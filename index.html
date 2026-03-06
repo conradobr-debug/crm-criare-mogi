@@ -1102,6 +1102,7 @@ function render(){
   }).join("");
 
   wireDnD();
+  wireCardOpen();
 }
 
 /* ===== DnD ===== */
@@ -1151,6 +1152,42 @@ function wireDnD(){
   });
 }
 
+
+function wireCardOpen(){
+  document.querySelectorAll(".card[data-id]").forEach(card=>{
+    if(card._wiredOpen) return;
+    card._wiredOpen = true;
+
+    let sx=0, sy=0, moved=false;
+
+    card.addEventListener("pointerdown", (e)=>{
+      if(e.target?.closest?.(".dots")) return;
+      // only primary button
+      if(e.button !== undefined && e.button !== 0) return;
+      sx = e.clientX; sy = e.clientY; moved = false;
+    });
+
+    card.addEventListener("pointermove", (e)=>{
+      if(isDragging) return;
+      if(moved) return;
+      const dx = Math.abs(e.clientX - sx);
+      const dy = Math.abs(e.clientY - sy);
+      if(dx > 6 || dy > 6) moved = true;
+    });
+
+    card.addEventListener("pointerup", (e)=>{
+      if(e.target?.closest?.(".dots")) return;
+      if(isDragging) return;
+      if(Date.now() - justDraggedAt < 250) return;
+      if(moved) return;
+      const id = card.dataset.id;
+      const r = records.find(x=>x.id===id);
+      if(r) openModal(r);
+    });
+  });
+}
+
+
 /* ===== Menus + card click opens modal ===== */
 function closeAllMenus(){
   document.querySelectorAll(".menu.open").forEach(m=>m.classList.remove("open"));
@@ -1188,16 +1225,6 @@ document.addEventListener("click", async (e)=>{
   const insideMenu = e.target.closest?.(".menu");
   if(!insideMenu) closeAllMenus();
 
-  const card = e.target.closest?.(".card[data-id]");
-  if(card){
-    if(isDragging) return;
-    if(Date.now() - justDraggedAt < 250) return;
-    if(e.target.closest?.(".dots")) return;
-
-    const id = card.dataset.id;
-    const r = records.find(x=>x.id===id);
-    if(r) openModal(r);
-  }
 
   // Config actions
   const cfgBtn = e.target.closest?.("button[data-act-config]");
