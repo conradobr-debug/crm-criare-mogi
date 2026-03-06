@@ -368,6 +368,7 @@
   <div class="actions">
     <button class="primary" id="btnNew">+ Novo lead</button>
     <button class="ghost" id="btnSync">Sincronizar</button>
+    <button class="ghost" id="btnSound">Som: OFF</button>
     <button class="ghost" id="btnExportJson">Exportar backup</button>
     <label class="btn ghost" for="importJson">Importar</label>
     <input id="importJson" type="file" accept="application/json" style="display:none" />
@@ -589,6 +590,54 @@ function daysBetween(a,b){ return Math.floor((b-a)/(1000*60*60*24)); }
 function fmtBRDate(iso){ if(!iso) return "—"; return new Date(iso).toLocaleDateString("pt-BR"); }
 function escapeHtml(s){ return (s??"").toString().replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); }
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._tm); toast._tm=setTimeout(()=>t.classList.remove("show"),2400); }
+
+// ===== Sound notification (Lead Online) =====
+let soundEnabled = localStorage.getItem("crm_sound_enabled") === "1";
+let audioUnlocked = false;
+let audioCtx = null;
+
+function updateSoundBtn(){
+  const b = document.getElementById("btnSound");
+  if(!b) return;
+  b.textContent = `Som: ${soundEnabled ? "ON" : "OFF"}`;
+}
+
+function unlockAudio(){
+  if(audioUnlocked) return;
+  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+  audioCtx.resume?.();
+  audioUnlocked = true;
+}
+
+function beep(){
+  if(!soundEnabled) return;
+  if(!audioUnlocked) return; // navegador exige 1 clique do usuário antes
+  try{
+    const ctx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx = ctx;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.value = 880;
+    g.gain.value = 0.05;
+    o.connect(g);
+    g.connect(ctx.destination);
+    o.start();
+    setTimeout(()=>{ o.stop(); }, 140);
+  }catch(e){
+    // ignore
+  }
+}
+
+document.getElementById("btnSound")?.addEventListener("click", ()=>{
+  soundEnabled = !soundEnabled;
+  localStorage.setItem("crm_sound_enabled", soundEnabled ? "1" : "0");
+  unlockAudio(); // 1º clique libera áudio
+  updateSoundBtn();
+  toast(soundEnabled ? "Som ativado." : "Som desativado.");
+});
+
+updateSoundBtn();
 function slugifyStage(stage){
   return stage.toLowerCase()
     .replaceAll("ç","c")
@@ -756,9 +805,23 @@ function subscribeRealtime(){
       .on("postgres_changes", { event: "*", schema: "public", table: TBL_RECORDS }, (_payload) => {
         clearTimeout(realtimeDebounce);
         realtimeDebounce = setTimeout(async ()=>{
+          const beforeIds = new Set(records.map(r => r.id));
+
           await fetchRecords();
+
+          const newOnes = records.filter(r =>
+            !beforeIds.has(r.id) &&
+            r.pipeline === "lead" &&
+            (r.source || "") === "Lead Online"
+          );
+
+          if(newOnes.length){
+            beep();
+            toast(`Novo lead online: ${fullName(newOnes[0])}`);
+          }
+
           render();
-        }, 250);
+}, 250);
       })
       .subscribe();
   }catch(e){
