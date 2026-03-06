@@ -1192,7 +1192,9 @@ function closeModal(){ $("modal").close(); currentEditingId=null; }
 async function upsertFromForm(){
   if(!sb || !session?.user) { toast("Sem login."); return false; }
 
-  const id = $("id").value || null; // let db generate if null
+  const id = ($("id").value || "").trim();
+  const isNew = !id;
+
   const pipeline = $("pipeline").value;
   const stage = $("stage").value;
 
@@ -1208,7 +1210,6 @@ async function upsertFromForm(){
   }
 
   const payload = {
-    id: id || undefined,
     first_name: firstName,
     last_name: lastName,
     phone,
@@ -1217,32 +1218,50 @@ async function upsertFromForm(){
     email: $("email").value.trim() || null,
     estimate: $("estimate").value === "" ? null : Number($("estimate").value),
     notes: $("notes").value.trim() || null,
-    source: $("source").value,
+    source: $("source").value || null,
     owner_id: $("owner").value || null,
     pipeline,
     stage,
     next_action: $("nextAction").value || null,
-    lost_reason: (pipeline==="lead" && stage==="Perdido") ? $("lostReason").value : null,
-    stage_entered_at: nowISO() // if stage changed, this is correct; if not, we will patch below
+    lost_reason: (pipeline==="lead" && stage==="Perdido") ? ($("lostReason").value || null) : null
   };
 
-  // If editing existing and stage didn't change, preserve stage_entered_at
-  if(id){
+  // stage_entered_at: só muda se a etapa mudou OU se for novo
+  const now = nowISO();
+  if(isNew){
+    payload.stage_entered_at = now;
+  }else{
     const existing = records.find(r=>r.id===id);
-    if(existing && existing.stage === payload.stage){
-      payload.stage_entered_at = existing.stage_entered_at;
-    }
+    payload.stage_entered_at = (existing && existing.stage === stage)
+      ? existing.stage_entered_at
+      : now;
   }
 
-  const { data, error } = await sb.from(TBL_RECORDS).upsert(payload).select("*").single();
-  if(error){ toast("Erro ao salvar."); return false; }
-
-  // refresh in-memory
-  const idx = records.findIndex(r=>r.id===data.id);
-  if(idx>=0) records[idx]=data; else records.unshift(data);
-
-  return true;
+  if(isNew){
+    // INSERT (não usar UPSERT com id vazio)
+    const { data, error } = await sb.from(TBL_RECORDS).insert(payload).select("*").single();
+    if(error){
+      console.error("INSERT error:", error);
+      toast("Erro ao salvar (insert).");
+      return false;
+    }
+    records.unshift(data);
+    $("id").value = data.id; // atualiza modal com id criado
+    return true;
+  }else{
+    // UPDATE
+    const { data, error } = await sb.from(TBL_RECORDS).update(payload).eq("id", id).select("*").single();
+    if(error){
+      console.error("UPDATE error:", error);
+      toast("Erro ao salvar (update).");
+      return false;
+    }
+    const idx = records.findIndex(r=>r.id===data.id);
+    if(idx>=0) records[idx]=data; else records.unshift(data);
+    return true;
+  }
 }
+
 
 async function markAsClosed(r){
   const patch = { pipeline:"closed", stage:"Contrato Realizado", stage_entered_at: nowISO() };
