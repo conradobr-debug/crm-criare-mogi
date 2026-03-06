@@ -6,11 +6,11 @@
   <title>CRM Criare Mogi Guaçu</title>
   <style>
     :root{
-      --bg:#0b1230;
-      --line:#2f3d6e;
-      --text:#f2f5ff;
-      --muted:#b7c2ea;
-      --shadow: 0 12px 35px rgba(0,0,0,.38);
+      --bg:#F7FBFC;
+      --line:#D9E7EA;
+      --text:#244047;
+      --muted:#6E8790;
+      --shadow: 0 10px 24px rgba(24, 62, 72, .08);
       --r:16px;
       --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -18,7 +18,7 @@
     *{box-sizing:border-box}
     body{
       margin:0; font-family:var(--sans); color:var(--text);
-      background: radial-gradient(1200px 700px at 15% -10%, #2a49d6 0%, var(--bg) 55%) fixed;
+      background: linear-gradient(180deg, #F9FCFD 0%, #F3F8F9 100%) fixed;
     }
     header{
       width:100%;
@@ -38,7 +38,7 @@
     .actions{display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; align-items:center}
     button, .btn{
       border:1px solid var(--line);
-      background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.04));
+      background: linear-gradient(180deg, #FFFFFF, #F6FBFC);
       color:var(--text);
       padding:10px 12px;
       border-radius:12px;
@@ -55,8 +55,8 @@
     .tabs{
       display:flex; gap:8px; flex-wrap:wrap;
       padding:8px;
-      background: rgba(255,255,255,.04);
-      border:1px solid var(--line);
+      background: #FFFFFF;
+      border:1px solid #E0EBED;
       border-radius: 14px;
       box-shadow: var(--shadow);
     }
@@ -66,16 +66,16 @@
     }
     .tab.active{
       color:var(--text);
-      border-color: rgba(150,186,255,.65);
-      background: rgba(150,186,255,.14);
+      border-color: #D6E8EA;
+      background: #F1F8F9;
     }
 
     .toolbar{
       margin-top:10px;
       padding:12px;
-      border:1px solid var(--line);
+      border:1px solid #E0EBED;
       border-radius: var(--r);
-      background: rgba(255,255,255,.04);
+      background: #FFFFFF;
       box-shadow: var(--shadow);
       display:flex; gap:10px; flex-wrap:wrap; align-items:end;
     }
@@ -83,8 +83,8 @@
     label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:950;}
     select, input, textarea{
       width:100%;
-      border:1px solid rgba(47,61,110,.95);
-      background: rgba(0,0,0,.18);
+      border:1px solid #DCE8EA;
+      background: #FFFFFF;
       color:var(--text);
       padding:10px 10px;
       border-radius: 12px;
@@ -98,16 +98,16 @@
       padding:10px 12px;
       border:1px solid var(--line);
       border-radius: 14px;
-      background: rgba(255,255,255,.04);
+      background: rgba(255,255,255,.78);
     }
     .kpi .n{font-size:18px; font-weight:950}
     .kpi .t{font-size:12px; color:var(--muted); margin-top:2px}
 
     .boardWrap{
       margin-top:10px;
-      border:1px solid var(--line);
+      border:1px solid #E0EBED;
       border-radius: var(--r);
-      background: rgba(255,255,255,.03);
+      background: #FFFFFF;
       box-shadow: var(--shadow);
       overflow:hidden;
     }
@@ -129,8 +129,8 @@
       min-width: 290px;
       max-width: 330px;
       flex: 0 0 auto;
-      background: rgba(0,0,0,.14);
-      border:1px solid rgba(47,61,110,.95);
+      background: #F0FAFB;
+      border:1px solid #D9EDEE;
       border-radius: 16px;
       scroll-snap-align: start;
       display:flex; flex-direction:column;
@@ -152,13 +152,15 @@
       padding:6px 8px;
       border-radius: 999px;
       border:1px solid rgba(255,255,255,.14);
-      background: rgba(255,255,255,.06);
-      color: rgba(242,245,255,.95);
+      background: rgba(255,255,255,.92);
+      color: #36575E;
     }
     .dropZone{
       padding:10px;
       overflow:auto;
       display:flex; flex-direction:column; gap:10px;
+      flex: 1;
+      min-height: 120px;
     }
     .dropZone.dragover{
       outline:2px dashed rgba(150,186,255,.65);
@@ -168,16 +170,20 @@
 
     .card{
       position:relative;
-      border:1px solid rgba(255,255,255,.12);
-      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+      border:1px solid #E1ECEE;
+      background: linear-gradient(180deg, #FFFFFF, #FBFDFD);
       border-radius: 14px;
       padding:10px;
       cursor:pointer;
-      box-shadow: 0 8px 18px rgba(0,0,0,.28);
+      box-shadow: 0 6px 16px rgba(28, 74, 80, .06);
       transition: .12s transform, .12s border-color, .12s background;
       user-select:none;
+      z-index: 1;
     }
-    .card:hover{transform: translateY(-1px); border-color: rgba(150,186,255,.55); background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.04));}
+    .card:hover{transform: translateY(-1px); border-color: rgba(150,186,255,.55); background: linear-gradient(180deg, #FFFFFF, #F6FBFC);}
+    .card.menuOpen{z-index: 5000; transform:none !important;}
+    .card.menuOpen:hover{transform:none !important;}
+
     .card.grab{cursor:grab;}
     .card.grab:active{cursor:grabbing;}
     .cTop{display:flex; justify-content:space-between; gap:10px; align-items:flex-start}
@@ -189,9 +195,9 @@
       border-radius:999px;
       padding:6px 8px;
       border:1px solid rgba(255,255,255,.14);
-      background: rgba(255,255,255,.07);
+      background: rgba(255,255,255,.94);
       white-space:nowrap;
-      color: rgba(242,245,255,.95);
+      color: #36575E;
       max-width:140px;
       overflow:hidden; text-overflow:ellipsis;
     }
@@ -200,8 +206,8 @@
       display:inline-flex; align-items:center; justify-content:center;
       border-radius: 12px;
       border:1px solid rgba(255,255,255,.12);
-      background: rgba(0,0,0,.10);
-      color: rgba(242,245,255,.95);
+      background: #FFFFFF;
+      color: #36575E;
       font-weight:950;
       cursor:pointer;
     }
@@ -210,13 +216,13 @@
       position:absolute;
       top:42px; right:10px;
       min-width: 170px;
-      border:1px solid rgba(47,61,110,.98);
-      background: rgba(12,18,40,.98);
+      border:1px solid #E0EBED;
+      background: #FFFFFF;
       border-radius: 14px;
-      box-shadow: var(--shadow);
+      box-shadow: 0 14px 32px rgba(24,62,72,.12);
       padding:6px;
       display:none;
-      z-index:50;
+      z-index: 5001;
     }
     .menu.open{display:block}
     .menu button{
@@ -239,21 +245,22 @@
       border-radius:999px;
       padding:6px 8px;
       border:1px solid rgba(47,61,110,.95);
-      background: rgba(0,0,0,.12);
-      color: rgba(242,245,255,.92);
+      background: #FFFFFF;
+      color: #36575E;
       max-width:100%;
       overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     }
-    .chip.muted{color: rgba(183,194,234,.95);}
+    .chip.muted{color: #6E8790;}
     .meta{margin-top:8px; color:var(--muted); font-size:12px; line-height:1.35;}
     .meta b{color: rgba(242,245,255,.95)}
 
     /* Stage colors */
     .s-novo{border-left:4px solid #9ab9ff}
-    .s-agendamento-de-medida{border-left:4px solid #74e3ff}
+    .s-atendimento-inicial{border-left:4px solid #74e3ff}
+    .s-so-quer-preco{border-left:4px solid #ffd88a}
     .s-projeto{border-left:4px solid #d4b2ff}
-    .s-apresentacao{border-left:4px solid #ffd88a}
-    .s-negociacao{border-left:4px solid #64f0c5}
+    .s-apresentacao{border-left:4px solid #64f0c5}
+    .s-enrolacao{border-left:4px solid #b7c2ea}
     .s-perdido{border-left:4px solid #ff8a8a}
     .s-contrato-realizado{border-left:4px solid #9ab9ff}
     .s-medicao-tecnica{border-left:4px solid #74e3ff}
@@ -269,8 +276,8 @@
       border-radius:999px;
       padding:6px 8px;
       border:1px solid rgba(255,255,255,.14);
-      background: rgba(255,255,255,.07);
-      color: rgba(242,245,255,.95);
+      background: rgba(255,255,255,.94);
+      color: #36575E;
     }
 
     .empty{
@@ -402,6 +409,12 @@
       <label>Busca</label>
       <input id="fSearch" placeholder="Nome, ambiente, observação..." />
     </div>
+
+    <div class="field" style="min-width:170px;">
+      <label>Perdido</label>
+      <button class="ghost" id="btnToggleLost" type="button">Ocultar Perdido</button>
+    </div>
+
 
     <div class="kpiRow">
       <div class="kpi">
@@ -572,7 +585,7 @@ const SUPABASE_URL = "https://mwpirdfcwqfmuythpawi.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_Zy25RqFpeNvTDRJvOxWTSg_g_lPA0Pm";
 
 /* ===== Funis ===== */
-const LEAD_STAGES = ["Novo","Agendamento de medida","Projeto","Apresentação","Negociação","Perdido"];
+const LEAD_STAGES = ["Novo","Atendimento Inicial","Só quer preço","Projeto","Apresentação","Enrolação","Perdido"];
 const CLOSED_STAGES = ["Contrato Realizado","Medição Técnica","Projeto Executivo","Pedido","Liberação Fábrica","Agendamento de Montagem","Entrega","Pós Venda"];
 const DEFAULT_SOURCES = ["WhatsApp","Campanha de Facebook","Cliente de Porta de loja","Google","Indicação"];
 const DEFAULT_LOST_REASONS = ["Preço","Prazo","Concorrente","Sem retorno (sumiu)","Mudou de ideia","Sem orçamento no momento","Outro"];
@@ -646,6 +659,12 @@ function slugifyStage(stage){
     .replace(/(^-|-$)/g,"");
 }
 function stageClass(stage){ return "s-" + slugifyStage(stage); }
+function normalizeLeadStage(stage){
+  if(!stage) return "Novo";
+  if(stage==="Agendamento de medida") return "Atendimento Inicial";
+  if(stage==="Negociação") return "Enrolação";
+  return stage;
+}
 function fullName(r){ return [r.first_name, r.last_name].filter(Boolean).join(" ").trim() || "Sem nome"; }
 function stageAge(r){
   const entered = new Date(r.stage_entered_at || r.updated_at || r.created_at);
@@ -661,6 +680,7 @@ function stageOptionsForPipeline(p){ return p==="closed" ? CLOSED_STAGES : LEAD_
 let sb = null;
 let session = null;
 let currentTab = "leads";
+let hideLostColumn = localStorage.getItem("crm_hide_lost") === "1";
 const filters = { owner:"Todos", source:"Todos", city:"", search:"" };
 let isDragging = false;
 let justDraggedAt = 0;
@@ -835,6 +855,10 @@ function datasetForTab(){
   if(currentTab==="leads") base = base.filter(r=>r.pipeline==="lead");
   if(currentTab==="closed") base = base.filter(r=>r.pipeline==="closed");
 
+  if(currentTab==="leads" && hideLostColumn){
+    base = base.filter(r=>(r.stage||"")!=="Perdido");
+  }
+
   const q = filters.search.trim().toLowerCase();
   const city = filters.city.trim().toLowerCase();
 
@@ -860,7 +884,9 @@ function datasetForTab(){
 }
 
 function getStagesForTab(){
-  if(currentTab==="leads") return LEAD_STAGES;
+  if(currentTab==="leads"){
+    return hideLostColumn ? LEAD_STAGES.filter(s=>s!=="Perdido") : LEAD_STAGES;
+  }
   if(currentTab==="closed") return CLOSED_STAGES;
   return [];
 }
@@ -883,7 +909,8 @@ function renderKPIs(scope){
 
 function renderCard(r){
   const name = fullName(r);
-  const st = r.stage || (r.pipeline==="lead" ? "Novo" : "Contrato Realizado");
+  let st = r.stage || (r.pipeline==="lead" ? "Novo" : "Contrato Realizado");
+  if(r.pipeline==="lead") st = normalizeLeadStage(st);
   const age = stageAge(r);
 
   const metaLines = [
@@ -1062,6 +1089,14 @@ function buildFilters(){
   $("owner").innerHTML = profiles.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.display_name)}</option>`).join("");
 }
 
+function updateLostBtn(){
+  const btn = document.getElementById("btnToggleLost");
+  if(!btn) return;
+  btn.textContent = hideLostColumn ? "Mostrar Perdido" : "Ocultar Perdido";
+  btn.disabled = currentTab !== "leads";
+}
+
+
 function render(){
   if(currentTab==="config"){
     $("board").innerHTML = renderConfig();
@@ -1079,7 +1114,8 @@ function render(){
   const byStage = {};
   stages.forEach(s=>byStage[s]=[]);
   data.forEach(r=>{
-    const st = r.stage || (r.pipeline==="lead" ? "Novo" : "Contrato Realizado");
+    let st = r.stage || (r.pipeline==="lead" ? "Novo" : "Contrato Realizado");
+  if(r.pipeline==="lead") st = normalizeLeadStage(st);
     (byStage[st] ||= []).push(r);
   });
 
@@ -1090,7 +1126,7 @@ function render(){
         <div class="colHd">
           <div class="colTitle">
             <div>${escapeHtml(stage)}</div>
-            <small>${currentTab==="leads" ? "Funil" : "Pós"}</small>
+            <small>&nbsp;</small>
           </div>
           <div class="count">${list.length}</div>
         </div>
@@ -1106,7 +1142,35 @@ function render(){
 }
 
 /* ===== DnD ===== */
+async function moveRecordToStage(id, stage){
+  const r = records.find(x=>x.id===id);
+  if(!r) return;
+
+  if(!sb || !session?.user) return toast("Sem login.");
+
+  const old = r.stage;
+  const patch = { stage, stage_entered_at: nowISO() };
+  // optimistic
+  r.stage = stage; r.stage_entered_at = patch.stage_entered_at;
+
+  const { error } = await sb.from(TBL_RECORDS).update(patch).eq("id", id);
+  if(error){
+    toast("Erro ao mover etapa.");
+    await fetchRecords();
+  }else{
+    toast(old!==stage ? `Movido: ${stage}` : "Atualizado.");
+  }
+  render();
+}
+
+function clearDragover(){
+  document.querySelectorAll(".dropZone.dragover").forEach(z=>z.classList.remove("dragover"));
+  document.querySelectorAll(".card.menuOpen").forEach(c=>c.classList.remove("menuOpen"));
+}
+
 function wireDnD(){
+  const boardEl = document.getElementById("board");
+
   document.querySelectorAll(".card[draggable='true']").forEach(c=>{
     c.addEventListener("dragstart", (e)=>{
       if(e.target && e.target.closest && e.target.closest(".dots")){ e.preventDefault(); return; }
@@ -1119,37 +1183,44 @@ function wireDnD(){
       isDragging = false;
       justDraggedAt = Date.now();
       c.style.opacity="1";
+      clearDragover();
     });
   });
 
-  document.querySelectorAll(".dropZone").forEach(z=>{
-    z.addEventListener("dragover", (e)=>{ e.preventDefault(); z.classList.add("dragover"); e.dataTransfer.dropEffect="move"; });
-    z.addEventListener("dragleave", ()=> z.classList.remove("dragover"));
-    z.addEventListener("drop", async (e)=>{
-      e.preventDefault(); z.classList.remove("dragover");
-      const id = e.dataTransfer.getData("text/plain");
-      const stage = z.dataset.dropStage;
-      const r = records.find(x=>x.id===id);
-      if(!r) return;
+  // Permitir drop em qualquer altura (inclusive sobre cards)
+  let lastZone = null;
 
-      if(!sb || !session?.user) return toast("Sem login.");
+  boardEl.addEventListener("dragover", (e)=>{
+    const col = e.target.closest?.(".col[data-stage]");
+    if(!col) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
 
-      const old = r.stage;
-      const patch = { stage, stage_entered_at: nowISO() };
-      // optimistic
-      r.stage = stage; r.stage_entered_at = patch.stage_entered_at;
+    const zone = col.querySelector(".dropZone");
+    if(zone && zone !== lastZone){
+      clearDragover();
+      zone.classList.add("dragover");
+      lastZone = zone;
+    }
+  }, true);
 
-      const { error } = await sb.from(TBL_RECORDS).update(patch).eq("id", id);
-      if(error){
-        toast("Erro ao mover etapa.");
-        // reload to recover
-        await fetchRecords();
-      }else{
-        toast(old!==stage ? `Movido: ${stage}` : "Atualizado.");
-      }
-      render();
-    });
-  });
+  boardEl.addEventListener("dragleave", (e)=>{
+    // quando sai do board, limpa
+    if(e.relatedTarget && boardEl.contains(e.relatedTarget)) return;
+    clearDragover();
+    lastZone = null;
+  }, true);
+
+  boardEl.addEventListener("drop", async (e)=>{
+    const col = e.target.closest?.(".col[data-stage]");
+    if(!col) return;
+    e.preventDefault();
+    const id = e.dataTransfer.getData("text/plain");
+    const stage = col.dataset.stage;
+    clearDragover();
+    lastZone = null;
+    if(id && stage) await moveRecordToStage(id, stage);
+  }, true);
 }
 
 
@@ -1191,6 +1262,7 @@ function wireCardOpen(){
 /* ===== Menus + card click opens modal ===== */
 function closeAllMenus(){
   document.querySelectorAll(".menu.open").forEach(m=>m.classList.remove("open"));
+  document.querySelectorAll(".card.menuOpen").forEach(c=>c.classList.remove("menuOpen"));
 }
 document.addEventListener("click", async (e)=>{
   const btn = e.target.closest?.("[data-menu-btn]");
@@ -1198,10 +1270,14 @@ document.addEventListener("click", async (e)=>{
     e.stopPropagation();
     const id = btn.dataset.menuBtn;
     const menu = document.querySelector(`.menu[data-menu="${CSS.escape(id)}"]`);
+    const hostCard = btn.closest(".card");
     if(!menu) return;
     const isOpen = menu.classList.contains("open");
     closeAllMenus();
-    if(!isOpen) menu.classList.add("open");
+    if(!isOpen){
+      menu.classList.add("open");
+      hostCard?.classList.add("menuOpen");
+    }
     return;
   }
 
@@ -1260,7 +1336,7 @@ function openModal(record=null){
   const pipeline = record?.pipeline || (currentTab==="closed" ? "closed" : "lead");
   $("pipeline").value = pipeline;
 
-  fillSelect($("stage"), stageOptionsForPipeline(pipeline), record?.stage || (pipeline==="lead" ? "Novo" : "Contrato Realizado"));
+  fillSelect($("stage"), stageOptionsForPipeline(pipeline), (pipeline==="lead" ? normalizeLeadStage(record?.stage) : record?.stage) || (pipeline==="lead" ? "Novo" : "Contrato Realizado"));
   fillSelect($("lostReason"), config.lost_reasons, record?.lost_reason || config.lost_reasons[0]);
   updateLostReasonVisibility();
 
@@ -1403,6 +1479,7 @@ function setTab(tab){
 
   $("boardHint").innerHTML = `<div>${escapeHtml(hint)}</div><div></div>`;
   buildFilters();
+  updateLostBtn();
   render();
 }
 
@@ -1413,6 +1490,13 @@ $("fOwner").addEventListener("change", e=>{ filters.owner=e.target.value; render
 $("fSource").addEventListener("change", e=>{ filters.source=e.target.value; render(); });
 $("fCity").addEventListener("input", e=>{ filters.city=e.target.value; render(); });
 $("fSearch").addEventListener("input", e=>{ filters.search=e.target.value; render(); });
+
+$("btnToggleLost").addEventListener("click", ()=>{
+  hideLostColumn = !hideLostColumn;
+  localStorage.setItem("crm_hide_lost", hideLostColumn ? "1" : "0");
+  updateLostBtn();
+  render();
+});
 
 $("btnNew").addEventListener("click", ()=>openModal(null));
 $("btnCloseModal").addEventListener("click", closeModal);
