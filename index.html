@@ -1,0 +1,1467 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CRM Criare Mogi Guaçu</title>
+  <style>
+    :root{
+      --bg:#0b1230;
+      --line:#2f3d6e;
+      --text:#f2f5ff;
+      --muted:#b7c2ea;
+      --shadow: 0 12px 35px rgba(0,0,0,.38);
+      --r:16px;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:var(--sans); color:var(--text);
+      background: radial-gradient(1200px 700px at 15% -10%, #2a49d6 0%, var(--bg) 55%) fixed;
+    }
+    header{
+      width:100%;
+      padding:14px 12px 10px;
+      display:flex; gap:14px; justify-content:space-between; align-items:flex-end; flex-wrap:wrap;
+    }
+    .wrap{width:100%; padding:0 10px 12px;}
+    .brand{display:flex; gap:12px; align-items:center;}
+    .logo{
+      width:42px; height:42px; border-radius:14px;
+      background: linear-gradient(135deg, rgba(150,186,255,.98), rgba(76,237,187,.92));
+      box-shadow: var(--shadow);
+    }
+    h1{margin:0; font-size:16px; letter-spacing:.2px}
+    .sub{margin-top:4px; font-size:12px; color:var(--muted); line-height:1.3; max-width: 980px}
+
+    .actions{display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; align-items:center}
+    button, .btn{
+      border:1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.04));
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:950;
+      transition:.15s transform, .15s border-color, .15s background;
+    }
+    button:hover, .btn:hover{transform: translateY(-1px); border-color: rgba(150,186,255,.55);}
+    button.primary{border-color: rgba(150,186,255,.85); background: linear-gradient(180deg, rgba(150,186,255,.25), rgba(150,186,255,.10));}
+    button.danger{border-color: rgba(255,128,128,.75); background: linear-gradient(180deg, rgba(255,128,128,.20), rgba(255,128,128,.07));}
+    button.ghost{background: transparent;}
+    button:disabled{opacity:.55; cursor:not-allowed; transform:none}
+
+    .tabs{
+      display:flex; gap:8px; flex-wrap:wrap;
+      padding:8px;
+      background: rgba(255,255,255,.04);
+      border:1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+    }
+    .tab{
+      padding:9px 12px; border-radius:12px; cursor:pointer;
+      border:1px solid transparent; color:var(--muted); font-weight:950; font-size:13px;
+    }
+    .tab.active{
+      color:var(--text);
+      border-color: rgba(150,186,255,.65);
+      background: rgba(150,186,255,.14);
+    }
+
+    .toolbar{
+      margin-top:10px;
+      padding:12px;
+      border:1px solid var(--line);
+      border-radius: var(--r);
+      background: rgba(255,255,255,.04);
+      box-shadow: var(--shadow);
+      display:flex; gap:10px; flex-wrap:wrap; align-items:end;
+    }
+    .field{min-width:170px;}
+    label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:950;}
+    select, input, textarea{
+      width:100%;
+      border:1px solid rgba(47,61,110,.95);
+      background: rgba(0,0,0,.18);
+      color:var(--text);
+      padding:10px 10px;
+      border-radius: 12px;
+      outline:none;
+    }
+    input::placeholder, textarea::placeholder{color: rgba(183,194,234,.65)}
+    .search{min-width:260px; flex:1;}
+    .kpiRow{display:flex; gap:10px; flex-wrap:wrap; margin-left:auto}
+    .kpi{
+      min-width:150px;
+      padding:10px 12px;
+      border:1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,.04);
+    }
+    .kpi .n{font-size:18px; font-weight:950}
+    .kpi .t{font-size:12px; color:var(--muted); margin-top:2px}
+
+    .boardWrap{
+      margin-top:10px;
+      border:1px solid var(--line);
+      border-radius: var(--r);
+      background: rgba(255,255,255,.03);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .boardHint{
+      padding:10px 12px;
+      border-bottom:1px solid rgba(47,61,110,.8);
+      display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;
+      color:var(--muted); font-size:12px;
+    }
+    .board{
+      display:flex;
+      gap:10px;
+      padding:10px;
+      overflow-x:auto;
+      scroll-snap-type: x proximity;
+      min-height: calc(100vh - 250px);
+    }
+    .col{
+      min-width: 290px;
+      max-width: 330px;
+      flex: 0 0 auto;
+      background: rgba(0,0,0,.14);
+      border:1px solid rgba(47,61,110,.95);
+      border-radius: 16px;
+      scroll-snap-align: start;
+      display:flex; flex-direction:column;
+      max-height: calc(100vh - 265px);
+    }
+    .colHd{
+      padding:12px 12px 10px;
+      border-bottom:1px solid rgba(47,61,110,.85);
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+    }
+    .colTitle{
+      display:flex; flex-direction:column; gap:4px;
+      font-weight:950; letter-spacing:.2px; font-size:13px;
+    }
+    .colTitle small{color:var(--muted); font-weight:850; font-size:11px}
+    .count{
+      font-family: var(--mono);
+      font-size: 11px;
+      padding:6px 8px;
+      border-radius: 999px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      color: rgba(242,245,255,.95);
+    }
+    .dropZone{
+      padding:10px;
+      overflow:auto;
+      display:flex; flex-direction:column; gap:10px;
+    }
+    .dropZone.dragover{
+      outline:2px dashed rgba(150,186,255,.65);
+      outline-offset:-6px;
+      background: rgba(150,186,255,.08);
+    }
+
+    .card{
+      position:relative;
+      border:1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+      border-radius: 14px;
+      padding:10px;
+      cursor:pointer;
+      box-shadow: 0 8px 18px rgba(0,0,0,.28);
+      transition: .12s transform, .12s border-color, .12s background;
+      user-select:none;
+    }
+    .card:hover{transform: translateY(-1px); border-color: rgba(150,186,255,.55); background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.04));}
+    .card.grab{cursor:grab;}
+    .card.grab:active{cursor:grabbing;}
+    .cTop{display:flex; justify-content:space-between; gap:10px; align-items:flex-start}
+    .cName{font-weight:980; font-size:14px; letter-spacing:.2px; line-height:1.15;}
+    .rightTop{display:flex; gap:8px; align-items:center}
+
+    .badge{
+      font-size:11px; font-weight:950;
+      border-radius:999px;
+      padding:6px 8px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.07);
+      white-space:nowrap;
+      color: rgba(242,245,255,.95);
+      max-width:140px;
+      overflow:hidden; text-overflow:ellipsis;
+    }
+    .dots{
+      width:34px; height:32px;
+      display:inline-flex; align-items:center; justify-content:center;
+      border-radius: 12px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.10);
+      color: rgba(242,245,255,.95);
+      font-weight:950;
+      cursor:pointer;
+    }
+    .dots:hover{border-color: rgba(150,186,255,.55); background: rgba(150,186,255,.10)}
+    .menu{
+      position:absolute;
+      top:42px; right:10px;
+      min-width: 170px;
+      border:1px solid rgba(47,61,110,.98);
+      background: rgba(12,18,40,.98);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      padding:6px;
+      display:none;
+      z-index:50;
+    }
+    .menu.open{display:block}
+    .menu button{
+      width:100%;
+      text-align:left;
+      padding:10px 10px;
+      border-radius: 12px;
+      border:1px solid transparent;
+      background: transparent;
+      font-weight:950;
+      font-size:12px;
+      transform:none;
+    }
+    .menu button:hover{border-color: rgba(150,186,255,.40); background: rgba(150,186,255,.12)}
+    .menu button.dangerItem:hover{border-color: rgba(255,128,128,.40); background: rgba(255,128,128,.12)}
+
+    .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px;}
+    .chip{
+      font-size:11px; font-weight:950;
+      border-radius:999px;
+      padding:6px 8px;
+      border:1px solid rgba(47,61,110,.95);
+      background: rgba(0,0,0,.12);
+      color: rgba(242,245,255,.92);
+      max-width:100%;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+    .chip.muted{color: rgba(183,194,234,.95);}
+    .meta{margin-top:8px; color:var(--muted); font-size:12px; line-height:1.35;}
+    .meta b{color: rgba(242,245,255,.95)}
+
+    /* Stage colors */
+    .s-novo{border-left:4px solid #9ab9ff}
+    .s-agendamento-de-medida{border-left:4px solid #74e3ff}
+    .s-projeto{border-left:4px solid #d4b2ff}
+    .s-apresentacao{border-left:4px solid #ffd88a}
+    .s-negociacao{border-left:4px solid #64f0c5}
+    .s-perdido{border-left:4px solid #ff8a8a}
+    .s-contrato-realizado{border-left:4px solid #9ab9ff}
+    .s-medicao-tecnica{border-left:4px solid #74e3ff}
+    .s-projeto-executivo{border-left:4px solid #d4b2ff}
+    .s-pedido{border-left:4px solid #ffd88a}
+    .s-liberacao-fabrica{border-left:4px solid #64f0c5}
+    .s-agendamento-de-montagem{border-left:4px solid #74e3ff}
+    .s-entrega{border-left:4px solid #64f0c5}
+    .s-pos-venda{border-left:4px solid #9ab9ff}
+
+    .stuckTag{
+      font-size:11px; font-weight:950;
+      border-radius:999px;
+      padding:6px 8px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.07);
+      color: rgba(242,245,255,.95);
+    }
+
+    .empty{
+      padding:14px;
+      border:1px dashed rgba(183,194,234,.40);
+      border-radius:14px;
+      color:var(--muted);
+      text-align:center;
+      margin:10px;
+    }
+
+    /* Dialogs */
+    dialog{
+      width:min(980px, 96vw);
+      border:1px solid var(--line);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(20,28,60,.98), rgba(10,16,38,.98));
+      color:var(--text);
+      box-shadow: 0 18px 55px rgba(0,0,0,.48);
+      padding:0;
+    }
+    dialog::backdrop{ background: rgba(0,0,0,.58); }
+    .modalHd{
+      padding:14px 16px;
+      border-bottom:1px solid rgba(47,61,110,.85);
+      display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    }
+    .modalTitle{font-weight:980}
+    .modalSub{color:var(--muted); font-size:12px; margin-top:4px; line-height:1.3}
+    .modalBd{padding:16px}
+    .form{display:grid; grid-template-columns: repeat(12, 1fr); gap:10px;}
+    .col-12{grid-column: span 12;}
+    .col-6{grid-column: span 6;}
+    .col-4{grid-column: span 4;}
+    .col-3{grid-column: span 3;}
+    @media (max-width: 880px){ .col-6,.col-4,.col-3{grid-column: span 12;} }
+    .req{color:#ffd88a; font-weight:980}
+    textarea{min-height:90px; resize:vertical}
+    .modalFt{
+      padding:14px 16px;
+      border-top:1px solid rgba(47,61,110,.85);
+      display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;
+      align-items:center;
+    }
+    .note{font-size:12px; color:var(--muted); line-height:1.35; max-width:640px}
+    .mono{font-family: var(--mono); font-size: 11px; color: rgba(183,194,234,.95)}
+    .modalQuick{
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+      margin-left:auto;
+    }
+    .modalQuick button{
+      padding:9px 10px;
+      border-radius: 12px;
+      font-size:12px;
+      font-weight:980;
+    }
+
+    /* Login overlay */
+    #loginModal{width:min(520px, 94vw);}
+    .loginGrid{display:grid; grid-template-columns: 1fr; gap:10px;}
+    .loginActions{display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; align-items:center}
+
+    /* Toast */
+    .toast{
+      position:fixed;
+      right:18px; bottom:18px;
+      background: rgba(20,28,60,.96);
+      border:1px solid rgba(150,186,255,.40);
+      color:var(--text);
+      padding:12px 14px;
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      opacity:0;
+      transform: translateY(8px);
+      transition:.2s opacity, .2s transform;
+      pointer-events:none;
+      max-width: 560px;
+      font-size:13px;
+      line-height:1.35;
+      z-index:999;
+    }
+    .toast.show{opacity:1; transform: translateY(0)}
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="logo" aria-hidden="true"></div>
+    <div>
+      <h1>CRM Criare Mogi Guaçu</h1>
+      <div class="sub" id="sessionLine">Offline (template). Conecte ao Supabase para login e sincronização.</div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="primary" id="btnNew">+ Novo lead</button>
+    <button class="ghost" id="btnSync">Sincronizar</button>
+    <button class="ghost" id="btnExportJson">Exportar backup</button>
+    <label class="btn ghost" for="importJson">Importar</label>
+    <input id="importJson" type="file" accept="application/json" style="display:none" />
+    <button class="danger" id="btnWipe">Limpar local</button>
+    <button class="ghost" id="btnSignOut">Sair</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="tabs" role="tablist" aria-label="Navegação">
+    <div class="tab active" data-tab="leads" role="tab" aria-selected="true">Leads</div>
+    <div class="tab" data-tab="closed" role="tab" aria-selected="false">Fechados</div>
+    <div class="tab" data-tab="reports" role="tab" aria-selected="false">Relatórios</div>
+    <div class="tab" data-tab="config" role="tab" aria-selected="false">Config</div>
+  </div>
+
+  <div class="toolbar">
+    <div class="field">
+      <label>Usuário</label>
+      <select id="fOwner"></select>
+    </div>
+    <div class="field">
+      <label>Origem</label>
+      <select id="fSource"></select>
+    </div>
+    <div class="field">
+      <label>Cidade</label>
+      <input id="fCity" placeholder="Ex.: Mogi Guaçu" />
+    </div>
+    <div class="field search">
+      <label>Busca</label>
+      <input id="fSearch" placeholder="Nome, ambiente, observação..." />
+    </div>
+
+    <div class="kpiRow">
+      <div class="kpi">
+        <div class="n" id="kpiTotal">0</div>
+        <div class="t">No filtro</div>
+      </div>
+      <div class="kpi">
+        <div class="n" id="kpiStuck">0</div>
+        <div class="t">Parados ≥ 14d</div>
+      </div>
+      <div class="kpi">
+        <div class="n" id="kpiDue">0</div>
+        <div class="t">Próx. ação ≤ 7d</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="boardWrap">
+    <div class="boardHint" id="boardHint"></div>
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- Login dialog -->
+  <dialog id="loginModal">
+    <div class="modalHd">
+      <div>
+        <div class="modalTitle">Entrar</div>
+        <div class="modalSub">Use o e-mail e senha criados no Supabase (Auth).</div>
+      </div>
+      <button class="ghost" id="btnCloseLogin">Fechar</button>
+    </div>
+    <div class="modalBd">
+      <div class="loginGrid">
+        <div>
+          <label>E-mail</label>
+          <input id="loginEmail" type="email" placeholder="ex.: conrado@empresa.com" />
+        </div>
+        <div>
+          <label>Senha</label>
+          <input id="loginPass" type="password" placeholder="••••••••" />
+        </div>
+        <div class="note" id="loginNote">
+          Se o login falhar, verifique se o usuário foi criado no painel do Supabase e se o projeto está ativo.
+        </div>
+      </div>
+    </div>
+    <div class="modalFt">
+      <div class="note">Dica: para equipe interna, desabilite “signups” e crie os usuários manualmente no Supabase.</div>
+      <div class="loginActions">
+        <button class="primary" id="btnLogin">Entrar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Details modal -->
+  <dialog id="modal">
+    <div class="modalHd">
+      <div>
+        <div class="modalTitle" id="modalTitle">Detalhes</div>
+        <div class="modalSub">Obrigatório: Nome, Sobrenome, Telefone, Cidade, Ambiente.</div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-left:auto">
+        <button class="ghost" id="btnCloseModal">Fechar</button>
+      </div>
+    </div>
+
+    <div class="modalBd">
+      <form class="form" id="form">
+        <input type="hidden" id="id" />
+
+        <div class="col-3">
+          <label>Nome <span class="req">*</span></label>
+          <input id="firstName" required />
+        </div>
+        <div class="col-3">
+          <label>Sobrenome <span class="req">*</span></label>
+          <input id="lastName" required />
+        </div>
+        <div class="col-3">
+          <label>Telefone <span class="req">*</span></label>
+          <input id="phone" required />
+        </div>
+        <div class="col-3">
+          <label>Cidade <span class="req">*</span></label>
+          <input id="city" required />
+        </div>
+
+        <div class="col-6">
+          <label>Ambiente <span class="req">*</span></label>
+          <input id="rooms" required />
+        </div>
+        <div class="col-3">
+          <label>Origem</label>
+          <select id="source"></select>
+        </div>
+        <div class="col-3">
+          <label>Usuário</label>
+          <select id="owner"></select>
+        </div>
+
+        <div class="col-4">
+          <label>Pipeline</label>
+          <select id="pipeline">
+            <option value="lead">Leads</option>
+            <option value="closed">Fechados</option>
+          </select>
+        </div>
+        <div class="col-4">
+          <label>Etapa</label>
+          <select id="stage"></select>
+        </div>
+        <div class="col-4">
+          <label>Próxima ação</label>
+          <input id="nextAction" type="date" />
+        </div>
+
+        <div class="col-6">
+          <label>E-mail</label>
+          <input id="email" type="email" placeholder="opcional" />
+        </div>
+        <div class="col-3">
+          <label>Estimativa (R$)</label>
+          <input id="estimate" type="number" min="0" step="100" placeholder="opcional" />
+        </div>
+        <div class="col-3" id="wrapLostReason" style="display:none;">
+          <label>Motivo (Perdido)</label>
+          <select id="lostReason"></select>
+        </div>
+
+        <div class="col-12">
+          <label>Observações</label>
+          <textarea id="notes"></textarea>
+        </div>
+
+        <div class="col-12">
+          <div class="note">Mudar etapa atualiza automaticamente a data “Etapa desde”.</div>
+          <div class="mono" id="metaLine"></div>
+        </div>
+      </form>
+    </div>
+
+    <div class="modalFt">
+      <div class="note" id="modalFootNote">Atalhos: Fechou / Perdeu / Excluir.</div>
+
+      <div class="modalQuick">
+        <button class="ghost" id="btnCancel">Cancelar</button>
+        <button class="primary" id="btnSave">Salvar</button>
+        <button class="primary" id="btnQuickClosed" style="border-color: rgba(76,237,187,.75); background: rgba(76,237,187,.14)">Fechou</button>
+        <button class="ghost" id="btnQuickLost" style="border-color: rgba(255,216,138,.65); background: rgba(255,216,138,.10)">Perdeu</button>
+        <button class="danger" id="btnQuickDelete">Excluir</button>
+      </div>
+    </div>
+  </dialog>
+</div>
+
+<!-- Supabase via CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+/*
+  ====== CONFIGURE AQUI ======
+  1) Crie um projeto no Supabase
+  2) Pegue URL e ANON KEY em: Project Settings > API
+*/
+const SUPABASE_URL = "https://mwpirdfcwqfmuythpawi.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_Zy25RqFpeNvTDRJvOxWTSg_g_lPA0Pm";
+
+/* ===== Funis ===== */
+const LEAD_STAGES = ["Novo","Agendamento de medida","Projeto","Apresentação","Negociação","Perdido"];
+const CLOSED_STAGES = ["Contrato Realizado","Medição Técnica","Projeto Executivo","Pedido","Liberação Fábrica","Agendamento de Montagem","Entrega","Pós Venda"];
+const DEFAULT_SOURCES = ["WhatsApp","Campanha de Facebook","Cliente de Porta de loja","Google","Indicação"];
+const DEFAULT_LOST_REASONS = ["Preço","Prazo","Concorrente","Sem retorno (sumiu)","Mudou de ideia","Sem orçamento no momento","Outro"];
+
+/* ===== DB tables (SQL no guia) ===== */
+const TBL_RECORDS = "crm_records";
+const TBL_PROFILES = "crm_profiles";
+const TBL_CONFIG = "crm_config"; // id=1, sources jsonb, lost_reasons jsonb
+
+/* ===== Helpers ===== */
+const $ = (id) => document.getElementById(id);
+function nowISO(){ return new Date().toISOString(); }
+function toDate(d){ if(!d) return null; const [y,m,dd]=d.split("-").map(Number); return new Date(y,m-1,dd); }
+function daysBetween(a,b){ return Math.floor((b-a)/(1000*60*60*24)); }
+function fmtBRDate(iso){ if(!iso) return "—"; return new Date(iso).toLocaleDateString("pt-BR"); }
+function escapeHtml(s){ return (s??"").toString().replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); }
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._tm); toast._tm=setTimeout(()=>t.classList.remove("show"),2400); }
+function slugifyStage(stage){
+  return stage.toLowerCase()
+    .replaceAll("ç","c")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/(^-|-$)/g,"");
+}
+function stageClass(stage){ return "s-" + slugifyStage(stage); }
+function fullName(r){ return [r.first_name, r.last_name].filter(Boolean).join(" ").trim() || "Sem nome"; }
+function stageAge(r){
+  const entered = new Date(r.stage_entered_at || r.updated_at || r.created_at);
+  const age = daysBetween(entered, new Date());
+  return {age, date: fmtBRDate(entered.toISOString())};
+}
+function fillSelect(el, arr, selected){
+  el.innerHTML = arr.map(v=>`<option ${v===selected?"selected":""}>${escapeHtml(v)}</option>`).join("");
+}
+function stageOptionsForPipeline(p){ return p==="closed" ? CLOSED_STAGES : LEAD_STAGES; }
+
+/* ===== App state ===== */
+let sb = null;
+let session = null;
+let currentTab = "leads";
+const filters = { owner:"Todos", source:"Todos", city:"", search:"" };
+let isDragging = false;
+let justDraggedAt = 0;
+let currentEditingId = null;
+
+let config = { sources: DEFAULT_SOURCES.slice(), lost_reasons: DEFAULT_LOST_REASONS.slice() };
+let profiles = [];   // [{id, display_name}]
+let records = [];    // crm_records rows
+
+/* ===== Auth + Init ===== */
+function isConfigured(){
+  return SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 20;
+}
+function updateSessionLine(){
+  const el = $("sessionLine");
+  if(!isConfigured()){
+    el.textContent = "Template offline. Cole SUPABASE_URL e SUPABASE_ANON_KEY para ativar login e sincronização.";
+    return;
+  }
+  if(!session?.user){
+    el.textContent = "Desconectado. Clique em “Entrar” (ou recarregue) para autenticar.";
+    return;
+  }
+  el.textContent = `Conectado: ${session.user.email}`;
+}
+async function initSupabase(){
+  if(!isConfigured()) return;
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data } = await sb.auth.getSession();
+  session = data.session;
+  updateSessionLine();
+
+  sb.auth.onAuthStateChange((_event, newSession) => {
+    session = newSession;
+    updateSessionLine();
+    if(session?.user) bootAfterLogin();
+    else lockApp();
+  });
+
+  if(!session?.user){
+    openLogin();
+  }else{
+    await bootAfterLogin();
+  }
+}
+function lockApp(){
+  // clear in-memory data (UI will show empty until login)
+  records = [];
+  profiles = [];
+  render();
+}
+function openLogin(){
+  $("loginModal").showModal();
+}
+function closeLogin(){
+  $("loginModal").close();
+}
+async function doLogin(){
+  if(!sb) return toast("Supabase não configurado.");
+  const email = $("loginEmail").value.trim();
+  const password = $("loginPass").value;
+  if(!email || !password) return toast("Informe e-mail e senha.");
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if(error) return toast("Login falhou. Verifique usuário/senha.");
+  closeLogin();
+}
+async function doSignOut(){
+  if(!sb) return;
+  await sb.auth.signOut();
+  toast("Saiu.");
+}
+
+/* ===== Data bootstrap ===== */
+async function ensureProfile(){
+  const uid = session.user.id;
+  const { data, error } = await sb.from(TBL_PROFILES).select("id, display_name").eq("id", uid).maybeSingle();
+  if(error) return toast("Erro ao ler perfil.");
+
+  if(!data){
+    const display = prompt("Seu nome para exibir no CRM (ex.: Marianna):");
+    const name = (display||"").trim() || "Usuário";
+    const ins = await sb.from(TBL_PROFILES).insert({ id: uid, display_name: name });
+    if(ins.error) return toast("Erro ao criar perfil.");
+  }
+}
+
+async function ensureConfigRow(){
+  // id=1
+  const { data, error } = await sb.from(TBL_CONFIG).select("id, sources, lost_reasons").eq("id", 1).maybeSingle();
+  if(error){
+    toast("Erro ao ler config.");
+    return;
+  }
+  if(!data){
+    const { error: insErr } = await sb.from(TBL_CONFIG).insert({ id: 1, sources: DEFAULT_SOURCES, lost_reasons: DEFAULT_LOST_REASONS });
+    if(insErr) toast("Erro ao criar config.");
+  }
+}
+
+async function fetchConfig(){
+  const { data, error } = await sb.from(TBL_CONFIG).select("id, sources, lost_reasons").eq("id", 1).single();
+  if(error) return toast("Erro ao carregar config.");
+  config.sources = Array.isArray(data.sources) ? data.sources : DEFAULT_SOURCES.slice();
+  config.lost_reasons = Array.isArray(data.lost_reasons) ? data.lost_reasons : DEFAULT_LOST_REASONS.slice();
+}
+
+async function fetchProfiles(){
+  const { data, error } = await sb.from(TBL_PROFILES).select("id, display_name").order("display_name", { ascending: true });
+  if(error) return toast("Erro ao carregar usuários.");
+  profiles = data || [];
+}
+
+async function fetchRecords(){
+  // Simple: read all (RLS controls)
+  const { data, error } = await sb.from(TBL_RECORDS).select("*").order("stage_entered_at", { ascending: false });
+  if(error) return toast("Erro ao carregar registros.");
+  records = data || [];
+}
+
+function profileNameById(id){
+  const p = profiles.find(x=>x.id===id);
+  return p ? p.display_name : "—";
+}
+
+async function bootAfterLogin(){
+  if(!sb || !session?.user) return;
+  await ensureConfigRow();
+  await ensureProfile();
+  await Promise.all([fetchConfig(), fetchProfiles(), fetchRecords()]);
+  buildFilters();
+  render();
+  subscribeRealtime();
+}
+
+let realtimeChannel = null;
+let realtimeDebounce = null;
+function subscribeRealtime(){
+  // optional; if unavailable, ignore
+  try{
+    if(realtimeChannel){ sb.removeChannel(realtimeChannel); realtimeChannel=null; }
+    realtimeChannel = sb.channel("crm_records_realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: TBL_RECORDS }, (_payload) => {
+        clearTimeout(realtimeDebounce);
+        realtimeDebounce = setTimeout(async ()=>{
+          await fetchRecords();
+          render();
+        }, 250);
+      })
+      .subscribe();
+  }catch(e){
+    // no-op
+  }
+}
+
+/* ===== Rendering ===== */
+function datasetForTab(){
+  let base = records.slice();
+  if(currentTab==="leads") base = base.filter(r=>r.pipeline==="lead");
+  if(currentTab==="closed") base = base.filter(r=>r.pipeline==="closed");
+
+  const q = filters.search.trim().toLowerCase();
+  const city = filters.city.trim().toLowerCase();
+
+  if(filters.owner!=="Todos"){
+    // filters.owner is profile id
+    base = base.filter(r=>(r.owner_id||"")===filters.owner);
+  }
+  if(filters.source!=="Todos"){
+    base = base.filter(r=>(r.source||"")===filters.source);
+  }
+  if(city){
+    base = base.filter(r=>(r.city||"").toLowerCase().includes(city));
+  }
+  if(q){
+    base = base.filter(r=>{
+      const hay = [r.first_name,r.last_name,r.rooms,r.notes,r.lost_reason].filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  base.sort((a,b)=> new Date(b.stage_entered_at||b.updated_at||b.created_at) - new Date(a.stage_entered_at||a.updated_at||a.created_at));
+  return base;
+}
+
+function getStagesForTab(){
+  if(currentTab==="leads") return LEAD_STAGES;
+  if(currentTab==="closed") return CLOSED_STAGES;
+  return [];
+}
+
+function renderKPIs(scope){
+  const total = scope.length;
+  const now = new Date();
+  const stuck = scope.filter(r=> daysBetween(new Date(r.stage_entered_at||r.updated_at||r.created_at), now) >= 14).length;
+  const due = scope.filter(r=>{
+    if(!r.next_action) return false;
+    const d = toDate(r.next_action); if(!d) return false;
+    const diff = daysBetween(now, d);
+    return diff >= 0 && diff <= 7;
+  }).length;
+
+  $("kpiTotal").textContent = total;
+  $("kpiStuck").textContent = stuck;
+  $("kpiDue").textContent = due;
+}
+
+function renderCard(r){
+  const name = fullName(r);
+  const st = r.stage || (r.pipeline==="lead" ? "Novo" : "Contrato Realizado");
+  const age = stageAge(r);
+
+  const metaLines = [
+    `Etapa desde <b>${escapeHtml(age.date)}</b>`,
+    r.next_action ? `Próx. ação <b>${escapeHtml(r.next_action)}</b>` : ""
+  ].filter(Boolean).join(" • ");
+
+  const stuckTag = age.age >= 14
+    ? `<span class="stuckTag" style="border-color: rgba(255,128,128,.45); background: rgba(255,128,128,.14)">parado</span>`
+    : (age.age >= 7
+      ? `<span class="stuckTag" style="border-color: rgba(255,216,138,.45); background: rgba(255,216,138,.12)">atenção</span>`
+      : ``);
+
+  return `
+    <div class="card ${stageClass(st)} grab" draggable="true" data-id="${escapeHtml(r.id)}" title="Clique para abrir detalhes">
+      <div class="cTop">
+        <div class="cName">${escapeHtml(name)}</div>
+        <div class="rightTop">
+          <span class="badge" title="Responsável">${escapeHtml(profileNameById(r.owner_id))}</span>
+          ${stuckTag}
+          <button class="dots" type="button" aria-label="Menu" data-menu-btn="${escapeHtml(r.id)}">...</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <span class="chip" title="Ambiente">${escapeHtml(r.rooms || "Ambiente —")}</span>
+        <span class="chip muted" title="Origem">${escapeHtml(r.source || "Origem —")}</span>
+      </div>
+
+      <div class="meta">${metaLines || "—"}</div>
+
+      <div class="menu" data-menu="${escapeHtml(r.id)}">
+        <button type="button" data-act="edit" data-id="${escapeHtml(r.id)}">Editar</button>
+        ${r.pipeline==="lead" && st!=="Perdido" ? `<button type="button" data-act="toClosed" data-id="${escapeHtml(r.id)}">Fechou</button>` : ``}
+        ${r.pipeline==="lead" && st!=="Perdido" ? `<button type="button" data-act="markLost" data-id="${escapeHtml(r.id)}">Perdeu</button>` : ``}
+        <button type="button" class="dangerItem" data-act="del" data-id="${escapeHtml(r.id)}">Excluir</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderReports(){
+  const all = records.slice();
+  const now = new Date();
+
+  const stuck = all
+    .map(r=>({r, days: daysBetween(new Date(r.stage_entered_at||r.updated_at||r.created_at), now)}))
+    .sort((a,b)=>b.days-a.days)
+    .filter(x=>x.days>=7)
+    .slice(0,60);
+
+  const lost = all.filter(r=>r.pipeline==="lead" && r.stage==="Perdido");
+  const lostDist = {};
+  lost.forEach(r=>{ const k=r.lost_reason||"Outro"; lostDist[k]=(lostDist[k]||0)+1; });
+
+  renderKPIs(all);
+
+  const stuckRows = stuck.length ? stuck.map(x=>{
+    const r=x.r;
+    return `<div style="padding:10px; border-bottom:1px dashed rgba(47,61,110,.60)">
+      <b>${escapeHtml(fullName(r))}</b> • ${escapeHtml(profileNameById(r.owner_id))}<br/>
+      <span style="color:var(--muted); font-size:12px">
+        ${escapeHtml(r.pipeline==="lead"?"Lead":"Fechado")} • ${escapeHtml(r.stage||"—")} • desde ${fmtBRDate(r.stage_entered_at||r.created_at)} • ${x.days}d
+      </span>
+    </div>`;
+  }).join("") : `<div class="empty">Nada parado (≥ 7 dias).</div>`;
+
+  const lostLines = Object.entries(lostDist).sort((a,b)=>b[1]-a[1])
+    .map(([k,v])=>`<div style="display:flex; justify-content:space-between; gap:10px; padding:10px; border-bottom:1px dashed rgba(47,61,110,.60)"><span>${escapeHtml(k)}</span><b>${v}</b></div>`)
+    .join("") || `<div class="empty">Sem perdas registradas.</div>`;
+
+  return `
+    <div class="col" style="min-width:420px; max-width:520px;">
+      <div class="colHd">
+        <div class="colTitle"><div>Parados</div><small>Top 60 (≥ 7 dias)</small></div>
+        <div class="count">${stuck.length}</div>
+      </div>
+      <div class="dropZone" style="padding:0">${stuckRows}</div>
+    </div>
+    <div class="col" style="min-width:360px; max-width:420px;">
+      <div class="colHd">
+        <div class="colTitle"><div>Motivos de perda</div><small>Leads em Perdido</small></div>
+        <div class="count">${lost.length}</div>
+      </div>
+      <div class="dropZone" style="padding:0">${lostLines}</div>
+    </div>
+  `;
+}
+
+function renderConfig(){
+  const userLines = profiles.length ? profiles.map(p=>`
+    <div style="display:flex; justify-content:space-between; gap:10px; padding:10px; border-bottom:1px dashed rgba(47,61,110,.60); align-items:center">
+      <span><b>${escapeHtml(p.display_name)}</b></span>
+      <span class="badge">${escapeHtml(p.id.slice(0,8))}</span>
+    </div>
+  `).join("") : `<div class="empty">Usuários aparecerão após cada login (perfil).</div>`;
+
+  const srcLines = config.sources.map((s,i)=>`
+    <div style="display:flex; justify-content:space-between; gap:10px; padding:10px; border-bottom:1px dashed rgba(47,61,110,.60); align-items:center">
+      <span>${escapeHtml(s)}</span>
+      <button class="danger" style="padding:8px 10px; font-size:12px" data-act="rmSource" data-idx="${i}">Remover</button>
+    </div>
+  `).join("");
+
+  const reasonLines = config.lost_reasons.map((s,i)=>`
+    <div style="display:flex; justify-content:space-between; gap:10px; padding:10px; border-bottom:1px dashed rgba(47,61,110,.60); align-items:center">
+      <span>${escapeHtml(s)}</span>
+      <button class="danger" style="padding:8px 10px; font-size:12px" data-act="rmReason" data-idx="${i}">Remover</button>
+    </div>
+  `).join("");
+
+  $("kpiTotal").textContent = "—"; $("kpiStuck").textContent="—"; $("kpiDue").textContent="—";
+
+  return `
+    <div class="col" style="min-width:360px; max-width:420px;">
+      <div class="colHd">
+        <div class="colTitle"><div>Usuários</div><small>Lista vinda dos perfis (Auth)</small></div>
+        <div class="count">${profiles.length}</div>
+      </div>
+      <div class="dropZone" style="padding:0">
+        <div class="empty" style="text-align:left; margin:10px;">
+          Para adicionar usuário: crie no Supabase (Auth). No primeiro login, ele cria o perfil automaticamente.
+        </div>
+        ${userLines}
+      </div>
+    </div>
+
+    <div class="col" style="min-width:360px; max-width:420px;">
+      <div class="colHd">
+        <div class="colTitle"><div>Origens</div><small>Compartilhado</small></div>
+        <div class="count">${config.sources.length}</div>
+      </div>
+      <div class="dropZone" style="padding:0">
+        <div style="display:flex; gap:8px; padding:10px;">
+          <input id="newSource" placeholder="Nova origem" />
+          <button class="primary" data-act="addSource">Adicionar</button>
+        </div>
+        ${srcLines || `<div class="empty">Sem origens.</div>`}
+      </div>
+    </div>
+
+    <div class="col" style="min-width:360px; max-width:420px;">
+      <div class="colHd">
+        <div class="colTitle"><div>Motivos de perda</div><small>Quando Perdido</small></div>
+        <div class="count">${config.lost_reasons.length}</div>
+      </div>
+      <div class="dropZone" style="padding:0">
+        <div style="display:flex; gap:8px; padding:10px;">
+          <input id="newReason" placeholder="Novo motivo" />
+          <button class="primary" data-act="addReason">Adicionar</button>
+        </div>
+        ${reasonLines || `<div class="empty">Sem motivos.</div>`}
+      </div>
+    </div>
+  `;
+}
+
+function buildFilters(){
+  // owner filter uses profile id, plus Todos
+  const ownerSel = $("fOwner");
+  ownerSel.innerHTML = `<option value="Todos">Todos</option>` + profiles.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.display_name)}</option>`).join("");
+  ownerSel.value = filters.owner;
+
+  const srcSel = $("fSource");
+  srcSel.innerHTML = `<option>Todos</option>` + config.sources.map(s=>`<option>${escapeHtml(s)}</option>`).join("");
+  srcSel.value = filters.source;
+
+  $("fCity").value = filters.city;
+  $("fSearch").value = filters.search;
+
+  // modal selects
+  fillSelect($("source"), config.sources, config.sources[0]);
+  fillSelect($("lostReason"), config.lost_reasons, config.lost_reasons[0]);
+  fillSelect($("owner"), profiles.map(p=>p.id), session?.user?.id);
+  // render owner dropdown as labels: swap values to id but show label via data map
+  $("owner").innerHTML = profiles.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.display_name)}</option>`).join("");
+}
+
+function render(){
+  if(currentTab==="config"){
+    $("board").innerHTML = renderConfig();
+    return;
+  }
+  if(currentTab==="reports"){
+    $("board").innerHTML = renderReports();
+    return;
+  }
+
+  const data = datasetForTab();
+  renderKPIs(data);
+
+  const stages = getStagesForTab();
+  const byStage = {};
+  stages.forEach(s=>byStage[s]=[]);
+  data.forEach(r=>{
+    const st = r.stage || (r.pipeline==="lead" ? "Novo" : "Contrato Realizado");
+    (byStage[st] ||= []).push(r);
+  });
+
+  $("board").innerHTML = stages.map(stage=>{
+    const list = byStage[stage] || [];
+    return `
+      <div class="col" data-stage="${escapeHtml(stage)}">
+        <div class="colHd">
+          <div class="colTitle">
+            <div>${escapeHtml(stage)}</div>
+            <small>${currentTab==="leads" ? "Funil" : "Pós"}</small>
+          </div>
+          <div class="count">${list.length}</div>
+        </div>
+        <div class="dropZone" data-drop-stage="${escapeHtml(stage)}">
+          ${list.length ? list.map(r=>renderCard(r)).join("") : `<div class="empty">Sem itens</div>`}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  wireDnD();
+}
+
+/* ===== DnD ===== */
+function wireDnD(){
+  document.querySelectorAll(".card[draggable='true']").forEach(c=>{
+    c.addEventListener("dragstart", (e)=>{
+      if(e.target && e.target.closest && e.target.closest(".dots")){ e.preventDefault(); return; }
+      isDragging = true;
+      e.dataTransfer.setData("text/plain", c.dataset.id);
+      e.dataTransfer.effectAllowed = "move";
+      c.style.opacity = "0.7";
+    });
+    c.addEventListener("dragend", ()=>{
+      isDragging = false;
+      justDraggedAt = Date.now();
+      c.style.opacity="1";
+    });
+  });
+
+  document.querySelectorAll(".dropZone").forEach(z=>{
+    z.addEventListener("dragover", (e)=>{ e.preventDefault(); z.classList.add("dragover"); e.dataTransfer.dropEffect="move"; });
+    z.addEventListener("dragleave", ()=> z.classList.remove("dragover"));
+    z.addEventListener("drop", async (e)=>{
+      e.preventDefault(); z.classList.remove("dragover");
+      const id = e.dataTransfer.getData("text/plain");
+      const stage = z.dataset.dropStage;
+      const r = records.find(x=>x.id===id);
+      if(!r) return;
+
+      if(!sb || !session?.user) return toast("Sem login.");
+
+      const old = r.stage;
+      const patch = { stage, stage_entered_at: nowISO() };
+      // optimistic
+      r.stage = stage; r.stage_entered_at = patch.stage_entered_at;
+
+      const { error } = await sb.from(TBL_RECORDS).update(patch).eq("id", id);
+      if(error){
+        toast("Erro ao mover etapa.");
+        // reload to recover
+        await fetchRecords();
+      }else{
+        toast(old!==stage ? `Movido: ${stage}` : "Atualizado.");
+      }
+      render();
+    });
+  });
+}
+
+/* ===== Menus + card click opens modal ===== */
+function closeAllMenus(){
+  document.querySelectorAll(".menu.open").forEach(m=>m.classList.remove("open"));
+}
+document.addEventListener("click", async (e)=>{
+  const btn = e.target.closest?.("[data-menu-btn]");
+  if(btn){
+    e.stopPropagation();
+    const id = btn.dataset.menuBtn;
+    const menu = document.querySelector(`.menu[data-menu="${CSS.escape(id)}"]`);
+    if(!menu) return;
+    const isOpen = menu.classList.contains("open");
+    closeAllMenus();
+    if(!isOpen) menu.classList.add("open");
+    return;
+  }
+
+  const actBtn = e.target.closest?.("button[data-act]");
+  if(actBtn){
+    const act = actBtn.dataset.act;
+    const id = actBtn.dataset.id;
+    if(!act || !id) return;
+
+    const r = records.find(x=>x.id===id);
+    if(!r) return;
+
+    closeAllMenus();
+    if(act==="edit"){ openModal(r); return; }
+    if(act==="toClosed"){ await markAsClosed(r); return; }
+    if(act==="markLost"){ await markAsLost(r); return; }
+    if(act==="del"){ await deleteRecord(r); return; }
+    return;
+  }
+
+  const insideMenu = e.target.closest?.(".menu");
+  if(!insideMenu) closeAllMenus();
+
+  const card = e.target.closest?.(".card[data-id]");
+  if(card){
+    if(isDragging) return;
+    if(Date.now() - justDraggedAt < 250) return;
+    if(e.target.closest?.(".dots")) return;
+
+    const id = card.dataset.id;
+    const r = records.find(x=>x.id===id);
+    if(r) openModal(r);
+  }
+
+  // Config actions
+  const cfgBtn = e.target.closest?.("button[data-act-config]");
+  if(cfgBtn) return;
+});
+
+/* ===== Modal ===== */
+function updateLostReasonVisibility(){
+  const show = $("pipeline").value==="lead" && $("stage").value==="Perdido";
+  $("wrapLostReason").style.display = show ? "" : "none";
+}
+function openModal(record=null){
+  const isNew = !record;
+  currentEditingId = record?.id || null;
+  $("modalTitle").textContent = isNew ? (currentTab==="closed" ? "Novo fechado" : "Novo lead") : "Detalhes do cliente";
+
+  $("id").value = record?.id || "";
+  $("firstName").value = record?.first_name || "";
+  $("lastName").value = record?.last_name || "";
+  $("phone").value = record?.phone || "";
+  $("city").value = record?.city || "";
+  $("rooms").value = record?.rooms || "";
+  $("email").value = record?.email || "";
+  $("estimate").value = (record?.estimate ?? "");
+  $("notes").value = record?.notes || "";
+  $("nextAction").value = record?.next_action || "";
+
+  // selects
+  fillSelect($("source"), config.sources, record?.source || config.sources[0]);
+  $("owner").innerHTML = profiles.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.display_name)}</option>`).join("");
+  $("owner").value = record?.owner_id || session?.user?.id || (profiles[0]?.id || "");
+
+  const pipeline = record?.pipeline || (currentTab==="closed" ? "closed" : "lead");
+  $("pipeline").value = pipeline;
+
+  fillSelect($("stage"), stageOptionsForPipeline(pipeline), record?.stage || (pipeline==="lead" ? "Novo" : "Contrato Realizado"));
+  fillSelect($("lostReason"), config.lost_reasons, record?.lost_reason || config.lost_reasons[0]);
+  updateLostReasonVisibility();
+
+  const meta = record
+    ? `id: ${record.id} • criado: ${new Date(record.created_at).toLocaleString("pt-BR")} • etapa desde: ${fmtBRDate(record.stage_entered_at||record.created_at)}`
+    : `novo registro • ${new Date().toLocaleString("pt-BR")}`;
+  $("metaLine").textContent = meta;
+
+  // Quick buttons
+  const st = $("stage").value;
+  const canQuick = (pipeline==="lead" && st !== "Perdido");
+  $("btnQuickClosed").disabled = !canQuick;
+  $("btnQuickLost").disabled = !canQuick;
+
+  $("modal").showModal();
+}
+function closeModal(){ $("modal").close(); currentEditingId=null; }
+
+async function upsertFromForm(){
+  if(!sb || !session?.user) { toast("Sem login."); return false; }
+
+  const id = $("id").value || null; // let db generate if null
+  const pipeline = $("pipeline").value;
+  const stage = $("stage").value;
+
+  const firstName = $("firstName").value.trim();
+  const lastName  = $("lastName").value.trim();
+  const phone     = $("phone").value.trim();
+  const city      = $("city").value.trim();
+  const rooms     = $("rooms").value.trim();
+
+  if(!firstName || !lastName || !phone || !city || !rooms){
+    toast("Preencha: Nome, Sobrenome, Telefone, Cidade, Ambiente.");
+    return false;
+  }
+
+  const payload = {
+    id: id || undefined,
+    first_name: firstName,
+    last_name: lastName,
+    phone,
+    city,
+    rooms,
+    email: $("email").value.trim() || null,
+    estimate: $("estimate").value === "" ? null : Number($("estimate").value),
+    notes: $("notes").value.trim() || null,
+    source: $("source").value,
+    owner_id: $("owner").value || null,
+    pipeline,
+    stage,
+    next_action: $("nextAction").value || null,
+    lost_reason: (pipeline==="lead" && stage==="Perdido") ? $("lostReason").value : null,
+    stage_entered_at: nowISO() // if stage changed, this is correct; if not, we will patch below
+  };
+
+  // If editing existing and stage didn't change, preserve stage_entered_at
+  if(id){
+    const existing = records.find(r=>r.id===id);
+    if(existing && existing.stage === payload.stage){
+      payload.stage_entered_at = existing.stage_entered_at;
+    }
+  }
+
+  const { data, error } = await sb.from(TBL_RECORDS).upsert(payload).select("*").single();
+  if(error){ toast("Erro ao salvar."); return false; }
+
+  // refresh in-memory
+  const idx = records.findIndex(r=>r.id===data.id);
+  if(idx>=0) records[idx]=data; else records.unshift(data);
+
+  return true;
+}
+
+async function markAsClosed(r){
+  const patch = { pipeline:"closed", stage:"Contrato Realizado", stage_entered_at: nowISO() };
+  const { error } = await sb.from(TBL_RECORDS).update(patch).eq("id", r.id);
+  if(error){ toast("Erro ao mover para Fechados."); return; }
+  toast("Movido para Fechados.");
+  await fetchRecords();
+  setTab("closed");
+}
+
+async function markAsLost(r){
+  const patch = { pipeline:"lead", stage:"Perdido", stage_entered_at: nowISO(), lost_reason: r.lost_reason || config.lost_reasons[0] };
+  const { error } = await sb.from(TBL_RECORDS).update(patch).eq("id", r.id);
+  if(error){ toast("Erro ao marcar Perdido."); return; }
+  toast("Marcado como Perdido.");
+  await fetchRecords();
+  render();
+}
+
+async function deleteRecord(r){
+  if(!confirm("Excluir este registro?")) return;
+  const { error } = await sb.from(TBL_RECORDS).delete().eq("id", r.id);
+  if(error){ toast("Erro ao excluir."); return; }
+  toast("Excluído.");
+  records = records.filter(x=>x.id!==r.id);
+  render();
+  closeModal();
+}
+
+/* ===== Config updates ===== */
+async function saveConfig(){
+  const { error } = await sb.from(TBL_CONFIG).upsert({ id:1, sources: config.sources, lost_reasons: config.lost_reasons });
+  if(error) toast("Erro ao salvar config.");
+}
+
+/* ===== Tabs + filters ===== */
+function setTab(tab){
+  currentTab = tab;
+  document.querySelectorAll(".tab").forEach(el=>{
+    const on = el.dataset.tab===tab;
+    el.classList.toggle("active", on);
+    el.setAttribute("aria-selected", on ? "true" : "false");
+  });
+
+  const hint = tab==="leads" ? "" :
+               tab==="closed" ? "" :
+               tab==="reports" ? "Relatórios: parados e motivos de perda." :
+               "Config: origens e motivos de perda (compartilhado).";
+
+  $("boardHint").innerHTML = `<div>${escapeHtml(hint)}</div><div></div>`;
+  buildFilters();
+  render();
+}
+
+/* ===== UI Events ===== */
+document.querySelectorAll(".tab").forEach(el=> el.addEventListener("click", ()=>setTab(el.dataset.tab)));
+
+$("fOwner").addEventListener("change", e=>{ filters.owner=e.target.value; render(); });
+$("fSource").addEventListener("change", e=>{ filters.source=e.target.value; render(); });
+$("fCity").addEventListener("input", e=>{ filters.city=e.target.value; render(); });
+$("fSearch").addEventListener("input", e=>{ filters.search=e.target.value; render(); });
+
+$("btnNew").addEventListener("click", ()=>openModal(null));
+$("btnCloseModal").addEventListener("click", closeModal);
+$("btnCancel").addEventListener("click", closeModal);
+$("pipeline").addEventListener("change", ()=>{
+  const p=$("pipeline").value;
+  fillSelect($("stage"), stageOptionsForPipeline(p), (p==="lead" ? "Novo" : "Contrato Realizado"));
+  updateLostReasonVisibility();
+});
+$("stage").addEventListener("change", updateLostReasonVisibility);
+
+$("btnSave").addEventListener("click", async (e)=>{
+  e.preventDefault();
+  if(await upsertFromForm()){
+    toast("Salvo.");
+    closeModal();
+    render();
+  }
+});
+$("btnQuickClosed").addEventListener("click", async (e)=>{
+  e.preventDefault();
+  const id = $("id").value;
+  if(!id) return toast("Salve antes de fechar.");
+  if(!(await upsertFromForm())) return;
+  const r = records.find(x=>x.id===id);
+  closeModal();
+  await markAsClosed(r);
+});
+$("btnQuickLost").addEventListener("click", async (e)=>{
+  e.preventDefault();
+  const id = $("id").value;
+  if(!id) return toast("Salve antes de marcar perdido.");
+  if(!(await upsertFromForm())) return;
+  const r = records.find(x=>x.id===id);
+  closeModal();
+  await markAsLost(r);
+});
+$("btnQuickDelete").addEventListener("click", async (e)=>{
+  e.preventDefault();
+  const id = $("id").value;
+  const r = records.find(x=>x.id===id);
+  if(!r) return;
+  await deleteRecord(r);
+});
+
+/* Login events */
+$("btnLogin").addEventListener("click", (e)=>{ e.preventDefault(); doLogin(); });
+$("btnCloseLogin").addEventListener("click", ()=> $("loginModal").close());
+
+$("btnSignOut").addEventListener("click", ()=> doSignOut());
+$("btnSync").addEventListener("click", async ()=>{
+  if(!sb || !session?.user) return openLogin();
+  await fetchRecords();
+  render();
+  toast("Sincronizado.");
+});
+
+/* Config tab button delegation */
+$("board").addEventListener("click", async (e)=>{
+  if(currentTab!=="config") return;
+  const btn = e.target.closest?.("button[data-act]");
+  if(!btn) return;
+  if(!sb || !session?.user) return toast("Sem login.");
+
+  const act = btn.dataset.act;
+
+  if(act==="addSource"){
+    const v = ($("newSource")?.value||"").trim();
+    if(!v) return toast("Digite uma origem.");
+    if(config.sources.includes(v)) return toast("Já existe.");
+    config.sources.push(v);
+    await saveConfig();
+    buildFilters();
+    render();
+    toast("Origem adicionada.");
+    return;
+  }
+  if(act==="rmSource"){
+    const idx = Number(btn.dataset.idx);
+    config.sources.splice(idx,1);
+    if(config.sources.length===0) config.sources = DEFAULT_SOURCES.slice();
+    await saveConfig();
+    buildFilters();
+    render();
+    toast("Origem removida.");
+    return;
+  }
+  if(act==="addReason"){
+    const v = ($("newReason")?.value||"").trim();
+    if(!v) return toast("Digite um motivo.");
+    if(config.lost_reasons.includes(v)) return toast("Já existe.");
+    config.lost_reasons.push(v);
+    await saveConfig();
+    buildFilters();
+    render();
+    toast("Motivo adicionado.");
+    return;
+  }
+  if(act==="rmReason"){
+    const idx = Number(btn.dataset.idx);
+    config.lost_reasons.splice(idx,1);
+    if(config.lost_reasons.length===0) config.lost_reasons = DEFAULT_LOST_REASONS.slice();
+    await saveConfig();
+    buildFilters();
+    render();
+    toast("Motivo removido.");
+    return;
+  }
+});
+
+/* Backup local (para emergência) */
+$("btnExportJson").addEventListener("click", ()=>{
+  const payload = { version:"crm_criare_online_template", exportedAt: nowISO(), config, profiles, records };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href=url; a.download=`crm_backup_${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast("Backup exportado.");
+});
+
+$("importJson").addEventListener("change", async (e)=>{
+  const f=e.target.files?.[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    try{
+      const obj = JSON.parse(reader.result);
+      if(obj.config){ config = obj.config; }
+      if(Array.isArray(obj.records)){ records = obj.records; }
+      toast("Importado localmente (somente visual).");
+      render();
+    }catch(err){ toast("Falha ao importar."); }
+  };
+  reader.readAsText(f);
+  e.target.value="";
+});
+
+$("btnWipe").addEventListener("click", ()=>{
+  if(confirm("Limpar dados carregados na tela (não apaga do Supabase)?")){
+    records = [];
+    profiles = [];
+    render();
+    toast("Limpo (apenas local).");
+  }
+});
+
+/* Boot */
+(async function boot(){
+  updateSessionLine();
+  // disable sign out / sync until configured
+  if(!isConfigured()){
+    $("btnSignOut").disabled = true;
+    $("btnSync").disabled = true;
+  }
+  setTab("leads");
+  await initSupabase();
+})();
+</script>
+</body>
+</html>
