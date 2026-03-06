@@ -251,8 +251,8 @@
       overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     }
     .chip.muted{color: #6E8790;}
-    .meta{margin-top:8px; color:#5C737A; font-size:12px; line-height:1.35;}
-    .meta b{color:#2F4B52; font-weight:800;}
+    .meta{margin-top:8px; color:#5C737A; font-size:11px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    .meta b{color:#2F4B52; font-weight:700; font-size:11px;}
 
     /* Stage colors */
     .s-novo{border-left:4px solid #9ab9ff}
@@ -914,8 +914,8 @@ function renderCard(r){
   const age = stageAge(r);
 
   const metaLines = [
-    `Etapa desde <b>${escapeHtml(age.date)}</b>`,
-    r.next_action ? `Próx. ação <b>${escapeHtml(r.next_action)}</b>` : ""
+    `Etapa <b>${escapeHtml(age.date)}</b>`,
+    r.next_action ? `Ação <b>${escapeHtml(r.next_action)}</b>` : ""
   ].filter(Boolean).join(" • ");
 
   const stuckTag = age.age >= 14
