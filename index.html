@@ -817,35 +817,47 @@ async function bootAfterLogin(){
 
 let realtimeChannel = null;
 let realtimeDebounce = null;
+
 function subscribeRealtime(){
-  // optional; if unavailable, ignore
+  if(!sb || !session?.user) return;
+
   try{
-    if(realtimeChannel){ sb.removeChannel(realtimeChannel); realtimeChannel=null; }
-    realtimeChannel = sb.channel("crm_records_realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: TBL_RECORDS }, (_payload) => {
-        clearTimeout(realtimeDebounce);
-        realtimeDebounce = setTimeout(async ()=>{
-          const beforeIds = new Set(records.map(r => r.id));
+    if(realtimeChannel){
+      sb.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
 
-          await fetchRecords();
+    realtimeChannel = sb
+      .channel("crm_records_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "crm_records" },
+        async () => {
+          clearTimeout(realtimeDebounce);
+          realtimeDebounce = setTimeout(async () => {
+            const beforeIds = new Set(records.map(r => r.id));
 
-          const newOnes = records.filter(r =>
-            !beforeIds.has(r.id) &&
-            r.pipeline === "lead" &&
-            (r.source || "") === "Lead Online"
-          );
+            await fetchRecords();
 
-          if(newOnes.length){
-            beep();
-            toast(`Novo lead online: ${fullName(newOnes[0])}`);
-          }
+            const newOnes = records.filter(r =>
+              !beforeIds.has(r.id) &&
+              r.pipeline === "lead" &&
+              (r.source || "") === "Lead Online"
+            );
 
-          render();
-}, 250);
-      })
+            if(newOnes.length){
+              beep?.();
+              const n = newOnes[0];
+              toast?.(`Novo lead online: ${(n.first_name || "")} ${(n.last_name || "")}`.trim());
+            }
+
+            render();
+          }, 250);
+        }
+      )
       .subscribe();
   }catch(e){
-    // no-op
+    console.error("Realtime subscribe error:", e);
   }
 }
 
