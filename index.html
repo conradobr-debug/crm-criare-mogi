@@ -1632,19 +1632,94 @@ $("btnExportJson").addEventListener("click", ()=>{
 });
 
 $("importJson").addEventListener("change", async (e)=>{
-  const f=e.target.files?.[0]; if(!f) return;
+  const f = e.target.files?.[0];
+  if(!f) return;
+
+  if(!sb || !session?.user){
+    openLogin();
+    e.target.value = "";
+    return;
+  }
+
   const reader = new FileReader();
+
   reader.onload = async ()=>{
     try{
       const obj = JSON.parse(reader.result);
-      if(obj.config){ config = obj.config; }
-      if(Array.isArray(obj.records)){ records = obj.records; }
-      toast("Importado localmente (somente visual).");
+
+      if(!Array.isArray(obj.records)){
+        toast("Arquivo inválido.");
+        return;
+      }
+
+      const importedRecords = obj.records;
+      let inserted = 0;
+      let skipped = 0;
+      let errors = 0;
+
+      for(const r of importedRecords){
+        const payload = {
+          first_name: (r.first_name || "").trim() || "Lead",
+          last_name: (r.last_name || "").trim() || "Online",
+          phone: (r.phone || "").trim() || "Não informado",
+          city: (r.city || "").trim() || "Não informado",
+          rooms: (r.rooms || "").trim() || "Não informado",
+          email: r.email || null,
+          estimate: r.estimate ?? null,
+          notes: r.notes || null,
+          source: r.source || "Lead Online",
+          owner_id: r.owner_id || session.user.id,
+          pipeline: r.pipeline || "lead",
+          stage: r.stage || "Novo",
+          next_action: r.next_action || null,
+          lost_reason: r.lost_reason || null,
+          stage_entered_at: r.stage_entered_at || r.created_at || new Date().toISOString(),
+          created_at: r.created_at || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          rd_payload: r.rd_payload || null,
+          rd_fingerprint: r.rd_fingerprint || null,
+          rd_event_name: r.rd_event_name || null,
+          rd_conversion_id: r.rd_conversion_id || null,
+          rd_conversion_at: r.rd_conversion_at || null,
+          rd_source: r.rd_source || null
+        };
+
+        const alreadyExists = r.id && records.some(x => x.id === r.id);
+        if(alreadyExists){
+          skipped++;
+          continue;
+        }
+
+        const { data, error } = await sb
+          .from(TBL_RECORDS)
+          .insert(payload)
+          .select("*")
+          .single();
+
+        if(error){
+          console.error("Erro ao importar registro:", error, payload);
+          errors++;
+          continue;
+        }
+
+        if(data){
+          records.unshift(data);
+          inserted++;
+        }
+      }
+
+      await fetchRecords();
       render();
-    }catch(err){ toast("Falha ao importar."); }
+
+      toast(`Importação concluída. Inseridos: ${inserted} | Ignorados: ${skipped} | Erros: ${errors}`);
+    }catch(err){
+      console.error(err);
+      toast("Falha ao importar.");
+    }
   };
+
   reader.readAsText(f);
-  e.target.value="";
+  e.target.value = "";
 });
 
 $("btnWipe").addEventListener("click", ()=>{
