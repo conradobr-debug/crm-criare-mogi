@@ -403,11 +403,11 @@
     </div>
     <div class="field">
       <label>Cidade</label>
-      <input id="fCity" placeholder="Ex.: Mogi Guaçu" />
+      <input id="fCity" placeholder="Ex.: Mogi Guaçu" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
     </div>
     <div class="field search">
       <label>Busca</label>
-      <input id="fSearch" placeholder="Nome, ambiente, observação..." />
+      <input id="fSearch" placeholder="Nome, ambiente, observação..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
     </div>
 
     <div class="field" style="min-width:170px;">
@@ -484,29 +484,29 @@
     </div>
 
     <div class="modalBd">
-      <form class="form" id="form">
+      <form class="form" id="form" autocomplete="off">
         <input type="hidden" id="id" />
 
         <div class="col-3">
           <label>Nome <span class="req">*</span></label>
-          <input id="firstName" required />
+          <input id="firstName" required autocomplete="off" />
         </div>
         <div class="col-3">
           <label>Sobrenome <span class="req">*</span></label>
-          <input id="lastName" required />
+          <input id="lastName" required autocomplete="off" />
         </div>
         <div class="col-3">
           <label>Telefone <span class="req">*</span></label>
-          <input id="phone" required />
+          <input id="phone" required autocomplete="off" />
         </div>
         <div class="col-3">
           <label>Cidade <span class="req">*</span></label>
-          <input id="city" required />
+          <input id="city" required autocomplete="off" />
         </div>
 
         <div class="col-6">
           <label>Ambiente <span class="req">*</span></label>
-          <input id="rooms" required />
+          <input id="rooms" required autocomplete="off" />
         </div>
         <div class="col-3">
           <label>Origem</label>
@@ -535,7 +535,7 @@
 
         <div class="col-6">
           <label>E-mail</label>
-          <input id="email" type="email" placeholder="opcional" />
+          <input id="email" type="email" placeholder="opcional" autocomplete="off" />
         </div>
         <div class="col-3">
           <label>Estimativa (R$)</label>
@@ -1325,6 +1325,9 @@ function updateLostReasonVisibility(){
   $("wrapLostReason").style.display = show ? "" : "none";
 }
 function openModal(record=null){
+  const prevSearch = $("fSearch").value;
+  const prevCity = $("fCity").value;
+
   const isNew = !record;
   currentEditingId = record?.id || null;
   $("modalTitle").textContent = isNew ? (currentTab==="closed" ? "Novo fechado" : "Novo lead") : "Detalhes do cliente";
@@ -1362,6 +1365,9 @@ function openModal(record=null){
   const canQuick = (pipeline==="lead" && st !== "Perdido");
   $("btnQuickClosed").disabled = !canQuick;
   $("btnQuickLost").disabled = !canQuick;
+
+  $("fSearch").value = prevSearch;
+  $("fCity").value = prevCity;
 
   $("modal").showModal();
 }
@@ -1500,8 +1506,34 @@ document.querySelectorAll(".tab").forEach(el=> el.addEventListener("click", ()=>
 
 $("fOwner").addEventListener("change", e=>{ filters.owner=e.target.value; render(); });
 $("fSource").addEventListener("change", e=>{ filters.source=e.target.value; render(); });
-$("fCity").addEventListener("input", e=>{ filters.city=e.target.value; render(); });
-$("fSearch").addEventListener("input", e=>{ filters.search=e.target.value; render(); });
+
+$("fCity").addEventListener("input", e=>{
+  filters.city = e.target.value;
+  render();
+});
+
+$("fSearch").addEventListener("input", e=>{
+  const v = (e.target.value || "").trim();
+
+  if (v.includes("@") && v === (session?.user?.email || "")) {
+    e.target.value = "";
+    filters.search = "";
+    render();
+    return;
+  }
+
+  filters.search = v;
+  render();
+});
+
+$("fSearch").addEventListener("change", e=>{
+  const v = (e.target.value || "").trim();
+  if (v.includes("@") && v === (session?.user?.email || "")) {
+    e.target.value = "";
+    filters.search = "";
+    render();
+  }
+});
 
 $("btnToggleLost").addEventListener("click", ()=>{
   hideLostColumn = !hideLostColumn;
