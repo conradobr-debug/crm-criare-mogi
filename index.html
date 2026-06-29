@@ -34,6 +34,20 @@
     }
     h1{margin:0; font-size:16px; letter-spacing:.2px}
     .sub{margin-top:4px; font-size:12px; color:var(--muted); line-height:1.3; max-width: 980px}
+    .syncStatus{
+      display:inline-flex; align-items:center; gap:6px;
+      margin-top:6px; padding:4px 8px;
+      border:1px solid #D9E7EA; border-radius:999px;
+      background:#FFFFFF; color:var(--muted);
+      font-size:11px; font-weight:850;
+    }
+    .syncStatus::before{
+      content:""; width:7px; height:7px; border-radius:50%;
+      background:#A9BBC0;
+    }
+    .syncStatus.online::before{background:#2FC88F;}
+    .syncStatus.reconnecting::before{background:#F0B44D;}
+    .syncStatus.offline::before,.syncStatus.error::before{background:#E66D6D;}
 
     .actions{display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; align-items:center}
     button, .btn{
@@ -370,6 +384,7 @@
     <div>
       <h1>CRM Criare Mogi Guaçu</h1>
       <div class="sub" id="sessionLine">Offline (template). Conecte ao Supabase para login e sincronização.</div>
+      <div class="syncStatus offline" id="syncStatus" role="status" aria-live="polite">Sem conexão</div>
     </div>
   </div>
   <div class="actions">
@@ -587,7 +602,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_Zy25RqFpeNvTDRJvOxWTSg_g_lPA0Pm";
 /* ===== Funis ===== */
 const LEAD_STAGES = ["Novo","Atendimento Inicial","Só quer preço","Projeto","Apresentação","Enrolação","Perdido"];
 const CLOSED_STAGES = ["Contrato Realizado","Medição Técnica","Projeto Executivo","Pedido","Liberação Fábrica","Agendamento de Montagem","Entrega","Pós Venda"];
-const DEFAULT_SOURCES = ["WhatsApp","Campanha de Facebook","Cliente de Porta de loja","Google","Indicação"];
+const DEFAULT_SOURCES = ["WhatsApp","Campanha de Facebook","Cliente de Porta de loja","Google","Indicação","Lead Online"];
 const DEFAULT_LOST_REASONS = ["Preço","Prazo","Concorrente","Sem retorno (sumiu)","Mudou de ideia","Sem orçamento no momento","Outro"];
 
 /* ===== DB tables (SQL no guia) ===== */
@@ -608,6 +623,16 @@ function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("sho
 let soundEnabled = localStorage.getItem("crm_sound_enabled") === "1";
 let audioUnlocked = false;
 let audioCtx = null;
+const NOTIFIED_IDS_KEY = "crm_notified_online_leads";
+const MAX_NOTIFIED_IDS = 300;
+let notifiedRecordIds = new Set();
+
+try{
+  const savedIds = JSON.parse(localStorage.getItem(NOTIFIED_IDS_KEY) || "[]");
+  if(Array.isArray(savedIds)) notifiedRecordIds = new Set(savedIds.slice(-MAX_NOTIFIED_IDS));
+}catch(error){
+  console.warn("Preferência de notificações inválida; recriando.", error);
+}
 
 function updateSoundBtn(){
   const b = document.getElementById("btnSound");
@@ -640,6 +665,27 @@ function beep(){
   }catch(e){
     // ignore
   }
+}
+
+function rememberNotifiedRecord(id){
+  if(!id) return;
+  notifiedRecordIds.add(id);
+  const ids = Array.from(notifiedRecordIds).slice(-MAX_NOTIFIED_IDS);
+  notifiedRecordIds = new Set(ids);
+  localStorage.setItem(NOTIFIED_IDS_KEY, JSON.stringify(ids));
+}
+
+function notifyOnlineLeadOnce(record, origin="sincronização"){
+  if(!hasInitialRecordSnapshot || !record?.id) return false;
+  if(record.pipeline !== "lead" || (record.source || "") !== "Lead Online") return false;
+  if(notifiedRecordIds.has(record.id)) return false;
+
+  rememberNotifiedRecord(record.id);
+  beep();
+  const name = [record.first_name, record.last_name].filter(Boolean).join(" ").trim() || "Lead Online";
+  toast(`Novo lead online: ${name}`);
+  console.info("[CRM Sync] Novo lead online detectado.", { id: record.id, origin });
+  return true;
 }
 
 document.getElementById("btnSound")?.addEventListener("click", ()=>{
@@ -689,6 +735,39 @@ let currentEditingId = null;
 let config = { sources: DEFAULT_SOURCES.slice(), lost_reasons: DEFAULT_LOST_REASONS.slice() };
 let profiles = [];   // [{id, display_name}]
 let records = [];    // crm_records rows
+let hasInitialRecordSnapshot = false;
+let recordsFetchPromise = null;
+let recordsRefreshQueued = false;
+let bootPromise = null;
+let bootedUserId = null;
+
+let syncConnectionState = "offline";
+let lastSuccessfulSyncAt = null;
+
+function syncAgeLabel(){
+  if(!lastSuccessfulSyncAt) return "aguardando atualização";
+  const seconds = Math.max(0, Math.floor((Date.now() - lastSuccessfulSyncAt) / 1000));
+  if(seconds < 10) return "atualizado agora";
+  if(seconds < 60) return `atualizado há ${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  return `atualizado há ${minutes}min`;
+}
+
+function updateSyncStatusDisplay(){
+  const el = $("syncStatus");
+  if(!el) return;
+
+  el.className = `syncStatus ${syncConnectionState}`;
+  if(syncConnectionState === "online") el.textContent = `Online • ${syncAgeLabel()}`;
+  else if(syncConnectionState === "reconnecting") el.textContent = "Reconectando...";
+  else if(syncConnectionState === "error") el.textContent = "Falha na sincronização";
+  else el.textContent = "Sem conexão";
+}
+
+function setSyncConnectionState(state){
+  syncConnectionState = state;
+  updateSyncStatusDisplay();
+}
 
 /* ===== Auth + Init ===== */
 function isConfigured(){
@@ -709,15 +788,17 @@ function updateSessionLine(){
 async function initSupabase(){
   if(!isConfigured()) return;
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const { data } = await sb.auth.getSession();
+  const { data, error } = await sb.auth.getSession();
+  if(error){
+    console.error("[CRM Auth] Falha ao recuperar sessão.", error);
+    toast("Não foi possível recuperar a sessão.");
+  }
   session = data.session;
   updateSessionLine();
 
-  sb.auth.onAuthStateChange((_event, newSession) => {
-    session = newSession;
-    updateSessionLine();
-    if(session?.user) bootAfterLogin();
-    else lockApp();
+  sb.auth.onAuthStateChange((event, newSession) => {
+    // Evita chamadas assíncronas dentro do callback interno do cliente Supabase.
+    setTimeout(() => handleAuthStateChange(event, newSession), 0);
   });
 
   if(!session?.user){
@@ -726,10 +807,40 @@ async function initSupabase(){
     await bootAfterLogin();
   }
 }
+
+async function handleAuthStateChange(event, newSession){
+  const previousUserId = session?.user?.id || null;
+  session = newSession;
+  updateSessionLine();
+  console.info("[CRM Auth] Estado alterado.", { event, authenticated: Boolean(session?.user) });
+
+  if(!session?.user){
+    bootedUserId = null;
+    hasInitialRecordSnapshot = false;
+    await syncController.stop();
+    lockApp();
+    return;
+  }
+
+  const userChanged = previousUserId !== session.user.id;
+  if(userChanged || bootedUserId !== session.user.id){
+    await bootAfterLogin();
+    return;
+  }
+
+  if(event === "TOKEN_REFRESHED"){
+    await syncController.resume("token atualizado");
+  }else if(event === "SIGNED_IN"){
+    await syncController.resume("sessão confirmada");
+  }
+}
+
 function lockApp(){
   // clear in-memory data (UI will show empty until login)
   records = [];
   profiles = [];
+  hasInitialRecordSnapshot = false;
+  setSyncConnectionState("offline");
   render();
 }
 function openLogin(){
@@ -749,6 +860,7 @@ async function doLogin(){
 }
 async function doSignOut(){
   if(!sb) return;
+  await syncController.stop();
   await sb.auth.signOut();
   toast("Saiu.");
 }
@@ -793,11 +905,62 @@ async function fetchProfiles(){
   profiles = data || [];
 }
 
-async function fetchRecords(){
-  // Simple: read all (RLS controls)
-  const { data, error } = await sb.from(TBL_RECORDS).select("*").order("stage_entered_at", { ascending: false });
-  if(error) return toast("Erro ao carregar registros.");
-  records = data || [];
+function recordsStateVersion(items){
+  return items
+    .map(record => [record.id, record.updated_at, record.pipeline, record.stage].join(":"))
+    .sort()
+    .join("|");
+}
+
+async function fetchRecords({ reason="sincronização", notifyNew=true, showError=false }={}){
+  if(!sb || !session?.user) return false;
+
+  if(recordsFetchPromise){
+    recordsRefreshQueued = true;
+    return recordsFetchPromise;
+  }
+
+  const previousIds = new Set(records.map(record => record.id));
+  const previousVersion = recordsStateVersion(records);
+  const hadInitialSnapshot = hasInitialRecordSnapshot;
+
+  recordsFetchPromise = (async () => {
+    const { data, error } = await sb
+      .from(TBL_RECORDS)
+      .select("*")
+      .order("stage_entered_at", { ascending: false });
+
+    if(error) throw error;
+
+    const loadedRecords = data || [];
+    const changed = previousVersion !== recordsStateVersion(loadedRecords);
+    records = loadedRecords;
+    if(hadInitialSnapshot && notifyNew){
+      records
+        .filter(record => !previousIds.has(record.id))
+        .forEach(record => notifyOnlineLeadOnce(record, reason));
+    }
+
+    hasInitialRecordSnapshot = true;
+    lastSuccessfulSyncAt = Date.now();
+    if(changed || reason !== "polling de segurança") render();
+    updateSyncStatusDisplay();
+    console.info("[CRM Sync] Registros atualizados.", { reason, total: records.length, changed });
+    return true;
+  })().catch(error => {
+    console.error("[CRM Sync] Erro ao carregar registros.", { reason, error });
+    setSyncConnectionState(navigator.onLine ? "error" : "offline");
+    if(showError) toast("Erro ao sincronizar. Tente novamente.");
+    return false;
+  }).finally(() => {
+    recordsFetchPromise = null;
+    if(recordsRefreshQueued){
+      recordsRefreshQueued = false;
+      setTimeout(() => syncController.refresh("atualização pendente", true), 100);
+    }
+  });
+
+  return recordsFetchPromise;
 }
 
 function profileNameById(id){
@@ -807,59 +970,252 @@ function profileNameById(id){
 
 async function bootAfterLogin(){
   if(!sb || !session?.user) return;
-  await ensureConfigRow();
-  await ensureProfile();
-  await Promise.all([fetchConfig(), fetchProfiles(), fetchRecords()]);
-  buildFilters();
-  render();
-  subscribeRealtime();
+  if(bootedUserId === session.user.id){
+    await syncController.start();
+    return;
+  }
+  if(bootPromise) return bootPromise;
+
+  const userId = session.user.id;
+  bootPromise = (async () => {
+    hasInitialRecordSnapshot = false;
+    setSyncConnectionState(navigator.onLine ? "reconnecting" : "offline");
+    await ensureConfigRow();
+    await ensureProfile();
+    await Promise.all([fetchConfig(), fetchProfiles()]);
+    buildFilters();
+    const loaded = await fetchRecords({ reason:"carga inicial", notifyNew:false, showError:true });
+    if(!loaded) return;
+    bootedUserId = userId;
+    await syncController.start();
+  })().catch(error => {
+    console.error("[CRM Boot] Falha ao iniciar aplicação.", error);
+    toast("Falha ao iniciar o CRM.");
+    setSyncConnectionState("error");
+  }).finally(() => {
+    bootPromise = null;
+  });
+
+  return bootPromise;
 }
 
-let realtimeChannel = null;
-let realtimeDebounce = null;
+/* ===== Sincronização resiliente: Realtime + polling ===== */
+const syncController = (() => {
+  const POLL_INTERVAL_MS = 45000;
+  const WAKE_CHECK_INTERVAL_MS = 15000;
+  const WAKE_GAP_MS = 45000;
+  const MAX_RECONNECT_DELAY_MS = 30000;
 
-function subscribeRealtime(){
-  if(!sb || !session?.user) return;
+  let channel = null;
+  let channelGeneration = 0;
+  let reconnectAttempt = 0;
+  let reconnectTimer = null;
+  let refreshDebounceTimer = null;
+  let pollingTimer = null;
+  let wakeTimer = null;
+  let statusTimer = null;
+  let started = false;
+  let lifecycleBound = false;
+  let connectPromise = null;
+  let lastWakeTick = Date.now();
+  let lastFocusRefreshAt = 0;
 
-  try{
-    if(realtimeChannel){
-      sb.removeChannel(realtimeChannel);
-      realtimeChannel = null;
+  function clearTimer(name){
+    if(name === "reconnect" && reconnectTimer){ clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if(name === "refresh" && refreshDebounceTimer){ clearTimeout(refreshDebounceTimer); refreshDebounceTimer = null; }
+  }
+
+  function scheduleRefresh(reason, notifyNew=true, delay=300){
+    clearTimer("refresh");
+    refreshDebounceTimer = setTimeout(() => {
+      refreshDebounceTimer = null;
+      refresh(reason, notifyNew);
+    }, delay);
+  }
+
+  function scheduleReconnect(reason){
+    if(!started || !session?.user || !navigator.onLine || reconnectTimer) return;
+    const delay = Math.min(1000 * (2 ** reconnectAttempt), MAX_RECONNECT_DELAY_MS);
+    reconnectAttempt = Math.min(reconnectAttempt + 1, 6);
+    setSyncConnectionState("reconnecting");
+    console.warn("[CRM Realtime] Reconexão agendada.", { reason, delay });
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connect(`reconexão: ${reason}`);
+    }, delay);
+  }
+
+  function handleRealtimeChange(payload){
+    const eventType = payload?.eventType || "UNKNOWN";
+    const record = payload?.new;
+    console.info("[CRM Realtime] Alteração recebida.", { eventType, id: record?.id || payload?.old?.id || null });
+
+    if(eventType === "INSERT" && record){
+      notifyOnlineLeadOnce(record, "realtime");
+    }
+    scheduleRefresh(`realtime ${eventType.toLowerCase()}`, true, 250);
+  }
+
+  async function removeCurrentChannel(){
+    const oldChannel = channel;
+    channel = null;
+    if(!oldChannel || !sb) return;
+    try{
+      await sb.removeChannel(oldChannel);
+    }catch(error){
+      console.warn("[CRM Realtime] Falha ao remover canal anterior.", error);
+    }
+  }
+
+  async function connectInternal(reason){
+    if(!started || !sb || !session?.user) return false;
+    if(!navigator.onLine){
+      setSyncConnectionState("offline");
+      return false;
     }
 
-    realtimeChannel = sb
-      .channel("crm_records_realtime")
+    clearTimer("reconnect");
+    setSyncConnectionState("reconnecting");
+    const generation = ++channelGeneration;
+    await removeCurrentChannel();
+    if(generation !== channelGeneration || !started || !session?.user) return false;
+
+    console.info("[CRM Realtime] Criando canal único.", { reason, generation });
+    const nextChannel = sb
+      .channel(`crm_records_sync_${session.user.id}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "crm_records" },
-        async () => {
-          clearTimeout(realtimeDebounce);
-          realtimeDebounce = setTimeout(async () => {
-            const beforeIds = new Set(records.map(r => r.id));
+        { event:"*", schema:"public", table:TBL_RECORDS },
+        handleRealtimeChange
+      );
 
-            await fetchRecords();
+    channel = nextChannel;
+    nextChannel.subscribe((status, error) => {
+      if(generation !== channelGeneration || channel !== nextChannel) return;
+      console.info("[CRM Realtime] Estado do canal.", { status, hasError:Boolean(error) });
 
-            const newOnes = records.filter(r =>
-              !beforeIds.has(r.id) &&
-              r.pipeline === "lead" &&
-              (r.source || "") === "Lead Online"
-            );
+      if(status === "SUBSCRIBED"){
+        reconnectAttempt = 0;
+        setSyncConnectionState("online");
+        scheduleRefresh("realtime conectado", true, 50);
+        return;
+      }
 
-            if(newOnes.length){
-              beep?.();
-              const n = newOnes[0];
-              toast?.(`Novo lead online: ${(n.first_name || "")} ${(n.last_name || "")}`.trim());
-            }
-
-            render();
-          }, 250);
-        }
-      )
-      .subscribe();
-  }catch(e){
-    console.error("Realtime subscribe error:", e);
+      if(["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)){
+        if(error) console.error("[CRM Realtime] Erro no canal.", error);
+        scheduleReconnect(status);
+      }
+    });
+    return true;
   }
-}
+
+  function connect(reason){
+    if(connectPromise) return connectPromise;
+    connectPromise = connectInternal(reason)
+      .catch(error => {
+        console.error("[CRM Realtime] Falha ao conectar.", error);
+        scheduleReconnect("exceção");
+        return false;
+      })
+      .finally(() => { connectPromise = null; });
+    return connectPromise;
+  }
+
+  async function refresh(reason="sincronização", notifyNew=true, showError=false){
+    return fetchRecords({ reason, notifyNew, showError });
+  }
+
+  function bindLifecycle(){
+    if(lifecycleBound) return;
+    lifecycleBound = true;
+
+    window.addEventListener("online", () => {
+      if(!started || !session?.user) return;
+      console.info("[CRM Sync] Navegador voltou a ficar online.");
+      setSyncConnectionState("reconnecting");
+      connect("navegador online");
+      scheduleRefresh("navegador online", true, 200);
+    });
+
+    window.addEventListener("offline", () => {
+      clearTimer("reconnect");
+      setSyncConnectionState("offline");
+      console.warn("[CRM Sync] Navegador sem conexão.");
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if(!started || !session?.user || document.visibilityState !== "visible") return;
+      console.info("[CRM Sync] Aba voltou a ficar visível.");
+      connect("aba visível");
+      scheduleRefresh("aba visível", true, 150);
+    });
+
+    window.addEventListener("focus", () => {
+      if(!started || !session?.user) return;
+      const now = Date.now();
+      if(now - lastFocusRefreshAt < 10000) return;
+      lastFocusRefreshAt = now;
+      connect("janela em foco");
+      scheduleRefresh("janela em foco", true, 150);
+    });
+  }
+
+  function startTimers(){
+    if(!pollingTimer){
+      pollingTimer = setInterval(() => {
+        if(!started || !session?.user || !navigator.onLine || document.visibilityState !== "visible") return;
+        refresh("polling de segurança", true);
+      }, POLL_INTERVAL_MS);
+    }
+
+    if(!wakeTimer){
+      lastWakeTick = Date.now();
+      wakeTimer = setInterval(() => {
+        const now = Date.now();
+        const gap = now - lastWakeTick;
+        lastWakeTick = now;
+        if(!started || !session?.user || gap <= WAKE_GAP_MS) return;
+        console.info("[CRM Sync] Retorno de suspensão detectado.", { gap });
+        connect("retorno de suspensão");
+        scheduleRefresh("retorno de suspensão", true, 200);
+      }, WAKE_CHECK_INTERVAL_MS);
+    }
+
+    if(!statusTimer){
+      statusTimer = setInterval(updateSyncStatusDisplay, 10000);
+    }
+  }
+
+  async function start(){
+    if(!sb || !session?.user) return;
+    bindLifecycle();
+    startTimers();
+    started = true;
+    await connect("inicialização");
+  }
+
+  async function resume(reason){
+    if(!sb || !session?.user) return;
+    if(!started) return start();
+    await connect(reason);
+    scheduleRefresh(reason, true, 150);
+  }
+
+  async function stop(){
+    started = false;
+    clearTimer("reconnect");
+    clearTimer("refresh");
+    if(pollingTimer){ clearInterval(pollingTimer); pollingTimer = null; }
+    if(wakeTimer){ clearInterval(wakeTimer); wakeTimer = null; }
+    if(statusTimer){ clearInterval(statusTimer); statusTimer = null; }
+    channelGeneration++;
+    reconnectAttempt = 0;
+    await removeCurrentChannel();
+    setSyncConnectionState("offline");
+  }
+
+  return { start, stop, resume, refresh };
+})();
 
 /* ===== Rendering ===== */
 function datasetForTab(){
@@ -1593,9 +1949,10 @@ $("btnCloseLogin").addEventListener("click", ()=> $("loginModal").close());
 $("btnSignOut").addEventListener("click", ()=> doSignOut());
 $("btnSync").addEventListener("click", async ()=>{
   if(!sb || !session?.user) return openLogin();
-  await fetchRecords();
-  render();
-  toast("Sincronizado.");
+  const ok = await syncController.refresh("sincronização manual", true, true);
+  if(!ok) return;
+  toast("Sincronizado com sucesso.");
+  syncController.resume("sincronização manual");
 });
 
 /* Config tab button delegation */
@@ -1729,7 +2086,7 @@ $("importJson").addEventListener("change", async (e)=>{
           .single();
 
         if(error){
-          console.error("Erro ao importar registro:", error, payload);
+          console.error("Erro ao importar registro:", { error, recordId: r.id || null });
           errors++;
           continue;
         }
