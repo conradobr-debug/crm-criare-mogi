@@ -334,6 +334,7 @@ async function sendEventThroughMake(
     headers: {
       "content-type": "application/json",
       "authorization": `Bearer ${MAKE_WEBHOOK_SECRET}`,
+      "x-make-apikey": MAKE_WEBHOOK_SECRET,
       "x-crm-calendar-secret": MAKE_WEBHOOK_SECRET,
     },
     body: JSON.stringify({

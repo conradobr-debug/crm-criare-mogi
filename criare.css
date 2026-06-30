@@ -44,20 +44,22 @@ header::after{
 }
 
 header .brand, header .actions{position:relative;z-index:1}
-header h1{font-size:17px;font-weight:650;letter-spacing:.02em;color:#fff}
+header h1{font-size:17px;font-weight:600;letter-spacing:.02em;color:#fff}
 header .sub{color:rgba(255,255,255,.64)}
 .brandClaim{margin-top:3px;color:rgba(255,255,255,.48);font-size:8px;font-weight:700;letter-spacing:.32em}
 .logo{
-  width:auto;height:auto;min-width:100px;
+  position:relative;
+  width:220px;height:58px;min-width:220px;
   border-radius:0;
-  padding:0 4px 2px 0;
-  color:#fff;
+  overflow:hidden;
   background:none;
   box-shadow:none;
-  font-size:29px;
-  font-weight:900;
-  font-style:italic;
-  letter-spacing:-.09em;
+}
+.logo img{
+  position:absolute;
+  width:220px;height:auto;
+  left:0;top:-52px;
+  display:block;
 }
 
 .syncStatus{border-color:rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:rgba(255,255,255,.72)}
@@ -69,7 +71,7 @@ header button:hover,header .btn:hover{border-color:rgba(255,255,255,.55);backgro
 .wrap{padding:14px 14px 18px}
 .tabs,.toolbar,.boardWrap{border-color:var(--line);box-shadow:var(--shadow)}
 .tabs{padding:7px;background:#fff;border-radius:3px}
-.tab{border-radius:2px;color:#77716b;font-weight:700;letter-spacing:.025em}
+.tab{border-radius:2px;color:#77716b;font-weight:600;letter-spacing:.025em}
 .tab.active{color:#fff;border-color:#111;background:#111}
 .toolbar{border-radius:3px;background:#faf9f7}
 .boardWrap{border-radius:3px;background:#fbfaf8}
@@ -79,7 +81,7 @@ header button:hover,header .btn:hover{border-color:rgba(255,255,255,.55);backgro
 .colHd{border-color:#bdb6ad;background:#f5f2ed}
 .count{border-color:#d4cdc4;background:#fff;color:#302c28}
 
-button,.btn{border-radius:2px;font-weight:750;background:#fff;color:#171717;border-color:#cfc8bf}
+button,.btn{border-radius:2px;font-weight:600;background:#fff;color:#171717;border-color:#cfc8bf}
 button.primary{border-color:#111;background:#111;color:#fff}
 button.primary:hover{background:#2a2927;border-color:#2a2927}
 button.ghost{background:transparent}
@@ -89,7 +91,7 @@ button.successAction{border-color:var(--olive);background:var(--olive);color:#ff
 select,input,textarea{border-radius:2px;border-color:#cec8c0;background:#fff;color:#171717}
 select:focus,input:focus,textarea:focus{border-color:#151515;box-shadow:0 0 0 2px rgba(0,0,0,.08)}
 input::placeholder,textarea::placeholder{color:#aaa49c}
-label{color:#625d57;font-weight:750}
+label{color:#625d57;font-weight:600}
 .fieldHelp{margin-top:6px;color:#837c74;font-size:10px;line-height:1.35}
 
 .kpi{border-color:#d6d0c8;border-radius:2px;background:#fff}
@@ -151,15 +153,15 @@ dialog::backdrop{background:rgba(10,10,10,.68);backdrop-filter:blur(3px)}
 .pendingCard{padding:12px;border:1px solid #d5cec5;background:#fff;cursor:pointer;box-shadow:0 5px 16px rgba(42,34,27,.05)}
 .pendingCard:hover{border-color:#8c8175}
 .pendingCardTop{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
-.pendingTitle{font-weight:800;font-size:13px;line-height:1.3}
+.pendingTitle{font-weight:650;font-size:13px;line-height:1.3}
 .pendingMeta{margin-top:8px;color:#6e6760;font-size:11px;line-height:1.5}
-.priority{display:inline-flex;padding:4px 7px;border:1px solid #ccc4ba;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+.priority{display:inline-flex;padding:4px 7px;border:1px solid #ccc4ba;font-size:10px;font-weight:650;text-transform:uppercase;letter-spacing:.05em}
 .priority.Urgente{background:#a0443e;border-color:#a0443e;color:#fff}
 .priority.Alta{background:#a36d49;border-color:#a36d49;color:#fff}
 .pendingThumbs{display:flex;gap:5px;margin-top:9px}
 .pendingThumbs img{width:42px;height:42px;object-fit:cover;border:1px solid #d4cdc4}
-.pendingDueLate{color:#963e37;font-weight:800}
-.pendingDueSoon{color:#835f2e;font-weight:800}
+.pendingDueLate{color:#963e37;font-weight:650}
+.pendingDueSoon{color:#835f2e;font-weight:650}
 .pendingToolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%}
 .outlookStatusCard{border:1px solid #d6d0c8;background:#fff;padding:14px;min-width:360px;max-width:520px}
 .outlookStatusLine{display:flex;gap:8px;align-items:center;margin:8px 0 12px}
@@ -168,7 +170,7 @@ dialog::backdrop{background:rgba(10,10,10,.68);backdrop-filter:blur(3px)}
 
 @media (max-width:1100px){.pendingLayout{grid-template-columns:repeat(2,minmax(250px,1fr))}}
 @media (max-width:700px){
-  header{align-items:flex-start;padding:16px 14px}.brandClaim{display:none}.logo{min-width:78px;font-size:24px}
+  header{align-items:flex-start;padding:16px 14px}.logo{width:170px;height:46px;min-width:170px}.logo img{width:170px;top:-40px}
   .actions{justify-content:flex-start}.wrap{padding:10px 8px}
   .pendingLayout{grid-template-columns:1fr}.photoGrid{grid-template-columns:repeat(2,1fr)}
   .toolbar .field{min-width:calc(50% - 6px)}.toolbar .search{min-width:100%}
