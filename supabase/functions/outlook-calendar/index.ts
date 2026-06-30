@@ -5,6 +5,8 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const MICROSOFT_CLIENT_ID = Deno.env.get("MICROSOFT_CLIENT_ID") || "";
 const MICROSOFT_CLIENT_SECRET = Deno.env.get("MICROSOFT_CLIENT_SECRET") || "";
 const TOKEN_ENCRYPTION_KEY = Deno.env.get("OUTLOOK_TOKEN_ENCRYPTION_KEY") || "";
+const MAKE_WEBHOOK_URL = Deno.env.get("MAKE_CALENDAR_WEBHOOK_URL") || "";
+const MAKE_WEBHOOK_SECRET = Deno.env.get("MAKE_CALENDAR_WEBHOOK_SECRET") || "";
 const ALLOWED_OUTLOOK_EMAIL = (Deno.env.get("OUTLOOK_ALLOWED_EMAIL") || "criaremg@hotmail.com").toLowerCase();
 const CONNECTOR_USER_EMAIL = (Deno.env.get("OUTLOOK_CONNECTOR_USER_EMAIL") || "").toLowerCase();
 const CRM_PUBLIC_URL = Deno.env.get("CRM_PUBLIC_URL") || "https://conradobr-debug.github.io/crm-criare-mogi/";
@@ -47,8 +49,22 @@ function redirect(url: string) {
 }
 
 function requireConfiguration() {
+  if (MAKE_WEBHOOK_URL && MAKE_WEBHOOK_SECRET) return;
   if (!MICROSOFT_CLIENT_ID) throw new Error("MICROSOFT_CLIENT_ID não configurado.");
   if (!TOKEN_ENCRYPTION_KEY) throw new Error("OUTLOOK_TOKEN_ENCRYPTION_KEY não configurado.");
+}
+
+function makeBridgeConfigured() {
+  return Boolean(MAKE_WEBHOOK_URL && MAKE_WEBHOOK_SECRET);
+}
+
+function validatedMakeWebhookUrl() {
+  const url = new URL(MAKE_WEBHOOK_URL);
+  const trustedHost = url.hostname === "hook.make.com" || url.hostname.endsWith(".make.com");
+  if (url.protocol !== "https:" || !trustedHost) {
+    throw new Error("MAKE_CALENDAR_WEBHOOK_URL precisa ser um webhook HTTPS da Make.");
+  }
+  return url.toString();
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -242,6 +258,15 @@ async function finishConnection(url: URL) {
 async function connectionStatus(request: Request) {
   const user = await authenticatedUser(request);
   if (!user) return json(request, { error: "Sessão do CRM inválida." }, 401);
+  if (makeBridgeConfigured()) {
+    return json(request, {
+      configured: true,
+      connected: true,
+      provider: "make",
+      account_email: ALLOWED_OUTLOOK_EMAIL,
+      connected_at: null,
+    });
+  }
   const configured = Boolean(MICROSOFT_CLIENT_ID && TOKEN_ENCRYPTION_KEY);
   if (!configured) return json(request, { configured: false, connected: false });
 
@@ -253,6 +278,7 @@ async function connectionStatus(request: Request) {
   return json(request, {
     configured: true,
     connected: Boolean(data),
+    provider: "microsoft_graph",
     account_email: data?.account_email || null,
     connected_at: data?.connected_at || null,
   });
@@ -290,6 +316,73 @@ function html(value: unknown): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+async function sendEventThroughMake(
+  recordId: string,
+  record: Record<string, any>,
+  event: {
+    title: string;
+    body: string;
+    start: Date;
+    end: Date;
+    reminder: number;
+  },
+) {
+  const response = await fetch(validatedMakeWebhookUrl(), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "authorization": `Bearer ${MAKE_WEBHOOK_SECRET}`,
+      "x-crm-calendar-secret": MAKE_WEBHOOK_SECRET,
+    },
+    body: JSON.stringify({
+      operation: record.outlook_event_id ? "update" : "create",
+      crm_record_id: recordId,
+      event_id: record.outlook_event_id || null,
+      subject: event.title,
+      body_html: event.body,
+      start_utc: event.start.toISOString(),
+      end_utc: event.end.toISOString(),
+      time_zone: "America/Sao_Paulo",
+      reminder_minutes: Math.max(0, event.reminder),
+      is_reminder_on: event.reminder > 0,
+      show_as: "busy",
+      category: "CRM Criare",
+      account_email: ALLOWED_OUTLOOK_EMAIL,
+    }),
+  });
+
+  const responseText = await response.text();
+  let payload: Record<string, any> = {};
+  if (responseText) {
+    try {
+      payload = JSON.parse(responseText);
+    } catch {
+      payload = { message: responseText };
+    }
+  }
+  if (!response.ok) {
+    console.error("[Make Calendar] Falha no cenário.", { status: response.status });
+    throw new Error(payload.error || payload.message || "A automação do calendário recusou o compromisso.");
+  }
+
+  const eventId = String(payload.event_id || payload.id || "").trim();
+  if (!eventId) {
+    throw new Error("A Make criou o compromisso, mas não retornou o identificador do evento.");
+  }
+  const webLink = String(payload.web_link || payload.webLink || "").trim() || null;
+  const { error: updateError } = await admin.from("crm_records").update({
+    outlook_event_id: eventId,
+    outlook_event_web_link: webLink,
+    outlook_synced_at: new Date().toISOString(),
+  }).eq("id", recordId);
+  if (updateError) throw updateError;
+
+  return {
+    event_id: eventId,
+    web_link: webLink,
+  };
 }
 
 async function createOrUpdateEvent(request: Request, input: Json) {
@@ -339,6 +432,23 @@ async function createOrUpdateEvent(request: Request, input: Json) {
     categories: ["CRM Criare"],
   };
 
+  if (makeBridgeConfigured()) {
+    const result = await sendEventThroughMake(recordId, record, {
+      title,
+      body,
+      start,
+      end,
+      reminder,
+    });
+    return json(request, {
+      ok: true,
+      provider: "make",
+      event_id: result.event_id,
+      web_link: result.web_link,
+      account_email: ALLOWED_OUTLOOK_EMAIL,
+    });
+  }
+
   const accessToken = await freshAccessToken();
   let eventResult = null;
   let eventResponse = null;
@@ -387,6 +497,11 @@ async function createOrUpdateEvent(request: Request, input: Json) {
 async function disconnect(request: Request) {
   const user = await authenticatedUser(request);
   if (!user) return json(request, { error: "Sessão do CRM inválida." }, 401);
+  if (makeBridgeConfigured()) {
+    return json(request, {
+      error: "A conexão gratuita é administrada na Make e não pode ser removida pelo CRM.",
+    }, 409);
+  }
   if (CONNECTOR_USER_EMAIL && (user.email || "").toLowerCase() !== CONNECTOR_USER_EMAIL) {
     return json(request, { error: "Somente o administrador do CRM pode desconectar o calendário central." }, 403);
   }

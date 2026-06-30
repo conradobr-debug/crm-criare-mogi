@@ -936,7 +936,7 @@ async function fetchOutlookStatus(){
     return true;
   }catch(error){
     console.warn("[CRM Outlook] Status indisponível.", error);
-    outlookStatus = {configured:false, connected:false, account_email:null};
+    outlookStatus = {configured:false, connected:false, account_email:null, provider:null};
     return false;
   }
 }
@@ -1106,7 +1106,7 @@ let pendingAttachments = [];
 let pendingPhotosBuffer = [];
 let pendingSupported = true;
 let showCompletedPending = false;
-let outlookStatus = { configured:false, connected:false, account_email:null };
+let outlookStatus = { configured:false, connected:false, account_email:null, provider:null };
 let hasInitialWeeklySnapshot = false;
 let hasInitialRecordSnapshot = false;
 let recordsFetchPromise = null;
@@ -2151,17 +2151,22 @@ function renderConfig(){
   const outlookLabel = !outlookStatus.configured
     ? "Integração ainda não configurada no servidor"
     : outlookStatus.connected
-      ? `Conectado a ${outlookStatus.account_email || "conta central"}`
+      ? `Conectado a ${outlookStatus.account_email || "conta central"}${outlookStatus.provider === "make" ? " • automação gratuita" : ""}`
       : "Aguardando conexão única com a conta da loja";
-  const outlookAction = outlookStatus.connected
+  const outlookAction = outlookStatus.provider === "make"
+    ? ``
+    : outlookStatus.connected
     ? `<button class="danger" data-act="disconnectOutlook">Desconectar</button>`
     : `<button class="primary" data-act="connectOutlook" ${outlookStatus.configured ? "" : "disabled"}>Conectar criaremg@hotmail.com</button>`;
+  const outlookNote = outlookStatus.provider === "make"
+    ? "A Make recebe somente os dados necessários do compromisso e grava no calendário central. Os usuários continuam trabalhando apenas no CRM."
+    : "Depois da conexão inicial, todos os usuários do CRM criam e atualizam compromissos sem abrir o Outlook.";
 
   return `
     <section class="outlookStatusCard">
       <div class="sectionHd" style="padding:0 0 10px;border-bottom:1px solid var(--line)"><span>Calendário central Outlook</span></div>
       <div class="outlookStatusLine"><span class="statusDot ${outlookStatus.connected ? "connected" : ""}"></span><span>${escapeHtml(outlookLabel)}</span></div>
-      <div class="note" style="margin-bottom:12px">Depois da conexão inicial, todos os usuários do CRM criam e atualizam compromissos sem abrir o Outlook.</div>
+      <div class="note" style="margin-bottom:12px">${escapeHtml(outlookNote)}</div>
       ${outlookAction}
     </section>
 
@@ -2500,7 +2505,7 @@ function updateModalMode(kind){
     ? "Obrigatório: Nome, Sobrenome, Telefone e Cidade."
     : "Obrigatório: Nome, Sobrenome, Telefone, Cidade e Ambiente.";
   $("outlookScheduleNotice").textContent = outlookStatus.connected
-    ? `Compromissos são salvos diretamente em ${outlookStatus.account_email || "criaremg@hotmail.com"}.`
+    ? `Compromissos são salvos diretamente em ${outlookStatus.account_email || "criaremg@hotmail.com"}${outlookStatus.provider === "make" ? " pela automação gratuita" : ""}.`
     : "O calendário central precisa ser conectado uma única vez na aba Config antes do primeiro agendamento.";
   updateLostReasonVisibility();
 }
@@ -2920,7 +2925,12 @@ $("board").addEventListener("click", async (e)=>{
   if(act==="connectOutlook"){
     try{
       const result=await callOutlook("connect");
-      window.location.href=result.authorization_url;
+      if(result.authorization_url) window.location.href=result.authorization_url;
+      else{
+        await fetchOutlookStatus();
+        render();
+        toast("Calendário central já está conectado.");
+      }
     }catch(error){
       toast(error.message || "Erro ao iniciar conexão com o Outlook.");
     }
