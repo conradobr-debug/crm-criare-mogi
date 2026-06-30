@@ -1,0 +1,2 @@
+[functions.outlook-calendar]
+verify_jwt = false

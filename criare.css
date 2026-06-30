@@ -1,0 +1,175 @@
+:root{
+  --bg:#f2f0ec;
+  --line:#d9d4cc;
+  --text:#171717;
+  --muted:#706c66;
+  --black:#0b0b0b;
+  --paper:#ffffff;
+  --sand:#c8b39f;
+  --sand-soft:#eee7df;
+  --wood:#a36d49;
+  --olive:#6f7868;
+  --danger:#a0443e;
+  --shadow:0 12px 34px rgba(30,25,20,.08);
+  --sans:"Avenir Next","Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+
+body{
+  color:var(--text);
+  background:
+    linear-gradient(rgba(255,255,255,.3),rgba(255,255,255,.3)),
+    var(--bg);
+  letter-spacing:.01em;
+}
+
+header{
+  position:relative;
+  align-items:center;
+  min-height:112px;
+  padding:18px 22px;
+  color:#fff;
+  background:
+    repeating-radial-gradient(ellipse at 17% 53%,transparent 0 22px,rgba(255,255,255,.075) 23px 24px,transparent 25px 34px),
+    repeating-radial-gradient(ellipse at 86% 18%,transparent 0 28px,rgba(255,255,255,.045) 29px 30px,transparent 31px 43px),
+    #090909;
+  overflow:hidden;
+}
+
+header::after{
+  content:"";
+  position:absolute;
+  left:0;right:0;bottom:0;
+  height:1px;
+  background:rgba(255,255,255,.25);
+}
+
+header .brand, header .actions{position:relative;z-index:1}
+header h1{font-size:17px;font-weight:650;letter-spacing:.02em;color:#fff}
+header .sub{color:rgba(255,255,255,.64)}
+.brandClaim{margin-top:3px;color:rgba(255,255,255,.48);font-size:8px;font-weight:700;letter-spacing:.32em}
+.logo{
+  width:auto;height:auto;min-width:100px;
+  border-radius:0;
+  padding:0 4px 2px 0;
+  color:#fff;
+  background:none;
+  box-shadow:none;
+  font-size:29px;
+  font-weight:900;
+  font-style:italic;
+  letter-spacing:-.09em;
+}
+
+.syncStatus{border-color:rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:rgba(255,255,255,.72)}
+header button,header .btn{border-color:rgba(255,255,255,.22);background:rgba(255,255,255,.06);color:#fff}
+header button.primary{border-color:#fff;background:#fff;color:#111}
+header button.danger{border-color:rgba(255,164,150,.45);background:rgba(160,68,62,.16);color:#fff}
+header button:hover,header .btn:hover{border-color:rgba(255,255,255,.55);background:rgba(255,255,255,.13)}
+
+.wrap{padding:14px 14px 18px}
+.tabs,.toolbar,.boardWrap{border-color:var(--line);box-shadow:var(--shadow)}
+.tabs{padding:7px;background:#fff;border-radius:3px}
+.tab{border-radius:2px;color:#77716b;font-weight:700;letter-spacing:.025em}
+.tab.active{color:#fff;border-color:#111;background:#111}
+.toolbar{border-radius:3px;background:#faf9f7}
+.boardWrap{border-radius:3px;background:#fbfaf8}
+.boardHint{border-color:#c9c2b9;color:#736d66}
+.board{gap:12px}
+.col{background:#ebe8e3;border-color:#d7d1ca;border-radius:3px}
+.colHd{border-color:#bdb6ad;background:#f5f2ed}
+.count{border-color:#d4cdc4;background:#fff;color:#302c28}
+
+button,.btn{border-radius:2px;font-weight:750;background:#fff;color:#171717;border-color:#cfc8bf}
+button.primary{border-color:#111;background:#111;color:#fff}
+button.primary:hover{background:#2a2927;border-color:#2a2927}
+button.ghost{background:transparent}
+button.danger{border-color:#d7aaa5;background:#fff5f3;color:#8c3833}
+button.successAction{border-color:var(--olive);background:var(--olive);color:#fff}
+
+select,input,textarea{border-radius:2px;border-color:#cec8c0;background:#fff;color:#171717}
+select:focus,input:focus,textarea:focus{border-color:#151515;box-shadow:0 0 0 2px rgba(0,0,0,.08)}
+input::placeholder,textarea::placeholder{color:#aaa49c}
+label{color:#625d57;font-weight:750}
+.fieldHelp{margin-top:6px;color:#837c74;font-size:10px;line-height:1.35}
+
+.kpi{border-color:#d6d0c8;border-radius:2px;background:#fff}
+.kpi .n{font-weight:650}
+.summaryCard,.sectionCard{border-radius:2px;border-color:#d6d0c8;background:#fff}
+.summaryCard .n{font-weight:650}
+.reportBar{background:#e9e5df}
+.reportBar>span{background:linear-gradient(90deg,#1b1b1b,#9d7b61)}
+.formNotice{border-radius:2px;border-color:#d9c9b7;background:#f7f1e9;color:#624e3e}
+
+.card{border-radius:2px;border-color:#d8d2ca;background:#fff;box-shadow:0 5px 18px rgba(40,32,25,.055)}
+.card:hover{border-color:#8d8378;background:#fff}
+.chip,.badge,.stuckTag{border-color:#c5beb5;border-radius:999px;background:#fff;color:#3e3934}
+.dots{border-radius:2px;border-color:#d4cec6;color:#272421}
+.menu{border-radius:2px;border-color:#ccc5bc}
+.menu button{border-radius:2px}
+.scheduleState{border-radius:2px;border-color:#d4cec6;background:#f7f5f2;color:#5f5953}
+.scheduleState.ok{border-color:#aab7a7;background:#f1f5ef;color:#4d624a}
+.scheduleState.warn{border-color:#d2bb97;background:#faf5eb;color:#785f36}
+.scheduleState.late{border-color:#d7aaa5;background:#fff4f2;color:#8c3833}
+
+/* Etapas em tons naturais, sem aparência infantil. */
+.s-novo{border-left-color:#8b8b87}
+.s-recepcao-e-sondagem{border-left-color:#9d7b61}
+.s-qualificacao{border-left-color:#b89b79}
+.s-briefing-e-materiais{border-left-color:#7d8474}
+.s-projeto-em-desenvolvimento{border-left-color:#6e7568}
+.s-apresentacao-agendada{border-left-color:#455a54}
+.s-negociacao{border-left-color:#a06b47}
+.s-acompanhamento{border-left-color:#6b6775}
+.s-perdido{border-left-color:#a0443e}
+.s-contrato-realizado,.s-medicao-final,.s-projeto-executivo,.s-aprovacao-tecnica,
+.s-pedido-em-fabrica,.s-producao-e-transporte,.s-montagem-agendada,.s-montagem,
+.s-entrega-tecnica,.s-pos-venda{border-left-color:#6f7868}
+.s-mapeado,.s-primeiro-contato,.s-relacionamento,.s-parceiro-ativo,.s-pausado{border-left-color:#9d7b61}
+
+dialog{border-radius:3px;border-color:#cfc7bd;background:#f8f6f2;color:#171717;box-shadow:0 24px 70px rgba(0,0,0,.35)}
+dialog::backdrop{background:rgba(10,10,10,.68);backdrop-filter:blur(3px)}
+.modalHd{color:#fff;background:#0b0b0b;border-color:#343434}
+.modalHd .modalSub{color:rgba(255,255,255,.62)}
+.modalHd button{border-color:rgba(255,255,255,.35);color:#fff}
+.modalBd{background:#f5f2ed}
+.modalFt{border-color:#d6d0c8;background:#fff}
+.modalTitle{letter-spacing:.02em}
+.req{color:#a36d49}
+
+.photoHelp{margin-top:6px;color:var(--muted);font-size:11px}
+.photoGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:10px}
+.photoTile{position:relative;min-height:100px;border:1px solid #d3ccc3;background:#fff;overflow:hidden}
+.photoTile img{width:100%;height:118px;object-fit:cover;display:block}
+.photoTile .photoName{padding:7px;font-size:10px;color:#5f5952;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.photoTile button{position:absolute;right:5px;top:5px;padding:5px 7px;background:rgba(0,0,0,.78);border-color:rgba(255,255,255,.4);color:#fff}
+
+.pendingLayout{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:12px;width:100%;align-items:start}
+.pendingGroup{background:#ebe8e3;border:1px solid #d7d1ca;min-height:240px}
+.pendingGroupHd{display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid #c8c1b8;background:#f7f5f1}
+.pendingGroupHd h3{margin:0;font-size:13px;letter-spacing:.02em}
+.pendingList{padding:10px;display:flex;flex-direction:column;gap:10px}
+.pendingCard{padding:12px;border:1px solid #d5cec5;background:#fff;cursor:pointer;box-shadow:0 5px 16px rgba(42,34,27,.05)}
+.pendingCard:hover{border-color:#8c8175}
+.pendingCardTop{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.pendingTitle{font-weight:800;font-size:13px;line-height:1.3}
+.pendingMeta{margin-top:8px;color:#6e6760;font-size:11px;line-height:1.5}
+.priority{display:inline-flex;padding:4px 7px;border:1px solid #ccc4ba;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+.priority.Urgente{background:#a0443e;border-color:#a0443e;color:#fff}
+.priority.Alta{background:#a36d49;border-color:#a36d49;color:#fff}
+.pendingThumbs{display:flex;gap:5px;margin-top:9px}
+.pendingThumbs img{width:42px;height:42px;object-fit:cover;border:1px solid #d4cdc4}
+.pendingDueLate{color:#963e37;font-weight:800}
+.pendingDueSoon{color:#835f2e;font-weight:800}
+.pendingToolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%}
+.outlookStatusCard{border:1px solid #d6d0c8;background:#fff;padding:14px;min-width:360px;max-width:520px}
+.outlookStatusLine{display:flex;gap:8px;align-items:center;margin:8px 0 12px}
+.statusDot{width:9px;height:9px;border-radius:50%;background:#a8a29b}
+.statusDot.connected{background:#60755f}
+
+@media (max-width:1100px){.pendingLayout{grid-template-columns:repeat(2,minmax(250px,1fr))}}
+@media (max-width:700px){
+  header{align-items:flex-start;padding:16px 14px}.brandClaim{display:none}.logo{min-width:78px;font-size:24px}
+  .actions{justify-content:flex-start}.wrap{padding:10px 8px}
+  .pendingLayout{grid-template-columns:1fr}.photoGrid{grid-template-columns:repeat(2,1fr)}
+  .toolbar .field{min-width:calc(50% - 6px)}.toolbar .search{min-width:100%}
+}

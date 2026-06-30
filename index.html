@@ -404,14 +404,16 @@
     }
     .toast.show{opacity:1; transform: translateY(0)}
   </style>
+  <link rel="stylesheet" href="criare.css" />
 </head>
 <body>
 
 <header>
   <div class="brand">
-    <div class="logo" aria-hidden="true"></div>
+    <div class="logo" aria-hidden="true">Criare</div>
     <div>
       <h1>CRM Criare Mogi Guaçu</h1>
+      <div class="brandClaim">MANIFESTE SUA PERSONALIDADE</div>
       <div class="sub" id="sessionLine">Offline (template). Conecte ao Supabase para login e sincronização.</div>
       <div class="syncStatus offline" id="syncStatus" role="status" aria-live="polite">Sem conexão</div>
     </div>
@@ -433,6 +435,7 @@
     <div class="tab active" data-tab="leads" role="tab" aria-selected="true">Leads</div>
     <div class="tab" data-tab="closed" role="tab" aria-selected="false">Fechados</div>
     <div class="tab" data-tab="specifiers" role="tab" aria-selected="false">Especificadores</div>
+    <div class="tab" data-tab="pending" role="tab" aria-selected="false">Pendências</div>
     <div class="tab" data-tab="reports" role="tab" aria-selected="false">Relatórios</div>
     <div class="tab" data-tab="config" role="tab" aria-selected="false">Config</div>
   </div>
@@ -464,15 +467,15 @@
     <div class="kpiRow">
       <div class="kpi">
         <div class="n" id="kpiTotal">0</div>
-        <div class="t">No filtro</div>
+        <div class="t" id="kpiTotalLabel">No filtro</div>
       </div>
       <div class="kpi">
         <div class="n" id="kpiStuck">0</div>
-        <div class="t">Parados ≥ 14d</div>
+        <div class="t" id="kpiStuckLabel">Parados ≥ 14d</div>
       </div>
       <div class="kpi">
         <div class="n" id="kpiDue">0</div>
-        <div class="t">Próx. ação ≤ 7d</div>
+        <div class="t" id="kpiDueLabel">Próx. ação ≤ 7d</div>
       </div>
     </div>
   </div>
@@ -596,6 +599,30 @@
           </select>
         </div>
 
+        <div class="col-4">
+          <label>Duração</label>
+          <select id="nextActionDuration">
+            <option value="15">15 minutos</option>
+            <option value="30" selected>30 minutos</option>
+            <option value="45">45 minutos</option>
+            <option value="60">1 hora</option>
+            <option value="90">1h30</option>
+            <option value="120">2 horas</option>
+          </select>
+        </div>
+
+        <div class="col-4">
+          <label>Lembrete no Outlook</label>
+          <select id="nextActionReminder">
+            <option value="0">Sem lembrete</option>
+            <option value="15">15 minutos antes</option>
+            <option value="30" selected>30 minutos antes</option>
+            <option value="60">1 hora antes</option>
+            <option value="120">2 horas antes</option>
+            <option value="1440">1 dia antes</option>
+          </select>
+        </div>
+
         <div class="col-4" id="wrapLeadQuality">
           <label>Qualidade do lead</label>
           <select id="leadQuality">
@@ -605,6 +632,7 @@
             <option>Baixo potencial</option>
             <option>Fora do perfil</option>
           </select>
+          <div class="fieldHelp">Perfil Criare valoriza personalização, design, qualidade, processo técnico e segurança — não apenas preço.</div>
         </div>
 
         <div class="col-6" id="wrapSpecifierType" style="display:none;">
@@ -635,23 +663,62 @@
           <select id="lostReason"></select>
         </div>
 
+        <div class="col-4 leadDiscoveryField">
+          <label>Situação do imóvel</label>
+          <select id="propertyStatus">
+            <option>Não informado</option>
+            <option>Pronto</option>
+            <option>Em obra</option>
+            <option>Em construção</option>
+            <option>Ainda não iniciado</option>
+          </select>
+        </div>
+        <div class="col-4 leadDiscoveryField">
+          <label>Arquiteto ou designer</label>
+          <input id="professionalName" placeholder="Nome do profissional, se houver" />
+        </div>
+        <div class="col-4 leadDiscoveryField">
+          <label>Possui planta?</label>
+          <select id="hasFloorPlan">
+            <option value="">Não informado</option>
+            <option value="true">Sim</option>
+            <option value="false">Não</option>
+          </select>
+        </div>
+        <div class="col-4 leadDiscoveryField">
+          <label>Caminho de investimento</label>
+          <select id="investmentProfile">
+            <option>A definir</option>
+            <option>Essencial</option>
+            <option>Equilibrado</option>
+            <option>Completo</option>
+          </select>
+        </div>
+        <div class="col-4 leadDiscoveryField">
+          <label>Prazo para decisão</label>
+          <input id="decisionDueAt" type="date" />
+        </div>
+        <div class="col-4 leadDiscoveryField">
+          <label>Canal preferido</label>
+          <select id="preferredContact">
+            <option>WhatsApp</option>
+            <option>Ligação</option>
+            <option>E-mail</option>
+          </select>
+        </div>
+
         <div class="col-12">
           <label>Observações</label>
           <textarea id="notes"></textarea>
         </div>
 
-        <div class="col-12" id="wrapQualityNotes">
-          <label>Por que este lead é ou não é perfil da Criare?</label>
-          <textarea id="qualityNotes" placeholder="Ex.: região atendida, tipo de projeto, prazo, faixa de investimento e nível de interesse."></textarea>
+        <div class="col-12">
+          <label>Detalhes do próximo agendamento</label>
+          <textarea id="nextActionDetails" placeholder="Ex.: confirmar recebimento da planta, revisar briefing e combinar data da apresentação."></textarea>
         </div>
 
         <div class="col-12" id="scheduleNotice">
-          <div class="formNotice">Todo lead ou especificador ativo deve ter um próximo acompanhamento. O compromisso será aberto já preenchido no Outlook.</div>
-        </div>
-
-        <div class="col-12">
-          <div class="note">Mudar etapa atualiza automaticamente a data “Etapa desde”.</div>
-          <div class="mono" id="metaLine"></div>
+          <div class="formNotice" id="outlookScheduleNotice">Todo atendimento deve terminar com um próximo passo. Ao agendar, o compromisso será salvo diretamente no calendário central da Criare.</div>
         </div>
       </form>
     </div>
@@ -662,11 +729,97 @@
       <div class="modalQuick">
         <button class="ghost" id="btnCancel">Cancelar</button>
         <button class="primary" id="btnSave">Salvar</button>
-        <button class="primary" id="btnOutlook">Salvar e agendar no Outlook</button>
+        <button class="primary" id="btnOutlook">Salvar e criar compromisso</button>
         <button class="ghost" id="btnLogContact">Registrar contato agora</button>
         <button class="primary" id="btnQuickClosed" style="border-color: rgba(76,237,187,.75); background: rgba(76,237,187,.14)">Fechou</button>
         <button class="ghost" id="btnQuickLost" style="border-color: rgba(255,216,138,.65); background: rgba(255,216,138,.10)">Perdeu</button>
         <button class="danger" id="btnQuickDelete">Excluir</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Pending item modal -->
+  <dialog id="pendingModal">
+    <div class="modalHd">
+      <div>
+        <div class="modalTitle" id="pendingModalTitle">Nova pendência</div>
+        <div class="modalSub">Assistências, vistorias, peças e compras fora do pipeline comercial.</div>
+      </div>
+      <button class="ghost" id="btnClosePending">Fechar</button>
+    </div>
+    <div class="modalBd">
+      <form class="form" id="pendingForm" autocomplete="off">
+        <input type="hidden" id="pendingId" />
+        <div class="col-6">
+          <label>Título <span class="req">*</span></label>
+          <input id="pendingTitle" required placeholder="Ex.: Regular porta do armário da cozinha" />
+        </div>
+        <div class="col-3">
+          <label>Tipo</label>
+          <select id="pendingType">
+            <option>Assistência técnica</option>
+            <option>Vistoria</option>
+            <option>Pedir peça</option>
+            <option>Comprar item</option>
+            <option>Outro</option>
+          </select>
+        </div>
+        <div class="col-3">
+          <label>Prioridade</label>
+          <select id="pendingPriority">
+            <option>Baixa</option>
+            <option selected>Normal</option>
+            <option>Alta</option>
+            <option>Urgente</option>
+          </select>
+        </div>
+        <div class="col-4">
+          <label>Cliente</label>
+          <input id="pendingCustomer" placeholder="Nome do cliente" />
+        </div>
+        <div class="col-4">
+          <label>Telefone</label>
+          <input id="pendingPhone" placeholder="WhatsApp ou telefone" />
+        </div>
+        <div class="col-4">
+          <label>Responsável</label>
+          <select id="pendingOwner"></select>
+        </div>
+        <div class="col-4">
+          <label>Cidade</label>
+          <input id="pendingCity" />
+        </div>
+        <div class="col-8">
+          <label>Endereço</label>
+          <input id="pendingAddress" />
+        </div>
+        <div class="col-4">
+          <label>Prazo</label>
+          <input id="pendingDueDate" type="date" />
+        </div>
+        <div class="col-4">
+          <label>Horário</label>
+          <input id="pendingDueTime" type="time" value="09:00" />
+        </div>
+        <div class="col-12">
+          <label>Descrição e próximos passos</label>
+          <textarea id="pendingDescription" placeholder="Descreva a situação, medidas já tomadas, peças necessárias e o próximo passo."></textarea>
+        </div>
+        <div class="col-12">
+          <label>Fotos da situação</label>
+          <input id="pendingPhotos" type="file" accept="image/jpeg,image/png,image/webp,image/heic" multiple />
+          <div class="photoHelp">Até 6 fotos por envio, com no máximo 8 MB cada.</div>
+          <div class="photoGrid" id="pendingPhotoGrid"></div>
+        </div>
+      </form>
+    </div>
+    <div class="modalFt">
+      <div class="note" id="pendingStatusNote">A pendência ficará visível até ser concluída.</div>
+      <div class="modalQuick">
+        <button class="ghost" id="btnCancelPending">Cancelar</button>
+        <button class="primary" id="btnSavePending">Salvar pendência</button>
+        <button class="primary successAction" id="btnCompletePending">Concluir</button>
+        <button class="danger" id="btnDeletePending">Excluir</button>
       </div>
     </div>
   </dialog>
@@ -685,11 +838,17 @@ const SUPABASE_URL = "https://mwpirdfcwqfmuythpawi.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_Zy25RqFpeNvTDRJvOxWTSg_g_lPA0Pm";
 
 /* ===== Funis ===== */
-const LEAD_STAGES = ["Novo","Atendimento Inicial","Só quer preço","Projeto","Apresentação","Enrolação","Perdido"];
-const CLOSED_STAGES = ["Contrato Realizado","Medição Técnica","Projeto Executivo","Pedido","Liberação Fábrica","Agendamento de Montagem","Entrega","Pós Venda"];
+const LEAD_STAGES = ["Novo","Recepção e sondagem","Qualificação","Briefing e materiais","Projeto em desenvolvimento","Apresentação agendada","Negociação","Acompanhamento","Perdido"];
+const CLOSED_STAGES = ["Contrato realizado","Medição final","Projeto executivo","Aprovação técnica","Pedido em fábrica","Produção e transporte","Montagem agendada","Montagem","Entrega técnica","Pós-venda"];
 const SPECIFIER_STAGES = ["Mapeado","Primeiro Contato","Relacionamento","Parceiro Ativo","Pausado"];
 const SPECIFIER_TYPES = ["Arquiteto","Designer de interiores","Corretor","Construtor","Outro parceiro"];
 const LEAD_QUALITIES = ["Não avaliado","Perfil Criare","Potencial","Baixo potencial","Fora do perfil"];
+const PENDING_TYPES = ["Assistência técnica","Vistoria","Pedir peça","Comprar item","Outro"];
+const STAGE_PHASES = {
+  "Novo":"Conquistar", "Recepção e sondagem":"Conquistar", "Qualificação":"Conquistar", "Briefing e materiais":"Conquistar",
+  "Projeto em desenvolvimento":"Convencer", "Apresentação agendada":"Convencer",
+  "Negociação":"Vender", "Acompanhamento":"Vender", "Perdido":"Encerrado"
+};
 const DEFAULT_SOURCES = ["WhatsApp","Campanha de Facebook","Cliente de Porta de loja","Google","Indicação","Lead Online"];
 const DEFAULT_LOST_REASONS = ["Preço","Prazo","Concorrente","Sem retorno (sumiu)","Mudou de ideia","Sem orçamento no momento","Outro"];
 
@@ -699,6 +858,9 @@ const TBL_PROFILES = "crm_profiles";
 const TBL_CONFIG = "crm_config"; // id=1, sources jsonb, lost_reasons jsonb
 const TBL_EVENTS = "crm_record_events";
 const TBL_WEEKLY_REPORTS = "crm_weekly_reports";
+const TBL_PENDING = "crm_pending_items";
+const TBL_PENDING_ATTACHMENTS = "crm_pending_attachments";
+const PENDING_PHOTO_BUCKET = "crm-pending-photos";
 
 /* ===== Helpers ===== */
 const $ = (id) => document.getElementById(id);
@@ -752,31 +914,53 @@ function scheduleStatus(r){
   if(diffHours <= 168) return {kind:"ok", label:`${action} • ${fmtBRDateTime(next.toISOString())}`};
   return {kind:"ok", label:`${action} agendado • ${fmtBRDateTime(next.toISOString())}`};
 }
-function outlookComposeUrl(record){
-  const next = getNextActionAt(record);
-  if(!next) return null;
-  const end = new Date(next.getTime() + 30*60000);
-  const kind = record.next_action_kind || "Follow-up";
-  const subject = `CRM Criare • ${kind} • ${fullName(record)}`;
-  const body = [
-    `Contato: ${fullName(record)}`,
-    record.phone ? `Telefone: ${record.phone}` : "",
-    record.city ? `Cidade: ${record.city}` : "",
-    isSpecifier(record)
-      ? `Especificador: ${record.specifier_type || "Parceiro"}${record.company_name ? ` • ${record.company_name}` : ""}`
-      : `Etapa: ${record.stage || "Novo"}`,
-    "",
-    "Objetivo: manter o acompanhamento ativo e registrar o próximo passo no CRM."
-  ].filter(Boolean).join("\n");
-  const params = new URLSearchParams({
-    subject,
-    startdt: next.toISOString(),
-    enddt: end.toISOString(),
-    body,
-    path:"/calendar/action/compose",
-    rru:"addevent"
+async function callOutlook(action, payload={}){
+  if(!sb || !session?.access_token) throw new Error("Entre no CRM novamente.");
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/outlook-calendar`, {
+    method:"POST",
+    headers:{
+      "content-type":"application/json",
+      "apikey":SUPABASE_ANON_KEY,
+      "authorization":`Bearer ${session.access_token}`
+    },
+    body:JSON.stringify({action, ...payload})
   });
-  return `https://outlook.office.com/calendar/0/deeplink/compose?${params.toString()}`;
+  const result = await response.json().catch(()=>({}));
+  if(!response.ok) throw new Error(result.error || "Falha na integração com o Outlook.");
+  return result;
+}
+async function fetchOutlookStatus(){
+  if(!session?.user) return false;
+  try{
+    outlookStatus = await callOutlook("status");
+    return true;
+  }catch(error){
+    console.warn("[CRM Outlook] Status indisponível.", error);
+    outlookStatus = {configured:false, connected:false, account_email:null};
+    return false;
+  }
+}
+async function saveOutlookEvent(recordId){
+  const result = await callOutlook("create_event", {record_id:recordId});
+  const record = records.find(r=>r.id===recordId);
+  if(record){
+    record.outlook_event_id = result.event_id;
+    record.outlook_event_web_link = result.web_link;
+    record.outlook_synced_at = nowISO();
+  }
+  return result;
+}
+function handleOutlookReturn(){
+  const url = new URL(window.location.href);
+  const state = url.searchParams.get("outlook");
+  if(!state) return;
+  if(state === "connected") toast("Calendário central da Criare conectado.");
+  else if(state === "wrong_account") toast("Conecte a conta criaremg@hotmail.com.");
+  else toast("Não foi possível conectar o Outlook.");
+  url.searchParams.delete("outlook");
+  url.searchParams.delete("reason");
+  url.searchParams.delete("email");
+  history.replaceState({}, "", url.pathname + url.search + url.hash);
 }
 
 // ===== Sound notification (Lead Online) =====
@@ -867,9 +1051,24 @@ function slugifyStage(stage){
 function stageClass(stage){ return "s-" + slugifyStage(stage); }
 function normalizeLeadStage(stage){
   if(!stage) return "Novo";
-  if(stage==="Agendamento de medida") return "Atendimento Inicial";
-  if(stage==="Negociação") return "Enrolação";
+  const legacy = {
+    "Agendamento de medida":"Recepção e sondagem",
+    "Atendimento Inicial":"Recepção e sondagem",
+    "Só quer preço":"Qualificação",
+    "Projeto":"Projeto em desenvolvimento",
+    "Apresentação":"Apresentação agendada",
+    "Enrolação":"Acompanhamento"
+  };
+  if(legacy[stage]) return legacy[stage];
   return stage;
+}
+function normalizeClosedStage(stage){
+  const legacy={
+    "Contrato Realizado":"Contrato realizado","Medição Técnica":"Medição final","Projeto Executivo":"Projeto executivo",
+    "Pedido":"Pedido em fábrica","Liberação Fábrica":"Produção e transporte","Agendamento de Montagem":"Montagem agendada",
+    "Entrega":"Entrega técnica","Pós Venda":"Pós-venda"
+  };
+  return legacy[stage] || stage || "Contrato realizado";
 }
 function fullName(r){ return [r.first_name, r.last_name].filter(Boolean).join(" ").trim() || "Sem nome"; }
 function stageAge(r){
@@ -902,6 +1101,12 @@ let recordEvents = []; // histórico de movimentações e contatos
 let eventsSupported = true;
 let weeklyReports = [];
 let weeklyReportsSupported = true;
+let pendingItems = [];
+let pendingAttachments = [];
+let pendingPhotosBuffer = [];
+let pendingSupported = true;
+let showCompletedPending = false;
+let outlookStatus = { configured:false, connected:false, account_email:null };
 let hasInitialWeeklySnapshot = false;
 let hasInitialRecordSnapshot = false;
 let recordsFetchPromise = null;
@@ -1009,6 +1214,8 @@ function lockApp(){
   profiles = [];
   recordEvents = [];
   weeklyReports = [];
+  pendingItems = [];
+  pendingAttachments = [];
   hasInitialRecordSnapshot = false;
   hasInitialWeeklySnapshot = false;
   setSyncConnectionState("offline");
@@ -1125,6 +1332,26 @@ async function fetchWeeklyReports(){
   return true;
 }
 
+async function fetchPendingData(){
+  if(!sb || !session?.user || !pendingSupported) return false;
+  const [itemsResult, attachmentsResult] = await Promise.all([
+    sb.from(TBL_PENDING).select("*").order("created_at", {ascending:false}),
+    sb.from(TBL_PENDING_ATTACHMENTS).select("*").order("created_at", {ascending:true})
+  ]);
+  const error = itemsResult.error || attachmentsResult.error;
+  if(error){
+    if(["42P01","PGRST205"].includes(error.code)) pendingSupported = false;
+    else console.warn("[CRM Pendências] Falha ao carregar.", error);
+    return false;
+  }
+  pendingItems = itemsResult.data || [];
+  pendingAttachments = await Promise.all((attachmentsResult.data || []).map(async attachment=>{
+    const {data} = await sb.storage.from(PENDING_PHOTO_BUCKET).createSignedUrl(attachment.object_path, 3600);
+    return {...attachment, signed_url:data?.signedUrl || null};
+  }));
+  return true;
+}
+
 function recordsStateVersion(items){
   return items
     .map(record => [record.id, record.updated_at, record.pipeline, record.stage].join(":"))
@@ -1207,7 +1434,7 @@ async function bootAfterLogin(){
     buildFilters();
     const loaded = await fetchRecords({ reason:"carga inicial", notifyNew:false, showError:true });
     if(!loaded) return;
-    await Promise.all([fetchRecordEvents(), fetchWeeklyReports()]);
+    await Promise.all([fetchRecordEvents(), fetchWeeklyReports(), fetchPendingData(), fetchOutlookStatus()]);
     bootedUserId = userId;
     await syncController.start();
   })().catch(error => {
@@ -1278,6 +1505,15 @@ const syncController = (() => {
     scheduleRefresh(`realtime ${eventType.toLowerCase()}`, true, 250);
   }
 
+  function handlePendingRealtimeChange(payload){
+    console.info("[CRM Realtime] Pendência alterada.", {eventType:payload?.eventType || "UNKNOWN"});
+    clearTimeout(handlePendingRealtimeChange.timer);
+    handlePendingRealtimeChange.timer = setTimeout(async ()=>{
+      await fetchPendingData();
+      if(currentTab === "pending") render();
+    }, 250);
+  }
+
   async function removeCurrentChannel(){
     const oldChannel = channel;
     channel = null;
@@ -1309,6 +1545,16 @@ const syncController = (() => {
         "postgres_changes",
         { event:"*", schema:"public", table:TBL_RECORDS },
         handleRealtimeChange
+      )
+      .on(
+        "postgres_changes",
+        { event:"*", schema:"public", table:TBL_PENDING },
+        handlePendingRealtimeChange
+      )
+      .on(
+        "postgres_changes",
+        { event:"*", schema:"public", table:TBL_PENDING_ATTACHMENTS },
+        handlePendingRealtimeChange
       );
 
     channel = nextChannel;
@@ -1346,7 +1592,7 @@ const syncController = (() => {
   async function refresh(reason="sincronização", notifyNew=true, showError=false){
     const ok = await fetchRecords({ reason, notifyNew, showError });
     if(ok){
-      await Promise.all([fetchRecordEvents(), fetchWeeklyReports()]);
+      await Promise.all([fetchRecordEvents(), fetchWeeklyReports(), fetchPendingData(), fetchOutlookStatus()]);
       if(currentTab === "reports") render();
     }
     return ok;
@@ -1503,12 +1749,15 @@ function renderKPIs(scope){
   $("kpiTotal").textContent = total;
   $("kpiStuck").textContent = stuck;
   $("kpiDue").textContent = due;
+  $("kpiTotalLabel").textContent = "No filtro";
+  $("kpiStuckLabel").textContent = "Parados ≥ 14d";
+  $("kpiDueLabel").textContent = "Próx. ação ≤ 7d";
 }
 
 function renderCard(r){
   const name = fullName(r);
-  let st = r.stage || (r.pipeline==="lead" ? "Novo" : "Contrato Realizado");
-  if(r.pipeline==="lead") st = normalizeLeadStage(st);
+  let st = r.stage || (r.pipeline==="lead" ? "Novo" : "Contrato realizado");
+  if(r.pipeline==="lead") st = normalizeLeadStage(st); else st = normalizeClosedStage(st);
   const age = stageAge(r);
   const schedule = scheduleStatus(r);
 
@@ -1555,6 +1804,226 @@ function renderCard(r){
       </div>
     </div>
   `;
+}
+
+function pendingAttachmentsFor(pendingId){
+  return pendingAttachments.filter(attachment=>attachment.pending_id===pendingId);
+}
+
+function pendingDataset(){
+  let data = pendingItems.filter(item=>showCompletedPending || item.status!=="completed");
+  if(filters.owner!=="Todos") data = data.filter(item=>(item.owner_id||"")===filters.owner);
+  if(filters.source!=="Todos") data = data.filter(item=>item.pending_type===filters.source);
+  const city = filters.city.trim().toLowerCase();
+  const query = filters.search.trim().toLowerCase();
+  if(city) data = data.filter(item=>(item.city||"").toLowerCase().includes(city));
+  if(query){
+    data = data.filter(item=>[
+      item.title,item.description,item.customer_name,item.customer_phone,item.address,item.pending_type
+    ].filter(Boolean).join(" ").toLowerCase().includes(query));
+  }
+  return data.sort((a,b)=>{
+    if(a.status!==b.status) return a.status==="open" ? -1 : 1;
+    if(a.due_at && b.due_at) return new Date(a.due_at)-new Date(b.due_at);
+    if(a.due_at) return -1;
+    if(b.due_at) return 1;
+    return new Date(b.created_at)-new Date(a.created_at);
+  });
+}
+
+function renderPendingKPIs(){
+  const openItems = pendingItems.filter(item=>item.status!=="completed");
+  const now = new Date();
+  const overdue = openItems.filter(item=>item.due_at && new Date(item.due_at)<now).length;
+  const soon = openItems.filter(item=>{
+    if(!item.due_at) return false;
+    const days=(new Date(item.due_at)-now)/86400000;
+    return days>=0 && days<=7;
+  }).length;
+  $("kpiTotal").textContent = openItems.length;
+  $("kpiStuck").textContent = overdue;
+  $("kpiDue").textContent = soon;
+  $("kpiTotalLabel").textContent = "Pendências abertas";
+  $("kpiStuckLabel").textContent = "Atrasadas";
+  $("kpiDueLabel").textContent = "Prazo ≤ 7d";
+}
+
+function pendingDueState(item){
+  if(!item.due_at) return {label:"Sem prazo definido",className:""};
+  const date = new Date(item.due_at);
+  const diff=(date-Date.now())/86400000;
+  if(item.status==="completed") return {label:`Concluída • ${fmtBRDateTime(item.completed_at)}`,className:""};
+  if(diff<0) return {label:`Atrasada • ${fmtBRDateTime(item.due_at)}`,className:"pendingDueLate"};
+  if(diff<=7) return {label:`Prazo próximo • ${fmtBRDateTime(item.due_at)}`,className:"pendingDueSoon"};
+  return {label:`Prazo • ${fmtBRDateTime(item.due_at)}`,className:""};
+}
+
+function renderPendingCard(item){
+  const due = pendingDueState(item);
+  const photos = pendingAttachmentsFor(item.id).filter(photo=>photo.signed_url).slice(0,3);
+  return `<article class="pendingCard" data-pending-id="${escapeHtml(item.id)}" tabindex="0">
+    <div class="pendingCardTop">
+      <div class="pendingTitle">${escapeHtml(item.title)}</div>
+      <span class="priority ${escapeHtml(item.priority)}">${escapeHtml(item.priority)}</span>
+    </div>
+    <div class="pendingMeta">
+      ${item.customer_name ? `<b>${escapeHtml(item.customer_name)}</b><br>` : ""}
+      ${escapeHtml(profileNameById(item.owner_id))} • <span class="${due.className}">${escapeHtml(due.label)}</span>
+    </div>
+    ${photos.length ? `<div class="pendingThumbs">${photos.map(photo=>`<img src="${escapeHtml(photo.signed_url)}" alt="Foto da pendência">`).join("")}</div>` : ""}
+  </article>`;
+}
+
+function renderPending(){
+  renderPendingKPIs();
+  if(!pendingSupported){
+    return `<div class="empty">A estrutura de Pendências ainda precisa ser aplicada no Supabase.</div>`;
+  }
+  const data = pendingDataset();
+  const groups = PENDING_TYPES.map(type=>({type,label:type,items:data.filter(item=>item.status!=="completed" && item.pending_type===type)}));
+  if(showCompletedPending){
+    groups.push({type:"completed",label:"Concluídas",items:data.filter(item=>item.status==="completed")});
+  }
+  const totalCompleted = pendingItems.filter(item=>item.status==="completed").length;
+  return `<div style="display:flex;flex-direction:column;gap:10px;width:100%;min-width:0">
+    <div class="pendingToolbar">
+      <div class="formNotice">A pendência permanece ativa até alguém registrar a conclusão.</div>
+      <button class="ghost" type="button" data-pending-action="toggle-completed">${showCompletedPending ? "Ocultar concluídas" : `Mostrar concluídas (${totalCompleted})`}</button>
+    </div>
+    <div class="pendingLayout">
+      ${groups.map(group=>`<section class="pendingGroup">
+        <div class="pendingGroupHd"><h3>${escapeHtml(group.label)}</h3><span class="count">${group.items.length}</span></div>
+        <div class="pendingList">${group.items.length ? group.items.map(renderPendingCard).join("") : `<div class="empty">Sem itens</div>`}</div>
+      </section>`).join("")}
+    </div>
+  </div>`;
+}
+
+function releasePendingPreviews(){
+  pendingPhotosBuffer.forEach(item=>item.preview_url && URL.revokeObjectURL(item.preview_url));
+  pendingPhotosBuffer=[];
+}
+
+function renderPendingPhotoGrid(pendingId=""){
+  const existing = pendingAttachmentsFor(pendingId);
+  const savedHtml = existing.map(photo=>`<div class="photoTile">
+    ${photo.signed_url ? `<img src="${escapeHtml(photo.signed_url)}" alt="${escapeHtml(photo.file_name)}">` : ""}
+    <div class="photoName">${escapeHtml(photo.file_name)}</div>
+    <button type="button" data-remove-attachment="${escapeHtml(photo.id)}" aria-label="Remover foto">×</button>
+  </div>`).join("");
+  const newHtml = pendingPhotosBuffer.map((item,index)=>`<div class="photoTile">
+    <img src="${escapeHtml(item.preview_url)}" alt="Nova foto">
+    <div class="photoName">${escapeHtml(item.file.name)}</div>
+    <button type="button" data-remove-new-photo="${index}" aria-label="Remover nova foto">×</button>
+  </div>`).join("");
+  $("pendingPhotoGrid").innerHTML=savedHtml+newHtml;
+}
+
+function openPendingModal(item=null){
+  releasePendingPreviews();
+  $("pendingId").value=item?.id||"";
+  $("pendingModalTitle").textContent=item ? "Detalhes da pendência" : "Nova pendência";
+  $("pendingTitle").value=item?.title||"";
+  $("pendingType").value=PENDING_TYPES.includes(item?.pending_type) ? item.pending_type : PENDING_TYPES[0];
+  $("pendingPriority").value=item?.priority||"Normal";
+  $("pendingCustomer").value=item?.customer_name||"";
+  $("pendingPhone").value=item?.customer_phone||"";
+  $("pendingCity").value=item?.city||"";
+  $("pendingAddress").value=item?.address||"";
+  $("pendingDescription").value=item?.description||"";
+  $("pendingOwner").innerHTML=profiles.map(profile=>`<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.display_name)}</option>`).join("");
+  $("pendingOwner").value=item?.owner_id||session?.user?.id||profiles[0]?.id||"";
+  const due=item?.due_at ? new Date(item.due_at) : null;
+  $("pendingDueDate").value=due ? inputDateValue(due) : "";
+  $("pendingDueTime").value=due ? inputTimeValue(due) : "09:00";
+  $("pendingPhotos").value="";
+  $("btnCompletePending").style.display=item && item.status!=="completed" ? "" : "none";
+  $("btnDeletePending").style.display=item ? "" : "none";
+  $("pendingStatusNote").textContent=item?.status==="completed"
+    ? `Concluída em ${fmtBRDateTime(item.completed_at)}.`
+    : "A pendência ficará visível até ser concluída.";
+  renderPendingPhotoGrid(item?.id||"");
+  $("pendingModal").showModal();
+}
+
+function closePendingModal(){
+  releasePendingPreviews();
+  $("pendingModal").close();
+}
+
+function safeFileName(name){
+  return name.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9._-]+/g,"-").slice(-100);
+}
+
+async function uploadPendingPhotos(pendingId){
+  for(const item of pendingPhotosBuffer){
+    const file=item.file;
+    const objectPath=`${pendingId}/${crypto.randomUUID()}-${safeFileName(file.name)}`;
+    const {error:uploadError}=await sb.storage.from(PENDING_PHOTO_BUCKET).upload(objectPath,file,{contentType:file.type,upsert:false});
+    if(uploadError) throw uploadError;
+    const {error:insertError}=await sb.from(TBL_PENDING_ATTACHMENTS).insert({
+      pending_id:pendingId,object_path:objectPath,file_name:file.name,mime_type:file.type,size_bytes:file.size,created_by:session.user.id
+    });
+    if(insertError){
+      await sb.storage.from(PENDING_PHOTO_BUCKET).remove([objectPath]);
+      throw insertError;
+    }
+  }
+}
+
+async function savePendingItem(){
+  if(!session?.user) return toast("Sem login.");
+  const title=$("pendingTitle").value.trim();
+  if(!title) return toast("Informe o título da pendência.");
+  const id=$("pendingId").value;
+  const dueDate=$("pendingDueDate").value||null;
+  const payload={
+    title,pending_type:$("pendingType").value,priority:$("pendingPriority").value,
+    customer_name:$("pendingCustomer").value.trim()||null,customer_phone:$("pendingPhone").value.trim()||null,
+    city:$("pendingCity").value.trim()||null,address:$("pendingAddress").value.trim()||null,
+    description:$("pendingDescription").value.trim()||null,owner_id:$("pendingOwner").value||null,
+    due_at:localScheduleIso(dueDate,$("pendingDueTime").value||"09:00")
+  };
+  let saved;
+  if(id){
+    const {data,error}=await sb.from(TBL_PENDING).update(payload).eq("id",id).select("*").single();
+    if(error){console.error(error);return toast("Erro ao salvar pendência.");}
+    saved=data;
+  }else{
+    const {data,error}=await sb.from(TBL_PENDING).insert({...payload,status:"open",created_by:session.user.id}).select("*").single();
+    if(error){console.error(error);return toast("Erro ao criar pendência.");}
+    saved=data;
+  }
+  try{ await uploadPendingPhotos(saved.id); }
+  catch(error){ console.error(error); toast("Pendência salva, mas uma foto não foi enviada."); }
+  await fetchPendingData();
+  closePendingModal();
+  render();
+  toast("Pendência salva.");
+}
+
+async function completePendingItem(){
+  const id=$("pendingId").value;
+  if(!id) return;
+  const {error}=await sb.from(TBL_PENDING).update({status:"completed",completed_by:session.user.id,completed_at:nowISO()}).eq("id",id);
+  if(error) return toast("Erro ao concluir pendência.");
+  await fetchPendingData();
+  closePendingModal();
+  render();
+  toast("Pendência concluída.");
+}
+
+async function deletePendingItem(){
+  const id=$("pendingId").value;
+  if(!id || !confirm("Excluir esta pendência e suas fotos?")) return;
+  const paths=pendingAttachmentsFor(id).map(photo=>photo.object_path);
+  if(paths.length) await sb.storage.from(PENDING_PHOTO_BUCKET).remove(paths);
+  const {error}=await sb.from(TBL_PENDING).delete().eq("id",id);
+  if(error) return toast("Erro ao excluir pendência.");
+  await fetchPendingData();
+  closePendingModal();
+  render();
+  toast("Pendência excluída.");
 }
 
 function renderReports(){
@@ -1675,8 +2144,27 @@ function renderConfig(){
   `).join("");
 
   $("kpiTotal").textContent = "—"; $("kpiStuck").textContent="—"; $("kpiDue").textContent="—";
+  $("kpiTotalLabel").textContent = "No filtro";
+  $("kpiStuckLabel").textContent = "Parados ≥ 14d";
+  $("kpiDueLabel").textContent = "Próx. ação ≤ 7d";
+
+  const outlookLabel = !outlookStatus.configured
+    ? "Integração ainda não configurada no servidor"
+    : outlookStatus.connected
+      ? `Conectado a ${outlookStatus.account_email || "conta central"}`
+      : "Aguardando conexão única com a conta da loja";
+  const outlookAction = outlookStatus.connected
+    ? `<button class="danger" data-act="disconnectOutlook">Desconectar</button>`
+    : `<button class="primary" data-act="connectOutlook" ${outlookStatus.configured ? "" : "disabled"}>Conectar criaremg@hotmail.com</button>`;
 
   return `
+    <section class="outlookStatusCard">
+      <div class="sectionHd" style="padding:0 0 10px;border-bottom:1px solid var(--line)"><span>Calendário central Outlook</span></div>
+      <div class="outlookStatusLine"><span class="statusDot ${outlookStatus.connected ? "connected" : ""}"></span><span>${escapeHtml(outlookLabel)}</span></div>
+      <div class="note" style="margin-bottom:12px">Depois da conexão inicial, todos os usuários do CRM criam e atualizam compromissos sem abrir o Outlook.</div>
+      ${outlookAction}
+    </section>
+
     <div class="col" style="min-width:360px; max-width:420px;">
       <div class="colHd">
         <div class="colTitle"><div>Usuários</div><small>Lista vinda dos perfis (Auth)</small></div>
@@ -1727,8 +2215,8 @@ function buildFilters(){
   ownerSel.value = filters.owner;
 
   const srcSel = $("fSource");
-  const sourceOptions = currentTab === "specifiers" ? SPECIFIER_TYPES : config.sources;
-  $("fSourceLabel").textContent = currentTab === "specifiers" ? "Tipo" : "Origem";
+  const sourceOptions = currentTab === "specifiers" ? SPECIFIER_TYPES : (currentTab === "pending" ? PENDING_TYPES : config.sources);
+  $("fSourceLabel").textContent = ["specifiers","pending"].includes(currentTab) ? "Tipo" : "Origem";
   srcSel.innerHTML = `<option>Todos</option>` + sourceOptions.map(s=>`<option>${escapeHtml(s)}</option>`).join("");
   if(!sourceOptions.includes(filters.source)) filters.source = "Todos";
   srcSel.value = filters.source;
@@ -1762,6 +2250,11 @@ function render(){
     $("board").innerHTML = renderReports();
     return;
   }
+  if(currentTab==="pending"){
+    $("board").innerHTML = renderPending();
+    wirePendingCards();
+    return;
+  }
 
   const data = datasetForTab();
   renderKPIs(data);
@@ -1770,8 +2263,9 @@ function render(){
   const byStage = {};
   stages.forEach(s=>byStage[s]=[]);
   data.forEach(r=>{
-    let st = r.stage || (isSpecifier(r) ? "Mapeado" : (r.pipeline==="lead" ? "Novo" : "Contrato Realizado"));
+    let st = r.stage || (isSpecifier(r) ? "Mapeado" : (r.pipeline==="lead" ? "Novo" : "Contrato realizado"));
     if(r.pipeline==="lead" && !isSpecifier(r)) st = normalizeLeadStage(st);
+    if(r.pipeline==="closed" && !isSpecifier(r)) st = normalizeClosedStage(st);
     (byStage[st] ||= []).push(r);
   });
 
@@ -1782,7 +2276,7 @@ function render(){
         <div class="colHd">
           <div class="colTitle">
             <div>${escapeHtml(stage)}</div>
-            <small>&nbsp;</small>
+            <small>${escapeHtml(currentTab === "leads" ? (STAGE_PHASES[stage] || "") : "")}&nbsp;</small>
           </div>
           <div class="count">${list.length}</div>
         </div>
@@ -1795,6 +2289,21 @@ function render(){
 
   wireDnD();
   wireCardOpen();
+}
+
+function wirePendingCards(){
+  document.querySelectorAll(".pendingCard[data-pending-id]").forEach(card=>{
+    const open=()=>{
+      const item=pendingItems.find(entry=>entry.id===card.dataset.pendingId);
+      if(item) openPendingModal(item);
+    };
+    card.addEventListener("click",open);
+    card.addEventListener("keydown",event=>{
+      if(event.key==="Enter" || event.key===" "){event.preventDefault();open();}
+    });
+  });
+  const toggle=$("board").querySelector("[data-pending-action='toggle-completed']");
+  toggle?.addEventListener("click",()=>{showCompletedPending=!showCompletedPending;render();});
 }
 
 /* ===== DnD ===== */
@@ -1973,12 +2482,12 @@ function updateLostReasonVisibility(){
 }
 function updateModalMode(kind){
   const specifier = kind === "specifier";
+  document.querySelectorAll(".leadDiscoveryField").forEach(field=>field.style.display=specifier ? "none" : "");
   $("wrapRooms").style.display = specifier ? "none" : "";
   $("wrapSource").style.display = specifier ? "none" : "";
   $("wrapPipeline").style.display = specifier ? "none" : "";
   $("wrapEstimate").style.display = specifier ? "none" : "";
   $("wrapLeadQuality").style.display = specifier ? "none" : "";
-  $("wrapQualityNotes").style.display = specifier ? "none" : "";
   $("wrapSpecifierType").style.display = specifier ? "" : "none";
   $("wrapCompanyName").style.display = specifier ? "" : "none";
   $("rooms").required = !specifier;
@@ -1990,6 +2499,9 @@ function updateModalMode(kind){
   $("modalRequirement").textContent = specifier
     ? "Obrigatório: Nome, Sobrenome, Telefone e Cidade."
     : "Obrigatório: Nome, Sobrenome, Telefone, Cidade e Ambiente.";
+  $("outlookScheduleNotice").textContent = outlookStatus.connected
+    ? `Compromissos são salvos diretamente em ${outlookStatus.account_email || "criaremg@hotmail.com"}.`
+    : "O calendário central precisa ser conectado uma única vez na aba Config antes do primeiro agendamento.";
   updateLostReasonVisibility();
 }
 function openModal(record=null, options={}){
@@ -2013,14 +2525,22 @@ function openModal(record=null, options={}){
   $("email").value = record?.email || "";
   $("estimate").value = (record?.estimate ?? "");
   $("notes").value = record?.notes || "";
-  $("qualityNotes").value = record?.quality_notes || "";
+  $("nextActionDetails").value = record?.next_action_details || "";
   const nextActionAt = getNextActionAt(record);
   $("nextAction").value = nextActionAt ? inputDateValue(nextActionAt) : (record?.next_action || "");
   $("nextActionTime").value = nextActionAt ? inputTimeValue(nextActionAt) : "09:00";
   $("nextActionKind").value = record?.next_action_kind || "Follow-up";
+  $("nextActionDuration").value = String(record?.next_action_duration_minutes || 30);
+  $("nextActionReminder").value = String(record?.next_action_reminder_minutes ?? 30);
   $("leadQuality").value = LEAD_QUALITIES.includes(record?.lead_quality) ? record.lead_quality : "Não avaliado";
   $("specifierType").value = SPECIFIER_TYPES.includes(record?.specifier_type) ? record.specifier_type : SPECIFIER_TYPES[0];
   $("companyName").value = record?.company_name || "";
+  $("propertyStatus").value = record?.property_status || "Não informado";
+  $("professionalName").value = record?.professional_name || "";
+  $("hasFloorPlan").value = record?.has_floor_plan === true ? "true" : (record?.has_floor_plan === false ? "false" : "");
+  $("investmentProfile").value = record?.investment_profile || "A definir";
+  $("decisionDueAt").value = record?.decision_due_at || "";
+  $("preferredContact").value = record?.preferred_contact || "WhatsApp";
 
   // selects
   fillSelect($("source"), config.sources, record?.source || config.sources[0]);
@@ -2030,15 +2550,10 @@ function openModal(record=null, options={}){
   const pipeline = kind === "specifier" ? "lead" : (record?.pipeline || (currentTab==="closed" ? "closed" : "lead"));
   $("pipeline").value = pipeline;
 
-  const defaultStage = kind === "specifier" ? "Mapeado" : (pipeline==="lead" ? "Novo" : "Contrato Realizado");
-  fillSelect($("stage"), stageOptionsForRecord(kind, pipeline), (kind === "specifier" ? record?.stage : (pipeline==="lead" ? normalizeLeadStage(record?.stage) : record?.stage)) || defaultStage);
+  const defaultStage = kind === "specifier" ? "Mapeado" : (pipeline==="lead" ? "Novo" : "Contrato realizado");
+  fillSelect($("stage"), stageOptionsForRecord(kind, pipeline), (kind === "specifier" ? record?.stage : (pipeline==="lead" ? normalizeLeadStage(record?.stage) : normalizeClosedStage(record?.stage))) || defaultStage);
   fillSelect($("lostReason"), config.lost_reasons, record?.lost_reason || config.lost_reasons[0]);
   updateModalMode(kind);
-
-  const meta = record
-    ? `id: ${record.id} • criado: ${new Date(record.created_at).toLocaleString("pt-BR")} • etapa desde: ${fmtBRDate(record.stage_entered_at||record.created_at)}`
-    : `novo registro • ${new Date().toLocaleString("pt-BR")}`;
-  $("metaLine").textContent = meta;
 
   // Quick buttons
   const st = $("stage").value;
@@ -2103,10 +2618,18 @@ async function upsertFromForm(){
     next_action: nextActionDate,
     next_action_at: nextActionAt,
     next_action_kind: nextActionDate ? ($("nextActionKind").value || "Follow-up") : null,
+    next_action_details: nextActionDate ? ($("nextActionDetails").value.trim() || null) : null,
+    next_action_duration_minutes: Number($("nextActionDuration").value || 30),
+    next_action_reminder_minutes: Number($("nextActionReminder").value || 30),
     specifier_type: kind === "specifier" ? ($("specifierType").value || SPECIFIER_TYPES[0]) : null,
     company_name: kind === "specifier" ? ($("companyName").value.trim() || null) : null,
     lead_quality: kind === "specifier" ? "Não avaliado" : ($("leadQuality").value || "Não avaliado"),
-    quality_notes: kind === "specifier" ? null : ($("qualityNotes").value.trim() || null),
+    property_status: kind === "specifier" ? "Não informado" : ($("propertyStatus").value || "Não informado"),
+    professional_name: kind === "specifier" ? null : ($("professionalName").value.trim() || null),
+    has_floor_plan: kind === "specifier" || $("hasFloorPlan").value === "" ? null : $("hasFloorPlan").value === "true",
+    investment_profile: kind === "specifier" ? "A definir" : ($("investmentProfile").value || "A definir"),
+    decision_due_at: kind === "specifier" ? null : ($("decisionDueAt").value || null),
+    preferred_contact: kind === "specifier" ? "WhatsApp" : ($("preferredContact").value || "WhatsApp"),
     lost_reason: (kind !== "specifier" && pipeline==="lead" && stage==="Perdido") ? ($("lostReason").value || null) : null
   };
 
@@ -2148,7 +2671,7 @@ async function upsertFromForm(){
 
 
 async function markAsClosed(r){
-  const patch = { pipeline:"closed", stage:"Contrato Realizado", stage_entered_at: nowISO() };
+  const patch = { pipeline:"closed", stage:"Contrato realizado", stage_entered_at: nowISO() };
   const { error } = await sb.from(TBL_RECORDS).update(patch).eq("id", r.id);
   if(error){ toast("Erro ao mover para Fechados."); return; }
   toast("Movido para Fechados.");
@@ -2206,7 +2729,8 @@ async function saveConfig(){
 /* ===== Tabs + filters ===== */
 function setTab(tab){
   currentTab = tab;
-  $("btnNew").textContent = tab === "specifiers" ? "+ Novo especificador" : "+ Novo lead";
+  $("btnNew").textContent = tab === "specifiers" ? "+ Novo especificador" : (tab === "pending" ? "+ Nova pendência" : "+ Novo lead");
+  $("btnNew").style.display = ["reports","config"].includes(tab) ? "none" : "";
   document.querySelectorAll(".tab").forEach(el=>{
     const on = el.dataset.tab===tab;
     el.classList.toggle("active", on);
@@ -2216,6 +2740,7 @@ function setTab(tab){
   const hint = tab==="leads" ? "" :
                tab==="closed" ? "" :
                tab==="specifiers" ? "Relacionamento contínuo com arquitetos, designers, corretores e parceiros." :
+               tab==="pending" ? "Assistências, vistorias, peças e compras acompanhadas até a conclusão." :
                tab==="reports" ? "Resumo semanal: movimentação, qualidade e cobertura de acompanhamento." :
                "Config: origens e motivos de perda (compartilhado).";
 
@@ -2266,12 +2791,12 @@ $("btnToggleLost").addEventListener("click", ()=>{
   render();
 });
 
-$("btnNew").addEventListener("click", ()=>openModal(null));
+$("btnNew").addEventListener("click", ()=> currentTab==="pending" ? openPendingModal(null) : openModal(null));
 $("btnCloseModal").addEventListener("click", closeModal);
 $("btnCancel").addEventListener("click", closeModal);
 $("pipeline").addEventListener("change", ()=>{
   const p=$("pipeline").value;
-  fillSelect($("stage"), stageOptionsForRecord($("recordType").value, p), (p==="lead" ? "Novo" : "Contrato Realizado"));
+  fillSelect($("stage"), stageOptionsForRecord($("recordType").value, p), (p==="lead" ? "Novo" : "Contrato realizado"));
   updateLostReasonVisibility();
 });
 $("stage").addEventListener("change", updateLostReasonVisibility);
@@ -2287,35 +2812,62 @@ $("btnSave").addEventListener("click", async (e)=>{
 $("btnOutlook").addEventListener("click", async (e)=>{
   e.preventDefault();
   if(!$("nextAction").value) return toast("Escolha a data do acompanhamento.");
-
-  const popup = window.open("about:blank", "_blank");
-  if(!(await upsertFromForm())){
-    popup?.close();
-    return;
+  if(!outlookStatus.connected) return toast("Conecte o calendário central na aba Config.");
+  $("btnOutlook").disabled=true;
+  $("btnOutlook").textContent="Criando compromisso...";
+  try{
+    if(!(await upsertFromForm())) return;
+    const id=$("id").value;
+    await saveOutlookEvent(id);
+    closeModal();
+    render();
+    toast("Compromisso salvo no Outlook da Criare.");
+  }catch(error){
+    console.error("[CRM Outlook]",error);
+    toast(error.message || "Erro ao criar compromisso no Outlook.");
+  }finally{
+    $("btnOutlook").disabled=false;
+    $("btnOutlook").textContent="Salvar e criar compromisso";
   }
-
-  const id = $("id").value;
-  const record = records.find(x=>x.id===id);
-  const url = outlookComposeUrl(record);
-  if(!url){
-    popup?.close();
-    return toast("Não foi possível montar o compromisso.");
-  }
-
-  if(popup){
-    popup.opener = null;
-    popup.location.href = url;
-  }else{
-    toast("O navegador bloqueou a nova janela. Libere pop-ups para este CRM.");
-  }
-  closeModal();
-  render();
 });
 $("btnLogContact").addEventListener("click", async (e)=>{
   e.preventDefault();
   const r = records.find(x=>x.id===$("id").value);
   if(!r) return toast("Salve o cadastro antes de registrar contato.");
   if(await registerContactNow(r)) closeModal();
+});
+
+$("btnClosePending").addEventListener("click",closePendingModal);
+$("btnCancelPending").addEventListener("click",closePendingModal);
+$("btnSavePending").addEventListener("click",async event=>{event.preventDefault();await savePendingItem();});
+$("btnCompletePending").addEventListener("click",async event=>{event.preventDefault();await completePendingItem();});
+$("btnDeletePending").addEventListener("click",async event=>{event.preventDefault();await deletePendingItem();});
+$("pendingPhotos").addEventListener("change",event=>{
+  releasePendingPreviews();
+  const files=Array.from(event.target.files||[]).slice(0,6);
+  const valid=files.filter(file=>file.type.startsWith("image/") && file.size<=8*1024*1024);
+  if(valid.length!==files.length) toast("Algumas fotos foram ignoradas por formato ou tamanho.");
+  pendingPhotosBuffer=valid.map(file=>({file,preview_url:URL.createObjectURL(file)}));
+  renderPendingPhotoGrid($("pendingId").value);
+});
+$("pendingPhotoGrid").addEventListener("click",async event=>{
+  const newButton=event.target.closest("[data-remove-new-photo]");
+  if(newButton){
+    const index=Number(newButton.dataset.removeNewPhoto);
+    const [removed]=pendingPhotosBuffer.splice(index,1);
+    if(removed?.preview_url) URL.revokeObjectURL(removed.preview_url);
+    renderPendingPhotoGrid($("pendingId").value);
+    return;
+  }
+  const savedButton=event.target.closest("[data-remove-attachment]");
+  if(!savedButton) return;
+  const attachment=pendingAttachments.find(item=>item.id===savedButton.dataset.removeAttachment);
+  if(!attachment || !confirm("Remover esta foto?")) return;
+  await sb.storage.from(PENDING_PHOTO_BUCKET).remove([attachment.object_path]);
+  const {error}=await sb.from(TBL_PENDING_ATTACHMENTS).delete().eq("id",attachment.id);
+  if(error) return toast("Erro ao remover foto.");
+  await fetchPendingData();
+  renderPendingPhotoGrid($("pendingId").value);
 });
 $("btnQuickClosed").addEventListener("click", async (e)=>{
   e.preventDefault();
@@ -2365,6 +2917,26 @@ $("board").addEventListener("click", async (e)=>{
 
   const act = btn.dataset.act;
 
+  if(act==="connectOutlook"){
+    try{
+      const result=await callOutlook("connect");
+      window.location.href=result.authorization_url;
+    }catch(error){
+      toast(error.message || "Erro ao iniciar conexão com o Outlook.");
+    }
+    return;
+  }
+  if(act==="disconnectOutlook"){
+    if(!confirm("Desconectar o calendário central da Criare?")) return;
+    try{
+      await callOutlook("disconnect");
+      await fetchOutlookStatus();
+      render();
+      toast("Calendário desconectado.");
+    }catch(error){toast(error.message || "Erro ao desconectar Outlook.");}
+    return;
+  }
+
   if(act==="addSource"){
     const v = ($("newSource")?.value||"").trim();
     if(!v) return toast("Digite uma origem.");
@@ -2411,7 +2983,7 @@ $("board").addEventListener("click", async (e)=>{
 
 /* Backup local (para emergência) */
 $("btnExportJson").addEventListener("click", ()=>{
-  const payload = { version:"crm_criare_online_template", exportedAt: nowISO(), config, profiles, records };
+  const payload = { version:"crm_criare_viver_2026", exportedAt: nowISO(), config, profiles, records, pendingItems, pendingAttachments };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -2477,9 +3049,18 @@ $("importJson").addEventListener("change", async (e)=>{
           company_name: r.company_name || null,
           next_action_at: r.next_action_at || null,
           next_action_kind: r.next_action_kind || null,
+          next_action_details: r.next_action_details || null,
+          next_action_duration_minutes: r.next_action_duration_minutes || 30,
+          next_action_reminder_minutes: r.next_action_reminder_minutes ?? 30,
           last_contact_at: r.last_contact_at || null,
           lead_quality: r.lead_quality || "Não avaliado",
-          quality_notes: r.quality_notes || null
+          quality_notes: r.quality_notes || null,
+          property_status: r.property_status || "Não informado",
+          professional_name: r.professional_name || null,
+          has_floor_plan: typeof r.has_floor_plan === "boolean" ? r.has_floor_plan : null,
+          preferred_contact: r.preferred_contact || "WhatsApp",
+          investment_profile: r.investment_profile || "A definir",
+          decision_due_at: r.decision_due_at || null
         };
 
         const alreadyExists = r.id && records.some(x => x.id === r.id);
@@ -2531,6 +3112,7 @@ $("btnWipe").addEventListener("click", ()=>{
 
 /* Boot */
 (async function boot(){
+  handleOutlookReturn();
   updateSessionLine();
   // disable sign out / sync until configured
   if(!isConfigured()){
