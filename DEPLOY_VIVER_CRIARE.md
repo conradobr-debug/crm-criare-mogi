@@ -1,14 +1,42 @@
-# Publicação — Viver Criare, Pendências e Outlook direto
+# Publicação — Viver Criare, Pendências e Outlook via Make
 
 ## Ordem segura
 
 1. Aplicar `supabase/migrations/20260630123000_add_pending_outlook_service_brand_flow.sql`.
-2. Criar a aplicação Microsoft e configurar os segredos da Edge Function.
+2. Criar o cenário gratuito na Make e configurar os segredos da Edge Function.
 3. Publicar a Edge Function `outlook-calendar` com verificação JWT desativada.
 4. Publicar `index.html` e `criare.css` no GitHub Pages.
-5. Na aba **Config**, conectar uma única vez `criaremg@hotmail.com`.
+5. Conectar uma única vez `criaremg@hotmail.com` dentro da Make.
 
-## Aplicação Microsoft
+## Automação gratuita na Make
+
+Criar um cenário com estas etapas:
+
+1. **Webhooks — Custom webhook**, recebendo o compromisso do CRM.
+2. Um roteador com as rotas `create` e `update`.
+3. **Microsoft 365 Calendar — Create an Event** para `operation = create`.
+4. **Microsoft 365 Calendar — Update an Event** para `operation = update`.
+5. Em cada rota, **Webhooks — Webhook response** devolvendo JSON com
+   `event_id` e `web_link`.
+
+A conexão Microsoft da Make deve usar a conta `criaremg@hotmail.com`. O webhook
+fica somente nos segredos do Supabase; nunca deve ser incluído no JavaScript
+público ou no GitHub.
+
+## Segredos da Edge Function — Make
+
+```text
+MAKE_CALENDAR_WEBHOOK_URL=<URL do Custom webhook da Make>
+MAKE_CALENDAR_WEBHOOK_SECRET=<segredo longo e aleatório>
+OUTLOOK_ALLOWED_EMAIL=criaremg@hotmail.com
+OUTLOOK_CONNECTOR_USER_EMAIL=conrado.br@hotmail.com
+CRM_PUBLIC_URL=https://conradobr-debug.github.io/crm-criare-mogi/
+```
+
+Os segredos antigos do Microsoft Graph podem permanecer configurados como rota
+de contingência. Quando os dois segredos da Make existem, a função usa a Make.
+
+## Rota opcional pelo Microsoft Graph
 
 No Microsoft Entra Admin Center, criar um **App registration**:
 
@@ -19,7 +47,7 @@ No Microsoft Entra Admin Center, criar um **App registration**:
 - Microsoft Graph, permissões delegadas: `User.Read` e `Calendars.ReadWrite`.
 - Criar um client secret e copiar o valor apenas para os segredos do Supabase.
 
-## Segredos da Edge Function
+## Segredos opcionais do Microsoft Graph
 
 Configurar no Supabase:
 
