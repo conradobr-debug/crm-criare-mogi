@@ -538,7 +538,7 @@ Deno.serve(async (request) => {
     console.error("[Outlook Calendar]", message);
     const status = message === "OUTLOOK_NOT_CONNECTED" ? 409 : 500;
     return json(request, {
-      error: message === "OUTLOOK_NOT_CONNECTED" ? "Calendário Outlook ainda não conectado." : message,
+      error: message === "OUTLOOK_NOT_CONNECTED" ? "Calendário ainda não conectado." : message,
       code: message === "OUTLOOK_NOT_CONNECTED" ? message : "OUTLOOK_ERROR",
     }, status);
   }
