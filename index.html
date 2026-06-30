@@ -267,6 +267,30 @@
     .chip.muted{color: #6E8790;}
     .meta{margin-top:8px; color:#5C737A; font-size:11px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
     .meta b{color:#2F4B52; font-weight:700; font-size:11px;}
+    .scheduleState{
+      margin-top:8px; padding:7px 8px; border-radius:10px;
+      border:1px solid #DCE8EA; background:#F7FBFC;
+      color:#557078; font-size:11px; font-weight:850;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .scheduleState.ok{border-color:#BCE8D8; background:#F0FBF7; color:#267A60;}
+    .scheduleState.warn{border-color:#F3D69F; background:#FFF9ED; color:#8A6426;}
+    .scheduleState.late{border-color:#F1B8B8; background:#FFF3F3; color:#A34444;}
+    .summaryGrid{display:grid; grid-template-columns:repeat(4,minmax(160px,1fr)); gap:10px; width:100%;}
+    .summaryCard{padding:14px; border:1px solid #D9E7EA; border-radius:14px; background:#FFFFFF;}
+    .summaryCard .n{font-size:24px; font-weight:980; margin-top:5px;}
+    .summaryCard .t{font-size:12px; color:var(--muted); font-weight:850;}
+    .summaryCard .d{font-size:11px; color:#557078; margin-top:5px; line-height:1.35;}
+    .sectionCard{min-width:360px; flex:1 1 380px; max-width:620px; background:#F8FCFC; border:1px solid #D9E7EA; border-radius:16px; overflow:hidden;}
+    .sectionHd{padding:12px 14px; border-bottom:1px solid #D9E7EA; font-weight:950; display:flex; justify-content:space-between; gap:10px;}
+    .sectionBody{padding:8px 14px 14px;}
+    .reportRow{padding:9px 0; border-bottom:1px dashed #D9E7EA; font-size:12px; line-height:1.4;}
+    .reportRow:last-child{border-bottom:0;}
+    .reportBar{height:8px; border-radius:999px; background:#E8F1F2; overflow:hidden; margin-top:6px;}
+    .reportBar > span{display:block; height:100%; background:linear-gradient(90deg,#96BAFF,#4CEDBB); border-radius:999px;}
+    .formNotice{padding:10px 12px; border:1px solid #F3D69F; border-radius:12px; background:#FFF9ED; color:#745623; font-size:12px; line-height:1.4;}
+    @media (max-width:900px){.summaryGrid{grid-template-columns:repeat(2,minmax(140px,1fr));}}
+    @media (max-width:520px){.summaryGrid{grid-template-columns:1fr;}}
 
     /* Stage colors */
     .s-novo{border-left:4px solid #9ab9ff}
@@ -284,6 +308,11 @@
     .s-agendamento-de-montagem{border-left:4px solid #74e3ff}
     .s-entrega{border-left:4px solid #64f0c5}
     .s-pos-venda{border-left:4px solid #9ab9ff}
+    .s-mapeado{border-left:4px solid #9ab9ff}
+    .s-primeiro-contato{border-left:4px solid #74e3ff}
+    .s-relacionamento{border-left:4px solid #d4b2ff}
+    .s-parceiro-ativo{border-left:4px solid #64f0c5}
+    .s-pausado{border-left:4px solid #b7c2ea}
 
     .stuckTag{
       font-size:11px; font-weight:950;
@@ -403,6 +432,7 @@
   <div class="tabs" role="tablist" aria-label="Navegação">
     <div class="tab active" data-tab="leads" role="tab" aria-selected="true">Leads</div>
     <div class="tab" data-tab="closed" role="tab" aria-selected="false">Fechados</div>
+    <div class="tab" data-tab="specifiers" role="tab" aria-selected="false">Especificadores</div>
     <div class="tab" data-tab="reports" role="tab" aria-selected="false">Relatórios</div>
     <div class="tab" data-tab="config" role="tab" aria-selected="false">Config</div>
   </div>
@@ -413,7 +443,7 @@
       <select id="fOwner"></select>
     </div>
     <div class="field">
-      <label>Origem</label>
+      <label id="fSourceLabel">Origem</label>
       <select id="fSource"></select>
     </div>
     <div class="field">
@@ -425,7 +455,7 @@
       <input id="fSearch" placeholder="Nome, ambiente, observação..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
     </div>
 
-    <div class="field" style="min-width:170px;">
+    <div class="field" id="wrapLostFilter" style="min-width:170px;">
       <label>Perdido</label>
       <button class="ghost" id="btnToggleLost" type="button">Ocultar Perdido</button>
     </div>
@@ -491,7 +521,7 @@
     <div class="modalHd">
       <div>
         <div class="modalTitle" id="modalTitle">Detalhes</div>
-        <div class="modalSub">Obrigatório: Nome, Sobrenome, Telefone, Cidade, Ambiente.</div>
+        <div class="modalSub" id="modalRequirement">Obrigatório: Nome, Sobrenome, Telefone, Cidade, Ambiente.</div>
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-left:auto">
         <button class="ghost" id="btnCloseModal">Fechar</button>
@@ -501,6 +531,7 @@
     <div class="modalBd">
       <form class="form" id="form" autocomplete="off">
         <input type="hidden" id="id" />
+        <input type="hidden" id="recordType" value="lead" />
 
         <div class="col-3">
           <label>Nome <span class="req">*</span></label>
@@ -519,11 +550,11 @@
           <input id="city" required autocomplete="off" />
         </div>
 
-        <div class="col-6">
+        <div class="col-6" id="wrapRooms">
           <label>Ambiente <span class="req">*</span></label>
           <input id="rooms" required autocomplete="off" />
         </div>
-        <div class="col-3">
+        <div class="col-3" id="wrapSource">
           <label>Origem</label>
           <select id="source"></select>
         </div>
@@ -532,27 +563,70 @@
           <select id="owner"></select>
         </div>
 
-        <div class="col-4">
+        <div class="col-4" id="wrapPipeline">
           <label>Pipeline</label>
           <select id="pipeline">
             <option value="lead">Leads</option>
             <option value="closed">Fechados</option>
           </select>
         </div>
-        <div class="col-4">
+        <div class="col-4" id="wrapStage">
           <label>Etapa</label>
           <select id="stage"></select>
         </div>
-        <div class="col-4">
-          <label>Próxima ação</label>
+        <div class="col-4" id="wrapNextActionDate">
+          <label>Próximo acompanhamento</label>
           <input id="nextAction" type="date" />
+        </div>
+
+        <div class="col-4">
+          <label>Horário</label>
+          <input id="nextActionTime" type="time" value="09:00" />
+        </div>
+        <div class="col-4">
+          <label>Tipo de contato</label>
+          <select id="nextActionKind">
+            <option>Follow-up</option>
+            <option>Reach-out</option>
+            <option>Ligação</option>
+            <option>WhatsApp</option>
+            <option>Reunião</option>
+            <option>Visita</option>
+            <option>Apresentação</option>
+          </select>
+        </div>
+
+        <div class="col-4" id="wrapLeadQuality">
+          <label>Qualidade do lead</label>
+          <select id="leadQuality">
+            <option>Não avaliado</option>
+            <option>Perfil Criare</option>
+            <option>Potencial</option>
+            <option>Baixo potencial</option>
+            <option>Fora do perfil</option>
+          </select>
+        </div>
+
+        <div class="col-6" id="wrapSpecifierType" style="display:none;">
+          <label>Tipo de especificador</label>
+          <select id="specifierType">
+            <option>Arquiteto</option>
+            <option>Designer de interiores</option>
+            <option>Corretor</option>
+            <option>Construtor</option>
+            <option>Outro parceiro</option>
+          </select>
+        </div>
+        <div class="col-6" id="wrapCompanyName" style="display:none;">
+          <label>Empresa / escritório</label>
+          <input id="companyName" autocomplete="off" />
         </div>
 
         <div class="col-6">
           <label>E-mail</label>
           <input id="email" type="email" placeholder="opcional" autocomplete="off" />
         </div>
-        <div class="col-3">
+        <div class="col-3" id="wrapEstimate">
           <label>Estimativa (R$)</label>
           <input id="estimate" type="number" min="0" step="100" placeholder="opcional" />
         </div>
@@ -564,6 +638,15 @@
         <div class="col-12">
           <label>Observações</label>
           <textarea id="notes"></textarea>
+        </div>
+
+        <div class="col-12" id="wrapQualityNotes">
+          <label>Por que este lead é ou não é perfil da Criare?</label>
+          <textarea id="qualityNotes" placeholder="Ex.: região atendida, tipo de projeto, prazo, faixa de investimento e nível de interesse."></textarea>
+        </div>
+
+        <div class="col-12" id="scheduleNotice">
+          <div class="formNotice">Todo lead ou especificador ativo deve ter um próximo acompanhamento. O compromisso será aberto já preenchido no Outlook.</div>
         </div>
 
         <div class="col-12">
@@ -579,6 +662,8 @@
       <div class="modalQuick">
         <button class="ghost" id="btnCancel">Cancelar</button>
         <button class="primary" id="btnSave">Salvar</button>
+        <button class="primary" id="btnOutlook">Salvar e agendar no Outlook</button>
+        <button class="ghost" id="btnLogContact">Registrar contato agora</button>
         <button class="primary" id="btnQuickClosed" style="border-color: rgba(76,237,187,.75); background: rgba(76,237,187,.14)">Fechou</button>
         <button class="ghost" id="btnQuickLost" style="border-color: rgba(255,216,138,.65); background: rgba(255,216,138,.10)">Perdeu</button>
         <button class="danger" id="btnQuickDelete">Excluir</button>
@@ -602,6 +687,9 @@ const SUPABASE_ANON_KEY = "sb_publishable_Zy25RqFpeNvTDRJvOxWTSg_g_lPA0Pm";
 /* ===== Funis ===== */
 const LEAD_STAGES = ["Novo","Atendimento Inicial","Só quer preço","Projeto","Apresentação","Enrolação","Perdido"];
 const CLOSED_STAGES = ["Contrato Realizado","Medição Técnica","Projeto Executivo","Pedido","Liberação Fábrica","Agendamento de Montagem","Entrega","Pós Venda"];
+const SPECIFIER_STAGES = ["Mapeado","Primeiro Contato","Relacionamento","Parceiro Ativo","Pausado"];
+const SPECIFIER_TYPES = ["Arquiteto","Designer de interiores","Corretor","Construtor","Outro parceiro"];
+const LEAD_QUALITIES = ["Não avaliado","Perfil Criare","Potencial","Baixo potencial","Fora do perfil"];
 const DEFAULT_SOURCES = ["WhatsApp","Campanha de Facebook","Cliente de Porta de loja","Google","Indicação","Lead Online"];
 const DEFAULT_LOST_REASONS = ["Preço","Prazo","Concorrente","Sem retorno (sumiu)","Mudou de ideia","Sem orçamento no momento","Outro"];
 
@@ -609,6 +697,8 @@ const DEFAULT_LOST_REASONS = ["Preço","Prazo","Concorrente","Sem retorno (sumiu
 const TBL_RECORDS = "crm_records";
 const TBL_PROFILES = "crm_profiles";
 const TBL_CONFIG = "crm_config"; // id=1, sources jsonb, lost_reasons jsonb
+const TBL_EVENTS = "crm_record_events";
+const TBL_WEEKLY_REPORTS = "crm_weekly_reports";
 
 /* ===== Helpers ===== */
 const $ = (id) => document.getElementById(id);
@@ -616,8 +706,78 @@ function nowISO(){ return new Date().toISOString(); }
 function toDate(d){ if(!d) return null; const [y,m,dd]=d.split("-").map(Number); return new Date(y,m-1,dd); }
 function daysBetween(a,b){ return Math.floor((b-a)/(1000*60*60*24)); }
 function fmtBRDate(iso){ if(!iso) return "—"; return new Date(iso).toLocaleDateString("pt-BR"); }
+function fmtBRDateTime(iso){
+  if(!iso) return "—";
+  const d = new Date(iso);
+  if(Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("pt-BR", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"});
+}
 function escapeHtml(s){ return (s??"").toString().replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); }
 function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._tm); toast._tm=setTimeout(()=>t.classList.remove("show"),2400); }
+function recordType(r){ return r?.record_type === "specifier" ? "specifier" : "lead"; }
+function isSpecifier(r){ return recordType(r) === "specifier"; }
+function localScheduleIso(dateValue, timeValue="09:00"){
+  if(!dateValue) return null;
+  const parsed = new Date(`${dateValue}T${timeValue || "09:00"}:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+function getNextActionAt(r){
+  if(r?.next_action_at){
+    const parsed = new Date(r.next_action_at);
+    if(!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  if(r?.next_action){
+    const parsed = new Date(`${r.next_action}T09:00:00`);
+    if(!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return null;
+}
+function inputDateValue(date){
+  if(!date || Number.isNaN(date.getTime())) return "";
+  const y = date.getFullYear();
+  const m = String(date.getMonth()+1).padStart(2,"0");
+  const d = String(date.getDate()).padStart(2,"0");
+  return `${y}-${m}-${d}`;
+}
+function inputTimeValue(date){
+  if(!date || Number.isNaN(date.getTime())) return "09:00";
+  return `${String(date.getHours()).padStart(2,"0")}:${String(date.getMinutes()).padStart(2,"0")}`;
+}
+function scheduleStatus(r){
+  const next = getNextActionAt(r);
+  if(!next) return {kind:"warn", label:"Sem próximo acompanhamento"};
+  const diffHours = (next.getTime() - Date.now()) / 3600000;
+  const action = r.next_action_kind || "Acompanhamento";
+  if(diffHours < 0) return {kind:"late", label:`${action} atrasado • ${fmtBRDateTime(next.toISOString())}`};
+  if(diffHours <= 168) return {kind:"ok", label:`${action} • ${fmtBRDateTime(next.toISOString())}`};
+  return {kind:"ok", label:`${action} agendado • ${fmtBRDateTime(next.toISOString())}`};
+}
+function outlookComposeUrl(record){
+  const next = getNextActionAt(record);
+  if(!next) return null;
+  const end = new Date(next.getTime() + 30*60000);
+  const kind = record.next_action_kind || "Follow-up";
+  const subject = `CRM Criare • ${kind} • ${fullName(record)}`;
+  const body = [
+    `Contato: ${fullName(record)}`,
+    record.phone ? `Telefone: ${record.phone}` : "",
+    record.city ? `Cidade: ${record.city}` : "",
+    isSpecifier(record)
+      ? `Especificador: ${record.specifier_type || "Parceiro"}${record.company_name ? ` • ${record.company_name}` : ""}`
+      : `Etapa: ${record.stage || "Novo"}`,
+    "",
+    "Objetivo: manter o acompanhamento ativo e registrar o próximo passo no CRM."
+  ].filter(Boolean).join("\n");
+  const params = new URLSearchParams({
+    subject,
+    startdt: next.toISOString(),
+    enddt: end.toISOString(),
+    body,
+    path:"/calendar/action/compose",
+    rru:"addevent"
+  });
+  return `https://outlook.office.com/calendar/0/deeplink/compose?${params.toString()}`;
+}
 
 // ===== Sound notification (Lead Online) =====
 let soundEnabled = localStorage.getItem("crm_sound_enabled") === "1";
@@ -721,6 +881,9 @@ function fillSelect(el, arr, selected){
   el.innerHTML = arr.map(v=>`<option ${v===selected?"selected":""}>${escapeHtml(v)}</option>`).join("");
 }
 function stageOptionsForPipeline(p){ return p==="closed" ? CLOSED_STAGES : LEAD_STAGES; }
+function stageOptionsForRecord(kind, pipeline="lead"){
+  return kind === "specifier" ? SPECIFIER_STAGES : stageOptionsForPipeline(pipeline);
+}
 
 /* ===== App state ===== */
 let sb = null;
@@ -735,6 +898,11 @@ let currentEditingId = null;
 let config = { sources: DEFAULT_SOURCES.slice(), lost_reasons: DEFAULT_LOST_REASONS.slice() };
 let profiles = [];   // [{id, display_name}]
 let records = [];    // crm_records rows
+let recordEvents = []; // histórico de movimentações e contatos
+let eventsSupported = true;
+let weeklyReports = [];
+let weeklyReportsSupported = true;
+let hasInitialWeeklySnapshot = false;
 let hasInitialRecordSnapshot = false;
 let recordsFetchPromise = null;
 let recordsRefreshQueued = false;
@@ -839,7 +1007,10 @@ function lockApp(){
   // clear in-memory data (UI will show empty until login)
   records = [];
   profiles = [];
+  recordEvents = [];
+  weeklyReports = [];
   hasInitialRecordSnapshot = false;
+  hasInitialWeeklySnapshot = false;
   setSyncConnectionState("offline");
   render();
 }
@@ -903,6 +1074,55 @@ async function fetchProfiles(){
   const { data, error } = await sb.from(TBL_PROFILES).select("id, display_name").order("display_name", { ascending: true });
   if(error) return toast("Erro ao carregar usuários.");
   profiles = data || [];
+}
+
+async function fetchRecordEvents(){
+  if(!sb || !session?.user || !eventsSupported) return false;
+  const since = new Date(Date.now() - 60*24*60*60*1000).toISOString();
+  const { data, error } = await sb
+    .from(TBL_EVENTS)
+    .select("*")
+    .gte("occurred_at", since)
+    .order("occurred_at", { ascending:false })
+    .limit(1500);
+
+  if(error){
+    const missingTable = ["42P01","PGRST205"].includes(error.code);
+    if(missingTable){
+      eventsSupported = false;
+      console.info("[CRM Relatórios] Histórico ainda não está disponível; aplique a migração nova.");
+    }else{
+      console.warn("[CRM Relatórios] Falha ao carregar histórico.", error);
+    }
+    return false;
+  }
+
+  recordEvents = data || [];
+  return true;
+}
+
+async function fetchWeeklyReports(){
+  if(!sb || !session?.user || !weeklyReportsSupported) return false;
+  const previousLatestId = weeklyReports[0]?.id || null;
+  const { data, error } = await sb
+    .from(TBL_WEEKLY_REPORTS)
+    .select("*")
+    .order("week_start", { ascending:false })
+    .limit(12);
+
+  if(error){
+    const missingTable = ["42P01","PGRST205"].includes(error.code);
+    if(missingTable) weeklyReportsSupported = false;
+    else console.warn("[CRM Relatórios] Falha ao carregar resumos semanais.", error);
+    return false;
+  }
+  weeklyReports = data || [];
+  const latestId = weeklyReports[0]?.id || null;
+  if(hasInitialWeeklySnapshot && latestId && latestId !== previousLatestId){
+    toast("Novo resumo semanal disponível em Relatórios.");
+  }
+  hasInitialWeeklySnapshot = true;
+  return true;
 }
 
 function recordsStateVersion(items){
@@ -979,6 +1199,7 @@ async function bootAfterLogin(){
   const userId = session.user.id;
   bootPromise = (async () => {
     hasInitialRecordSnapshot = false;
+    hasInitialWeeklySnapshot = false;
     setSyncConnectionState(navigator.onLine ? "reconnecting" : "offline");
     await ensureConfigRow();
     await ensureProfile();
@@ -986,6 +1207,7 @@ async function bootAfterLogin(){
     buildFilters();
     const loaded = await fetchRecords({ reason:"carga inicial", notifyNew:false, showError:true });
     if(!loaded) return;
+    await Promise.all([fetchRecordEvents(), fetchWeeklyReports()]);
     bootedUserId = userId;
     await syncController.start();
   })().catch(error => {
@@ -1122,7 +1344,12 @@ const syncController = (() => {
   }
 
   async function refresh(reason="sincronização", notifyNew=true, showError=false){
-    return fetchRecords({ reason, notifyNew, showError });
+    const ok = await fetchRecords({ reason, notifyNew, showError });
+    if(ok){
+      await Promise.all([fetchRecordEvents(), fetchWeeklyReports()]);
+      if(currentTab === "reports") render();
+    }
+    return ok;
   }
 
   function bindLifecycle(){
@@ -1220,8 +1447,9 @@ const syncController = (() => {
 /* ===== Rendering ===== */
 function datasetForTab(){
   let base = records.slice();
-  if(currentTab==="leads") base = base.filter(r=>r.pipeline==="lead");
-  if(currentTab==="closed") base = base.filter(r=>r.pipeline==="closed");
+  if(currentTab==="leads") base = base.filter(r=>r.pipeline==="lead" && !isSpecifier(r));
+  if(currentTab==="closed") base = base.filter(r=>r.pipeline==="closed" && !isSpecifier(r));
+  if(currentTab==="specifiers") base = base.filter(r=>isSpecifier(r));
 
   if(currentTab==="leads" && hideLostColumn){
     base = base.filter(r=>(r.stage||"")!=="Perdido");
@@ -1235,7 +1463,9 @@ function datasetForTab(){
     base = base.filter(r=>(r.owner_id||"")===filters.owner);
   }
   if(filters.source!=="Todos"){
-    base = base.filter(r=>(r.source||"")===filters.source);
+    base = currentTab === "specifiers"
+      ? base.filter(r=>(r.specifier_type||"")===filters.source)
+      : base.filter(r=>(r.source||"")===filters.source);
   }
   if(city){
     base = base.filter(r=>(r.city||"").toLowerCase().includes(city));
@@ -1256,6 +1486,7 @@ function getStagesForTab(){
     return hideLostColumn ? LEAD_STAGES.filter(s=>s!=="Perdido") : LEAD_STAGES;
   }
   if(currentTab==="closed") return CLOSED_STAGES;
+  if(currentTab==="specifiers") return SPECIFIER_STAGES;
   return [];
 }
 
@@ -1264,9 +1495,8 @@ function renderKPIs(scope){
   const now = new Date();
   const stuck = scope.filter(r=> daysBetween(new Date(r.stage_entered_at||r.updated_at||r.created_at), now) >= 14).length;
   const due = scope.filter(r=>{
-    if(!r.next_action) return false;
-    const d = toDate(r.next_action); if(!d) return false;
-    const diff = daysBetween(now, d);
+    const d = getNextActionAt(r); if(!d) return false;
+    const diff = (d.getTime() - now.getTime()) / 86400000;
     return diff >= 0 && diff <= 7;
   }).length;
 
@@ -1280,10 +1510,11 @@ function renderCard(r){
   let st = r.stage || (r.pipeline==="lead" ? "Novo" : "Contrato Realizado");
   if(r.pipeline==="lead") st = normalizeLeadStage(st);
   const age = stageAge(r);
+  const schedule = scheduleStatus(r);
 
   const metaLines = [
     `Etapa <b>${escapeHtml(age.date)}</b>`,
-    r.next_action ? `Ação <b>${escapeHtml(r.next_action)}</b>` : ""
+    getNextActionAt(r) ? `Ação <b>${escapeHtml(fmtBRDateTime(getNextActionAt(r).toISOString()))}</b>` : ""
   ].filter(Boolean).join(" • ");
 
   const stuckTag = age.age >= 14
@@ -1304,16 +1535,22 @@ function renderCard(r){
       </div>
 
       <div class="row">
-        <span class="chip" title="Ambiente">${escapeHtml(r.rooms || "Ambiente —")}</span>
-        <span class="chip muted" title="Origem">${escapeHtml(r.source || "Origem —")}</span>
+        ${isSpecifier(r)
+          ? `<span class="chip" title="Tipo">${escapeHtml(r.specifier_type || "Parceiro")}</span>
+             <span class="chip muted" title="Empresa">${escapeHtml(r.company_name || "Empresa —")}</span>`
+          : `<span class="chip" title="Ambiente">${escapeHtml(r.rooms || "Ambiente —")}</span>
+             <span class="chip muted" title="Origem">${escapeHtml(r.source || "Origem —")}</span>`}
       </div>
 
       <div class="meta">${metaLines || "—"}</div>
+      <div class="scheduleState ${schedule.kind}">${escapeHtml(schedule.label)}</div>
 
       <div class="menu" data-menu="${escapeHtml(r.id)}">
         <button type="button" data-act="edit" data-id="${escapeHtml(r.id)}">Editar</button>
-        ${r.pipeline==="lead" && st!=="Perdido" ? `<button type="button" data-act="toClosed" data-id="${escapeHtml(r.id)}">Fechou</button>` : ``}
-        ${r.pipeline==="lead" && st!=="Perdido" ? `<button type="button" data-act="markLost" data-id="${escapeHtml(r.id)}">Perdeu</button>` : ``}
+        <button type="button" data-act="schedule" data-id="${escapeHtml(r.id)}">Agendar no Outlook</button>
+        <button type="button" data-act="logContact" data-id="${escapeHtml(r.id)}">Registrar contato agora</button>
+        ${!isSpecifier(r) && r.pipeline==="lead" && st!=="Perdido" ? `<button type="button" data-act="toClosed" data-id="${escapeHtml(r.id)}">Fechou</button>` : ``}
+        ${!isSpecifier(r) && r.pipeline==="lead" && st!=="Perdido" ? `<button type="button" data-act="markLost" data-id="${escapeHtml(r.id)}">Perdeu</button>` : ``}
         <button type="button" class="dangerItem" data-act="del" data-id="${escapeHtml(r.id)}">Excluir</button>
       </div>
     </div>
@@ -1321,51 +1558,98 @@ function renderCard(r){
 }
 
 function renderReports(){
-  const all = records.slice();
   const now = new Date();
+  const since = new Date(now.getTime() - 7*24*60*60*1000);
+  const leads = records.filter(r=>!isSpecifier(r));
+  const activeLeads = leads.filter(r=>r.pipeline==="lead" && r.stage!=="Perdido");
+  const specifiers = records.filter(r=>isSpecifier(r) && r.stage!=="Pausado");
+  const weeklyEvents = recordEvents.filter(e=>new Date(e.occurred_at) >= since);
+  const createdThisWeek = leads.filter(r=>new Date(r.created_at) >= since).length;
+  const stageMoves = weeklyEvents.filter(e=>e.event_type==="stage_changed").length;
+  const contacts = weeklyEvents.filter(e=>e.event_type==="contact_logged").length;
+  const scheduled = activeLeads.filter(r=>{
+    const d=getNextActionAt(r); return d && d>=now;
+  });
+  const overdue = activeLeads.filter(r=>{
+    const d=getNextActionAt(r); return d && d<now;
+  });
+  const withoutSchedule = activeLeads.filter(r=>!getNextActionAt(r));
+  const followupCoverage = activeLeads.length ? Math.round((scheduled.length/activeLeads.length)*100) : null;
+  const specifierCoverage = specifiers.length
+    ? Math.round((specifiers.filter(r=>{const d=getNextActionAt(r); return d && d>=now;}).length/specifiers.length)*100)
+    : null;
 
-  const stuck = all
-    .map(r=>({r, days: daysBetween(new Date(r.stage_entered_at||r.updated_at||r.created_at), now)}))
-    .sort((a,b)=>b.days-a.days)
-    .filter(x=>x.days>=7)
-    .slice(0,60);
+  const qualityDist = Object.fromEntries(LEAD_QUALITIES.map(q=>[q,0]));
+  leads.filter(r=>r.pipeline==="lead").forEach(r=>{
+    const q = LEAD_QUALITIES.includes(r.lead_quality) ? r.lead_quality : "Não avaliado";
+    qualityDist[q] = (qualityDist[q]||0)+1;
+  });
+  const assessed = Math.max(0, leads.filter(r=>r.pipeline==="lead").length - (qualityDist["Não avaliado"]||0));
+  const criareFit = (qualityDist["Perfil Criare"]||0) + (qualityDist["Potencial"]||0);
+  const latestWeekly = weeklyReports[0] || null;
+  const savedSummary = latestWeekly?.summary || null;
+  const shown = {
+    newLeads: savedSummary?.new_leads ?? createdThisWeek,
+    stageMoves: savedSummary?.stage_moves ?? stageMoves,
+    contacts: savedSummary?.contacts ?? contacts,
+    coverage: savedSummary?.followup_coverage_pct ?? followupCoverage,
+    fitPct: savedSummary?.fit_pct ?? (assessed ? Math.round((criareFit/assessed)*100) : null),
+    unassessed: savedSummary?.unassessed_leads ?? (qualityDist["Não avaliado"]||0),
+    overdue: savedSummary?.overdue_followups ?? overdue.length
+  };
+  const reportPeriod = latestWeekly
+    ? `Resumo programado de ${fmtBRDate(`${latestWeekly.week_start}T12:00:00`)} a ${fmtBRDate(`${latestWeekly.week_end}T12:00:00`)} • gerado ${fmtBRDateTime(latestWeekly.generated_at)}`
+    : "Visão ao vivo dos últimos 7 dias • o primeiro resumo fixo será gerado na próxima segunda-feira às 09:00";
 
-  const lost = all.filter(r=>r.pipeline==="lead" && r.stage==="Perdido");
-  const lostDist = {};
-  lost.forEach(r=>{ const k=r.lost_reason||"Outro"; lostDist[k]=(lostDist[k]||0)+1; });
+  renderKPIs(activeLeads);
 
-  renderKPIs(all);
+  const qualityRows = LEAD_QUALITIES.map(q=>{
+    const value = qualityDist[q] || 0;
+    const total = Math.max(1, leads.filter(r=>r.pipeline==="lead").length);
+    const pct = Math.round((value/total)*100);
+    return `<div class="reportRow"><div style="display:flex;justify-content:space-between;gap:10px"><span>${escapeHtml(q)}</span><b>${value} • ${pct}%</b></div><div class="reportBar"><span style="width:${pct}%"></span></div></div>`;
+  }).join("");
 
-  const stuckRows = stuck.length ? stuck.map(x=>{
-    const r=x.r;
-    return `<div style="padding:10px; border-bottom:1px dashed rgba(47,61,110,.60)">
+  const attention = [...overdue.map(r=>({r, reason:"Acompanhamento atrasado"})), ...withoutSchedule.map(r=>({r, reason:"Sem acompanhamento agendado"}))]
+    .slice(0,40);
+  const attentionRows = attention.length ? attention.map(({r,reason})=>`
+    <div class="reportRow">
       <b>${escapeHtml(fullName(r))}</b> • ${escapeHtml(profileNameById(r.owner_id))}<br/>
-      <span style="color:var(--muted); font-size:12px">
-        ${escapeHtml(r.pipeline==="lead"?"Lead":"Fechado")} • ${escapeHtml(r.stage||"—")} • desde ${fmtBRDate(r.stage_entered_at||r.created_at)} • ${x.days}d
-      </span>
-    </div>`;
-  }).join("") : `<div class="empty">Nada parado (≥ 7 dias).</div>`;
+      <span style="color:var(--muted)">${escapeHtml(reason)} • ${escapeHtml(r.stage||"—")}</span>
+    </div>`).join("") : `<div class="empty">Todos os leads ativos têm acompanhamento futuro.</div>`;
 
-  const lostLines = Object.entries(lostDist).sort((a,b)=>b[1]-a[1])
-    .map(([k,v])=>`<div style="display:flex; justify-content:space-between; gap:10px; padding:10px; border-bottom:1px dashed rgba(47,61,110,.60)"><span>${escapeHtml(k)}</span><b>${v}</b></div>`)
-    .join("") || `<div class="empty">Sem perdas registradas.</div>`;
+  const eventLabels = {
+    created:"Novo cadastro",
+    stage_changed:"Mudança de etapa",
+    followup_scheduled:"Acompanhamento agendado",
+    contact_logged:"Contato registrado",
+    quality_changed:"Qualidade avaliada"
+  };
+  const movementRows = weeklyEvents.slice(0,60).map(e=>{
+    const r = records.find(x=>x.id===e.record_id);
+    return `<div class="reportRow"><b>${escapeHtml(eventLabels[e.event_type]||e.event_type)}</b> • ${escapeHtml(r ? fullName(r) : "Registro removido")}<br/><span style="color:var(--muted)">${escapeHtml(fmtBRDateTime(e.occurred_at))}${e.to_value ? ` • ${escapeHtml(e.to_value)}` : ""}</span></div>`;
+  }).join("") || `<div class="empty">O histórico começará a aparecer após a nova migração.</div>`;
 
   return `
-    <div class="col" style="min-width:420px; max-width:520px;">
-      <div class="colHd">
-        <div class="colTitle"><div>Parados</div><small>Top 60 (≥ 7 dias)</small></div>
-        <div class="count">${stuck.length}</div>
+    <div style="display:flex; flex-direction:column; gap:10px; width:100%; min-width:0;">
+      <div class="formNotice">${escapeHtml(reportPeriod)}</div>
+      <div class="summaryGrid">
+        <div class="summaryCard"><div class="t">Novos leads • semana</div><div class="n">${shown.newLeads}</div><div class="d">Entradas recentes no funil.</div></div>
+        <div class="summaryCard"><div class="t">Movimentações • semana</div><div class="n">${shown.stageMoves}</div><div class="d">Mudanças de etapa registradas.</div></div>
+        <div class="summaryCard"><div class="t">Contatos • semana</div><div class="n">${shown.contacts}</div><div class="d">Atendimentos marcados como realizados.</div></div>
+        <div class="summaryCard"><div class="t">Leads com agenda futura</div><div class="n">${shown.coverage===null ? "—" : `${shown.coverage}%`}</div><div class="d">Meta recomendada: 100% dos leads ativos.</div></div>
+        <div class="summaryCard"><div class="t">Perfil Criare ou potencial</div><div class="n">${shown.fitPct===null ? "—" : `${shown.fitPct}%`}</div><div class="d">Considera apenas leads já avaliados.</div></div>
+        <div class="summaryCard"><div class="t">Sem avaliação de perfil</div><div class="n">${shown.unassessed}</div><div class="d">Precisam de qualificação comercial.</div></div>
+        <div class="summaryCard"><div class="t">Acompanhamentos atrasados</div><div class="n">${shown.overdue}</div><div class="d">Exigem contato ou reagendamento.</div></div>
+        <div class="summaryCard"><div class="t">Especificadores com agenda</div><div class="n">${specifierCoverage===null ? "—" : `${specifierCoverage}%`}</div><div class="d">Relacionamentos com próximo passo futuro.</div></div>
       </div>
-      <div class="dropZone" style="padding:0">${stuckRows}</div>
-    </div>
-    <div class="col" style="min-width:360px; max-width:420px;">
-      <div class="colHd">
-        <div class="colTitle"><div>Motivos de perda</div><small>Leads em Perdido</small></div>
-        <div class="count">${lost.length}</div>
+
+      <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-start;">
+        <section class="sectionCard"><div class="sectionHd"><span>Qualidade dos leads</span><span>${assessed} avaliados</span></div><div class="sectionBody">${qualityRows}</div></section>
+        <section class="sectionCard"><div class="sectionHd"><span>Prioridade de acompanhamento</span><span>${attention.length}</span></div><div class="sectionBody">${attentionRows}</div></section>
+        <section class="sectionCard"><div class="sectionHd"><span>Movimentação recente</span><span>Últimos 7 dias</span></div><div class="sectionBody">${movementRows}</div></section>
       </div>
-      <div class="dropZone" style="padding:0">${lostLines}</div>
-    </div>
-  `;
+    </div>`;
 }
 
 function renderConfig(){
@@ -1443,7 +1727,10 @@ function buildFilters(){
   ownerSel.value = filters.owner;
 
   const srcSel = $("fSource");
-  srcSel.innerHTML = `<option>Todos</option>` + config.sources.map(s=>`<option>${escapeHtml(s)}</option>`).join("");
+  const sourceOptions = currentTab === "specifiers" ? SPECIFIER_TYPES : config.sources;
+  $("fSourceLabel").textContent = currentTab === "specifiers" ? "Tipo" : "Origem";
+  srcSel.innerHTML = `<option>Todos</option>` + sourceOptions.map(s=>`<option>${escapeHtml(s)}</option>`).join("");
+  if(!sourceOptions.includes(filters.source)) filters.source = "Todos";
   srcSel.value = filters.source;
 
   $("fCity").value = filters.city;
@@ -1462,6 +1749,7 @@ function updateLostBtn(){
   if(!btn) return;
   btn.textContent = hideLostColumn ? "Mostrar Perdido" : "Ocultar Perdido";
   btn.disabled = currentTab !== "leads";
+  $("wrapLostFilter").style.display = currentTab === "leads" ? "" : "none";
 }
 
 
@@ -1482,8 +1770,8 @@ function render(){
   const byStage = {};
   stages.forEach(s=>byStage[s]=[]);
   data.forEach(r=>{
-    let st = r.stage || (r.pipeline==="lead" ? "Novo" : "Contrato Realizado");
-  if(r.pipeline==="lead") st = normalizeLeadStage(st);
+    let st = r.stage || (isSpecifier(r) ? "Mapeado" : (r.pipeline==="lead" ? "Novo" : "Contrato Realizado"));
+    if(r.pipeline==="lead" && !isSpecifier(r)) st = normalizeLeadStage(st);
     (byStage[st] ||= []).push(r);
   });
 
@@ -1517,6 +1805,7 @@ async function moveRecordToStage(id, stage){
   if(!sb || !session?.user) return toast("Sem login.");
 
   const old = r.stage;
+  if(old === stage) return;
   const patch = { stage, stage_entered_at: nowISO() };
   // optimistic
   r.stage = stage; r.stage_entered_at = patch.stage_entered_at;
@@ -1660,6 +1949,8 @@ document.addEventListener("click", async (e)=>{
 
     closeAllMenus();
     if(act==="edit"){ openModal(r); return; }
+    if(act==="schedule"){ openModal(r, { focusSchedule:true }); return; }
+    if(act==="logContact"){ await registerContactNow(r); return; }
     if(act==="toClosed"){ await markAsClosed(r); return; }
     if(act==="markLost"){ await markAsLost(r); return; }
     if(act==="del"){ await deleteRecord(r); return; }
@@ -1677,16 +1968,41 @@ document.addEventListener("click", async (e)=>{
 
 /* ===== Modal ===== */
 function updateLostReasonVisibility(){
-  const show = $("pipeline").value==="lead" && $("stage").value==="Perdido";
+  const show = $("recordType").value !== "specifier" && $("pipeline").value==="lead" && $("stage").value==="Perdido";
   $("wrapLostReason").style.display = show ? "" : "none";
 }
-function openModal(record=null){
+function updateModalMode(kind){
+  const specifier = kind === "specifier";
+  $("wrapRooms").style.display = specifier ? "none" : "";
+  $("wrapSource").style.display = specifier ? "none" : "";
+  $("wrapPipeline").style.display = specifier ? "none" : "";
+  $("wrapEstimate").style.display = specifier ? "none" : "";
+  $("wrapLeadQuality").style.display = specifier ? "none" : "";
+  $("wrapQualityNotes").style.display = specifier ? "none" : "";
+  $("wrapSpecifierType").style.display = specifier ? "" : "none";
+  $("wrapCompanyName").style.display = specifier ? "" : "none";
+  $("rooms").required = !specifier;
+  $("btnQuickClosed").style.display = specifier ? "none" : "";
+  $("btnQuickLost").style.display = specifier ? "none" : "";
+  $("modalFootNote").textContent = specifier
+    ? "Mantenha sempre um próximo contato para fortalecer a parceria."
+    : "Atalhos: agendar, registrar contato, fechar, perder ou excluir.";
+  $("modalRequirement").textContent = specifier
+    ? "Obrigatório: Nome, Sobrenome, Telefone e Cidade."
+    : "Obrigatório: Nome, Sobrenome, Telefone, Cidade e Ambiente.";
+  updateLostReasonVisibility();
+}
+function openModal(record=null, options={}){
   const prevSearch = $("fSearch").value;
   const prevCity = $("fCity").value;
 
   const isNew = !record;
+  const kind = record ? recordType(record) : (currentTab === "specifiers" ? "specifier" : "lead");
   currentEditingId = record?.id || null;
-  $("modalTitle").textContent = isNew ? (currentTab==="closed" ? "Novo fechado" : "Novo lead") : "Detalhes do cliente";
+  $("recordType").value = kind;
+  $("modalTitle").textContent = isNew
+    ? (kind === "specifier" ? "Novo especificador" : (currentTab==="closed" ? "Novo fechado" : "Novo lead"))
+    : (kind === "specifier" ? "Detalhes do especificador" : "Detalhes do cliente");
 
   $("id").value = record?.id || "";
   $("firstName").value = record?.first_name || "";
@@ -1697,19 +2013,27 @@ function openModal(record=null){
   $("email").value = record?.email || "";
   $("estimate").value = (record?.estimate ?? "");
   $("notes").value = record?.notes || "";
-  $("nextAction").value = record?.next_action || "";
+  $("qualityNotes").value = record?.quality_notes || "";
+  const nextActionAt = getNextActionAt(record);
+  $("nextAction").value = nextActionAt ? inputDateValue(nextActionAt) : (record?.next_action || "");
+  $("nextActionTime").value = nextActionAt ? inputTimeValue(nextActionAt) : "09:00";
+  $("nextActionKind").value = record?.next_action_kind || "Follow-up";
+  $("leadQuality").value = LEAD_QUALITIES.includes(record?.lead_quality) ? record.lead_quality : "Não avaliado";
+  $("specifierType").value = SPECIFIER_TYPES.includes(record?.specifier_type) ? record.specifier_type : SPECIFIER_TYPES[0];
+  $("companyName").value = record?.company_name || "";
 
   // selects
   fillSelect($("source"), config.sources, record?.source || config.sources[0]);
   $("owner").innerHTML = profiles.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.display_name)}</option>`).join("");
   $("owner").value = record?.owner_id || session?.user?.id || (profiles[0]?.id || "");
 
-  const pipeline = record?.pipeline || (currentTab==="closed" ? "closed" : "lead");
+  const pipeline = kind === "specifier" ? "lead" : (record?.pipeline || (currentTab==="closed" ? "closed" : "lead"));
   $("pipeline").value = pipeline;
 
-  fillSelect($("stage"), stageOptionsForPipeline(pipeline), (pipeline==="lead" ? normalizeLeadStage(record?.stage) : record?.stage) || (pipeline==="lead" ? "Novo" : "Contrato Realizado"));
+  const defaultStage = kind === "specifier" ? "Mapeado" : (pipeline==="lead" ? "Novo" : "Contrato Realizado");
+  fillSelect($("stage"), stageOptionsForRecord(kind, pipeline), (kind === "specifier" ? record?.stage : (pipeline==="lead" ? normalizeLeadStage(record?.stage) : record?.stage)) || defaultStage);
   fillSelect($("lostReason"), config.lost_reasons, record?.lost_reason || config.lost_reasons[0]);
-  updateLostReasonVisibility();
+  updateModalMode(kind);
 
   const meta = record
     ? `id: ${record.id} • criado: ${new Date(record.created_at).toLocaleString("pt-BR")} • etapa desde: ${fmtBRDate(record.stage_entered_at||record.created_at)}`
@@ -1718,14 +2042,19 @@ function openModal(record=null){
 
   // Quick buttons
   const st = $("stage").value;
-  const canQuick = (pipeline==="lead" && st !== "Perdido");
+  const canQuick = (kind !== "specifier" && pipeline==="lead" && st !== "Perdido");
   $("btnQuickClosed").disabled = !canQuick;
   $("btnQuickLost").disabled = !canQuick;
+  $("btnLogContact").disabled = isNew;
+  $("btnQuickDelete").disabled = isNew;
 
   $("fSearch").value = prevSearch;
   $("fCity").value = prevCity;
 
   $("modal").showModal();
+  if(options.focusSchedule){
+    setTimeout(()=>$("nextAction").focus(), 50);
+  }
 }
 function closeModal(){ $("modal").close(); currentEditingId=null; }
 
@@ -1734,36 +2063,51 @@ async function upsertFromForm(){
 
   const id = ($("id").value || "").trim();
   const isNew = !id;
+  const kind = $("recordType").value === "specifier" ? "specifier" : "lead";
 
-  const pipeline = $("pipeline").value;
+  const pipeline = kind === "specifier" ? "lead" : $("pipeline").value;
   const stage = $("stage").value;
 
   const firstName = $("firstName").value.trim();
   const lastName  = $("lastName").value.trim();
   const phone     = $("phone").value.trim();
   const city      = $("city").value.trim();
-  const rooms     = $("rooms").value.trim();
+  const rooms     = kind === "specifier"
+    ? ($("companyName").value.trim() || $("specifierType").value || "Parcerias")
+    : $("rooms").value.trim();
 
-  if(!firstName || !lastName || !phone || !city || !rooms){
-    toast("Preencha: Nome, Sobrenome, Telefone, Cidade, Ambiente.");
+  if(!firstName || !lastName || !phone || !city || (!rooms && kind !== "specifier")){
+    toast(kind === "specifier"
+      ? "Preencha: Nome, Sobrenome, Telefone e Cidade."
+      : "Preencha: Nome, Sobrenome, Telefone, Cidade e Ambiente.");
     return false;
   }
 
+  const nextActionDate = $("nextAction").value || null;
+  const nextActionAt = localScheduleIso(nextActionDate, $("nextActionTime").value || "09:00");
+
   const payload = {
+    record_type: kind,
     first_name: firstName,
     last_name: lastName,
     phone,
     city,
     rooms,
     email: $("email").value.trim() || null,
-    estimate: $("estimate").value === "" ? null : Number($("estimate").value),
+    estimate: kind === "specifier" ? null : ($("estimate").value === "" ? null : Number($("estimate").value)),
     notes: $("notes").value.trim() || null,
-    source: $("source").value || null,
+    source: kind === "specifier" ? null : ($("source").value || null),
     owner_id: $("owner").value || null,
     pipeline,
     stage,
-    next_action: $("nextAction").value || null,
-    lost_reason: (pipeline==="lead" && stage==="Perdido") ? ($("lostReason").value || null) : null
+    next_action: nextActionDate,
+    next_action_at: nextActionAt,
+    next_action_kind: nextActionDate ? ($("nextActionKind").value || "Follow-up") : null,
+    specifier_type: kind === "specifier" ? ($("specifierType").value || SPECIFIER_TYPES[0]) : null,
+    company_name: kind === "specifier" ? ($("companyName").value.trim() || null) : null,
+    lead_quality: kind === "specifier" ? "Não avaliado" : ($("leadQuality").value || "Não avaliado"),
+    quality_notes: kind === "specifier" ? null : ($("qualityNotes").value.trim() || null),
+    lost_reason: (kind !== "specifier" && pipeline==="lead" && stage==="Perdido") ? ($("lostReason").value || null) : null
   };
 
   // stage_entered_at: só muda se a etapa mudou OU se for novo
@@ -1831,6 +2175,28 @@ async function deleteRecord(r){
   closeModal();
 }
 
+async function registerContactNow(r){
+  if(!r || !sb || !session?.user) return toast("Sem login.");
+  const timestamp = nowISO();
+  const { data, error } = await sb
+    .from(TBL_RECORDS)
+    .update({ last_contact_at:timestamp })
+    .eq("id", r.id)
+    .select("*")
+    .single();
+  if(error){
+    console.error("[CRM Contato] Falha ao registrar contato.", error);
+    toast("Erro ao registrar contato.");
+    return false;
+  }
+  const idx = records.findIndex(x=>x.id===r.id);
+  if(idx>=0) records[idx]=data;
+  await fetchRecordEvents();
+  render();
+  toast("Contato registrado agora.");
+  return true;
+}
+
 /* ===== Config updates ===== */
 async function saveConfig(){
   const { error } = await sb.from(TBL_CONFIG).upsert({ id:1, sources: config.sources, lost_reasons: config.lost_reasons });
@@ -1840,6 +2206,7 @@ async function saveConfig(){
 /* ===== Tabs + filters ===== */
 function setTab(tab){
   currentTab = tab;
+  $("btnNew").textContent = tab === "specifiers" ? "+ Novo especificador" : "+ Novo lead";
   document.querySelectorAll(".tab").forEach(el=>{
     const on = el.dataset.tab===tab;
     el.classList.toggle("active", on);
@@ -1848,7 +2215,8 @@ function setTab(tab){
 
   const hint = tab==="leads" ? "" :
                tab==="closed" ? "" :
-               tab==="reports" ? "Relatórios: parados e motivos de perda." :
+               tab==="specifiers" ? "Relacionamento contínuo com arquitetos, designers, corretores e parceiros." :
+               tab==="reports" ? "Resumo semanal: movimentação, qualidade e cobertura de acompanhamento." :
                "Config: origens e motivos de perda (compartilhado).";
 
   $("boardHint").innerHTML = `<div>${escapeHtml(hint)}</div><div></div>`;
@@ -1903,7 +2271,7 @@ $("btnCloseModal").addEventListener("click", closeModal);
 $("btnCancel").addEventListener("click", closeModal);
 $("pipeline").addEventListener("change", ()=>{
   const p=$("pipeline").value;
-  fillSelect($("stage"), stageOptionsForPipeline(p), (p==="lead" ? "Novo" : "Contrato Realizado"));
+  fillSelect($("stage"), stageOptionsForRecord($("recordType").value, p), (p==="lead" ? "Novo" : "Contrato Realizado"));
   updateLostReasonVisibility();
 });
 $("stage").addEventListener("change", updateLostReasonVisibility);
@@ -1915,6 +2283,39 @@ $("btnSave").addEventListener("click", async (e)=>{
     closeModal();
     render();
   }
+});
+$("btnOutlook").addEventListener("click", async (e)=>{
+  e.preventDefault();
+  if(!$("nextAction").value) return toast("Escolha a data do acompanhamento.");
+
+  const popup = window.open("about:blank", "_blank");
+  if(!(await upsertFromForm())){
+    popup?.close();
+    return;
+  }
+
+  const id = $("id").value;
+  const record = records.find(x=>x.id===id);
+  const url = outlookComposeUrl(record);
+  if(!url){
+    popup?.close();
+    return toast("Não foi possível montar o compromisso.");
+  }
+
+  if(popup){
+    popup.opener = null;
+    popup.location.href = url;
+  }else{
+    toast("O navegador bloqueou a nova janela. Libere pop-ups para este CRM.");
+  }
+  closeModal();
+  render();
+});
+$("btnLogContact").addEventListener("click", async (e)=>{
+  e.preventDefault();
+  const r = records.find(x=>x.id===$("id").value);
+  if(!r) return toast("Salve o cadastro antes de registrar contato.");
+  if(await registerContactNow(r)) closeModal();
 });
 $("btnQuickClosed").addEventListener("click", async (e)=>{
   e.preventDefault();
@@ -2070,7 +2471,15 @@ $("importJson").addEventListener("change", async (e)=>{
           rd_event_name: r.rd_event_name || null,
           rd_conversion_id: r.rd_conversion_id || null,
           rd_conversion_at: r.rd_conversion_at || null,
-          rd_source: r.rd_source || null
+          rd_source: r.rd_source || null,
+          record_type: r.record_type || "lead",
+          specifier_type: r.specifier_type || null,
+          company_name: r.company_name || null,
+          next_action_at: r.next_action_at || null,
+          next_action_kind: r.next_action_kind || null,
+          last_contact_at: r.last_contact_at || null,
+          lead_quality: r.lead_quality || "Não avaliado",
+          quality_notes: r.quality_notes || null
         };
 
         const alreadyExists = r.id && records.some(x => x.id === r.id);
