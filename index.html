@@ -39,7 +39,7 @@
       margin-top:6px; padding:4px 8px;
       border:1px solid #D9E7EA; border-radius:999px;
       background:#FFFFFF; color:var(--muted);
-      font-size:11px; font-weight:850;
+      font-size:11px; font-weight:600;
     }
     .syncStatus::before{
       content:""; width:7px; height:7px; border-radius:50%;
@@ -57,7 +57,7 @@
       padding:10px 12px;
       border-radius:12px;
       cursor:pointer;
-      font-weight:950;
+      font-weight:650;
       transition:.15s transform, .15s border-color, .15s background;
     }
     button:hover, .btn:hover{transform: translateY(-1px); border-color: rgba(150,186,255,.55);}
@@ -76,7 +76,7 @@
     }
     .tab{
       padding:9px 12px; border-radius:12px; cursor:pointer;
-      border:1px solid transparent; color:var(--muted); font-weight:950; font-size:13px;
+      border:1px solid transparent; color:var(--muted); font-weight:650; font-size:13px;
     }
     .tab.active{
       color:var(--text);
@@ -94,7 +94,7 @@
       display:flex; gap:10px; flex-wrap:wrap; align-items:end;
     }
     .field{min-width:170px;}
-    label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:950;}
+    label{display:block; font-size:12px; color:var(--muted); margin-bottom:6px; font-weight:600;}
     select, input, textarea{
       width:100%;
       border:1px solid #DCE8EA;
@@ -114,7 +114,7 @@
       border-radius: 14px;
       background: rgba(255,255,255,.78);
     }
-    .kpi .n{font-size:18px; font-weight:950}
+    .kpi .n{font-size:18px; font-weight:700}
     .kpi .t{font-size:12px; color:var(--muted); margin-top:2px}
 
     .boardWrap{
@@ -157,9 +157,9 @@
     }
     .colTitle{
       display:flex; flex-direction:column; gap:4px;
-      font-weight:950; letter-spacing:.2px; font-size:13px;
+      font-weight:650; letter-spacing:.2px; font-size:13px;
     }
-    .colTitle small{color:var(--muted); font-weight:850; font-size:11px}
+    .colTitle small{color:var(--muted); font-weight:600; font-size:11px}
     .count{
       font-family: var(--mono);
       font-size: 11px;
@@ -201,11 +201,11 @@
     .card.grab{cursor:grab;}
     .card.grab:active{cursor:grabbing;}
     .cTop{display:flex; justify-content:space-between; gap:10px; align-items:flex-start}
-    .cName{font-weight:980; font-size:14px; letter-spacing:.2px; line-height:1.15;}
+    .cName{font-weight:700; font-size:14px; letter-spacing:.2px; line-height:1.15;}
     .rightTop{display:flex; gap:8px; align-items:center}
 
     .badge{
-      font-size:11px; font-weight:950;
+      font-size:11px; font-weight:600;
       border-radius:999px;
       padding:6px 8px;
       border:1px solid rgba(255,255,255,.14);
@@ -222,7 +222,7 @@
       border:1px solid rgba(255,255,255,.12);
       background: #FFFFFF;
       color: #36575E;
-      font-weight:950;
+      font-weight:700;
       cursor:pointer;
     }
     .dots:hover{border-color: rgba(150,186,255,.55); background: rgba(150,186,255,.10)}
@@ -246,7 +246,7 @@
       border-radius: 12px;
       border:1px solid transparent;
       background: transparent;
-      font-weight:950;
+      font-weight:600;
       font-size:12px;
       transform:none;
     }
@@ -255,7 +255,7 @@
 
     .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px;}
     .chip{
-      font-size:11px; font-weight:950;
+      font-size:11px; font-weight:600;
       border-radius:999px;
       padding:6px 8px;
       border:1px solid rgba(47,61,110,.95);
@@ -270,7 +270,7 @@
     .scheduleState{
       margin-top:8px; padding:7px 8px; border-radius:10px;
       border:1px solid #DCE8EA; background:#F7FBFC;
-      color:#557078; font-size:11px; font-weight:850;
+      color:#557078; font-size:11px; font-weight:600;
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
     .scheduleState.ok{border-color:#BCE8D8; background:#F0FBF7; color:#267A60;}
@@ -278,11 +278,11 @@
     .scheduleState.late{border-color:#F1B8B8; background:#FFF3F3; color:#A34444;}
     .summaryGrid{display:grid; grid-template-columns:repeat(4,minmax(160px,1fr)); gap:10px; width:100%;}
     .summaryCard{padding:14px; border:1px solid #D9E7EA; border-radius:14px; background:#FFFFFF;}
-    .summaryCard .n{font-size:24px; font-weight:980; margin-top:5px;}
-    .summaryCard .t{font-size:12px; color:var(--muted); font-weight:850;}
+    .summaryCard .n{font-size:24px; font-weight:700; margin-top:5px;}
+    .summaryCard .t{font-size:12px; color:var(--muted); font-weight:600;}
     .summaryCard .d{font-size:11px; color:#557078; margin-top:5px; line-height:1.35;}
     .sectionCard{min-width:360px; flex:1 1 380px; max-width:620px; background:#F8FCFC; border:1px solid #D9E7EA; border-radius:16px; overflow:hidden;}
-    .sectionHd{padding:12px 14px; border-bottom:1px solid #D9E7EA; font-weight:950; display:flex; justify-content:space-between; gap:10px;}
+    .sectionHd{padding:12px 14px; border-bottom:1px solid #D9E7EA; font-weight:650; display:flex; justify-content:space-between; gap:10px;}
     .sectionBody{padding:8px 14px 14px;}
     .reportRow{padding:9px 0; border-bottom:1px dashed #D9E7EA; font-size:12px; line-height:1.4;}
     .reportRow:last-child{border-bottom:0;}
@@ -315,7 +315,7 @@
     .s-pausado{border-left:4px solid #b7c2ea}
 
     .stuckTag{
-      font-size:11px; font-weight:950;
+      font-size:11px; font-weight:600;
       border-radius:999px;
       padding:6px 8px;
       border:1px solid rgba(255,255,255,.14);
@@ -348,7 +348,7 @@
       border-bottom:1px solid rgba(47,61,110,.85);
       display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
     }
-    .modalTitle{font-weight:980}
+    .modalTitle{font-weight:700}
     .modalSub{color:var(--muted); font-size:12px; margin-top:4px; line-height:1.3}
     .modalBd{padding:16px}
     .form{display:grid; grid-template-columns: repeat(12, 1fr); gap:10px;}
@@ -357,7 +357,7 @@
     .col-4{grid-column: span 4;}
     .col-3{grid-column: span 3;}
     @media (max-width: 880px){ .col-6,.col-4,.col-3{grid-column: span 12;} }
-    .req{color:#ffd88a; font-weight:980}
+    .req{color:#ffd88a; font-weight:700}
     textarea{min-height:90px; resize:vertical}
     .modalFt{
       padding:14px 16px;
@@ -375,7 +375,7 @@
       padding:9px 10px;
       border-radius: 12px;
       font-size:12px;
-      font-weight:980;
+      font-weight:650;
     }
 
     /* Login overlay */
@@ -410,10 +410,11 @@
 
 <header>
   <div class="brand">
-    <div class="logo" aria-hidden="true">Criare</div>
+    <div class="logo">
+      <img src="assets/logo-criare.png" alt="Criare" />
+    </div>
     <div>
       <h1>CRM Criare Mogi Guaçu</h1>
-      <div class="brandClaim">MANIFESTE SUA PERSONALIDADE</div>
       <div class="sub" id="sessionLine">Offline (template). Conecte ao Supabase para login e sincronização.</div>
       <div class="syncStatus offline" id="syncStatus" role="status" aria-live="polite">Sem conexão</div>
     </div>
@@ -612,7 +613,7 @@
         </div>
 
         <div class="col-4">
-          <label>Lembrete no Outlook</label>
+          <label>Lembrete do calendário</label>
           <select id="nextActionReminder">
             <option value="0">Sem lembrete</option>
             <option value="15">15 minutos antes</option>
@@ -926,7 +927,7 @@ async function callOutlook(action, payload={}){
     body:JSON.stringify({action, ...payload})
   });
   const result = await response.json().catch(()=>({}));
-  if(!response.ok) throw new Error(result.error || "Falha na integração com o Outlook.");
+  if(!response.ok) throw new Error(result.error || "Falha na integração com o calendário.");
   return result;
 }
 async function fetchOutlookStatus(){
@@ -956,7 +957,7 @@ function handleOutlookReturn(){
   if(!state) return;
   if(state === "connected") toast("Calendário central da Criare conectado.");
   else if(state === "wrong_account") toast("Conecte a conta criaremg@hotmail.com.");
-  else toast("Não foi possível conectar o Outlook.");
+  else toast("Não foi possível conectar o calendário.");
   url.searchParams.delete("outlook");
   url.searchParams.delete("reason");
   url.searchParams.delete("email");
@@ -1796,7 +1797,7 @@ function renderCard(r){
 
       <div class="menu" data-menu="${escapeHtml(r.id)}">
         <button type="button" data-act="edit" data-id="${escapeHtml(r.id)}">Editar</button>
-        <button type="button" data-act="schedule" data-id="${escapeHtml(r.id)}">Agendar no Outlook</button>
+        <button type="button" data-act="schedule" data-id="${escapeHtml(r.id)}">Agendar no calendário</button>
         <button type="button" data-act="logContact" data-id="${escapeHtml(r.id)}">Registrar contato agora</button>
         ${!isSpecifier(r) && r.pipeline==="lead" && st!=="Perdido" ? `<button type="button" data-act="toClosed" data-id="${escapeHtml(r.id)}">Fechou</button>` : ``}
         ${!isSpecifier(r) && r.pipeline==="lead" && st!=="Perdido" ? `<button type="button" data-act="markLost" data-id="${escapeHtml(r.id)}">Perdeu</button>` : ``}
@@ -2160,11 +2161,11 @@ function renderConfig(){
     : `<button class="primary" data-act="connectOutlook" ${outlookStatus.configured ? "" : "disabled"}>Conectar criaremg@hotmail.com</button>`;
   const outlookNote = outlookStatus.provider === "make"
     ? "A Make recebe somente os dados necessários do compromisso e grava no calendário central. Os usuários continuam trabalhando apenas no CRM."
-    : "Depois da conexão inicial, todos os usuários do CRM criam e atualizam compromissos sem abrir o Outlook.";
+    : "Depois da conexão inicial, todos os usuários criam e atualizam compromissos sem sair do CRM.";
 
   return `
     <section class="outlookStatusCard">
-      <div class="sectionHd" style="padding:0 0 10px;border-bottom:1px solid var(--line)"><span>Calendário central Outlook</span></div>
+      <div class="sectionHd" style="padding:0 0 10px;border-bottom:1px solid var(--line)"><span>Calendário central</span></div>
       <div class="outlookStatusLine"><span class="statusDot ${outlookStatus.connected ? "connected" : ""}"></span><span>${escapeHtml(outlookLabel)}</span></div>
       <div class="note" style="margin-bottom:12px">${escapeHtml(outlookNote)}</div>
       ${outlookAction}
@@ -2826,10 +2827,10 @@ $("btnOutlook").addEventListener("click", async (e)=>{
     await saveOutlookEvent(id);
     closeModal();
     render();
-    toast("Compromisso salvo no Outlook da Criare.");
+    toast("Compromisso salvo no calendário da Criare.");
   }catch(error){
     console.error("[CRM Outlook]",error);
-    toast(error.message || "Erro ao criar compromisso no Outlook.");
+    toast(error.message || "Erro ao criar compromisso no calendário.");
   }finally{
     $("btnOutlook").disabled=false;
     $("btnOutlook").textContent="Salvar e criar compromisso";
@@ -2932,7 +2933,7 @@ $("board").addEventListener("click", async (e)=>{
         toast("Calendário central já está conectado.");
       }
     }catch(error){
-      toast(error.message || "Erro ao iniciar conexão com o Outlook.");
+      toast(error.message || "Erro ao iniciar conexão com o calendário.");
     }
     return;
   }
@@ -2943,7 +2944,7 @@ $("board").addEventListener("click", async (e)=>{
       await fetchOutlookStatus();
       render();
       toast("Calendário desconectado.");
-    }catch(error){toast(error.message || "Erro ao desconectar Outlook.");}
+    }catch(error){toast(error.message || "Erro ao desconectar o calendário.");}
     return;
   }
 

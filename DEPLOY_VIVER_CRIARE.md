@@ -1,4 +1,4 @@
-# Publicação — Viver Criare, Pendências e Outlook via Make
+# Publicação — Viver Criare, Pendências e calendário via Make
 
 ## Ordem segura
 
@@ -93,7 +93,7 @@ Teste funcional:
 
 1. Cadastrar uma pendência com foto e confirmar que ela aparece na aba.
 2. Concluir a pendência e confirmar que ela sai da lista aberta.
-3. Conectar o Outlook na aba Config.
+3. Verificar o calendário central na aba Config.
 4. Criar um acompanhamento em um lead e confirmar que o evento surge diretamente
    no calendário `criaremg@hotmail.com`, com detalhes e lembrete.
 5. Alterar o horário e salvar novamente; o evento existente deve ser atualizado,
