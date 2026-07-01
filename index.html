@@ -733,15 +733,25 @@
           <div class="whatsappWorkspaceHd">
             <div>
               <div class="whatsappWorkspaceTitle">WhatsApp do cliente</div>
-              <div class="fieldHelp">Abra a conversa diretamente ou cole um trecho para criar um resumo comercial.</div>
+              <div class="fieldHelp">Abra a conversa diretamente ou cole um trecho para análise comercial e operacional.</div>
             </div>
             <button class="whatsappAction" id="btnWhatsApp" type="button">Abrir conversa</button>
           </div>
-          <label for="whatsappConversation">Conversa para resumir</label>
+          <label for="whatsappAnalysisMode">Tipo de análise</label>
+          <select id="whatsappAnalysisMode">
+            <option>Resumo gerencial</option>
+            <option>Análise completa</option>
+            <option>Analisar a venda</option>
+            <option>Analisar o atendimento</option>
+            <option>Somente pendências</option>
+            <option>Somente riscos</option>
+            <option>Preparar uma resposta</option>
+          </select>
+          <label for="whatsappConversation" style="margin-top:12px">Conversa para analisar</label>
           <textarea id="whatsappConversation" class="whatsappConversation" placeholder="Cole aqui somente o trecho relevante da conversa. O texto colado não será salvo no CRM."></textarea>
           <div class="whatsappPrivacy">Ao gerar, o trecho poderá ser enviado ao serviço de IA configurado. Evite documentos, senhas e dados sensíveis. Apenas o resumo será salvo.</div>
           <div class="whatsappActions">
-            <button class="primary" id="btnSummarizeWhatsApp" type="button">Gerar resumo</button>
+            <button class="primary" id="btnSummarizeWhatsApp" type="button">Analisar conversa</button>
             <button class="ghost" id="btnClearWhatsAppConversation" type="button">Limpar conversa colada</button>
           </div>
           <label for="whatsappSummary">Resumo da conversa</label>
@@ -1014,6 +1024,7 @@ async function callWhatsAppSummary(conversation){
     },
     body:JSON.stringify({
       conversation,
+      analysis_mode:$("whatsappAnalysisMode").value,
       customer_name:`${$("firstName").value} ${$("lastName").value}`.trim(),
       stage:$("stage").value,
       rooms:$("rooms").value,
@@ -2717,6 +2728,7 @@ function openModal(record=null, options={}){
   $("estimate").value = (record?.estimate ?? "");
   $("notes").value = record?.notes || "";
   $("whatsappConversation").value = "";
+  $("whatsappAnalysisMode").value = "Resumo gerencial";
   $("whatsappSummary").value = record?.whatsapp_summary || "";
   $("whatsappSummary").dataset.model = record?.whatsapp_summary_model || "";
   $("whatsappSummaryMeta").textContent = record?.whatsapp_summary_updated_at
@@ -3040,7 +3052,7 @@ $("btnSummarizeWhatsApp").addEventListener("click", async ()=>{
     if(result.model !== "análise local") toast("Resumo criado. Revise e salve o cliente.");
   }finally{
     button.disabled = false;
-    button.textContent = "Gerar resumo";
+    button.textContent = "Analisar conversa";
   }
 });
 
