@@ -1,2 +1,5 @@
 [functions.outlook-calendar]
 verify_jwt = false
+
+[functions.whatsapp-summary]
+verify_jwt = false
