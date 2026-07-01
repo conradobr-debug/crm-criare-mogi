@@ -12,7 +12,40 @@
   --danger:#a0443e;
   --shadow:0 12px 34px rgba(30,25,20,.08);
   --sans:"Avenir Next","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mobile-nav-height:68px;
 }
+
+html{min-height:100%;background:var(--bg);-webkit-text-size-adjust:100%}
+body{min-height:100dvh;overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+.mobileUtility{display:none}
+.tabIcon{display:none}
+
+.appStateBanner{
+  margin-top:10px;
+  padding:13px 14px;
+  display:flex;
+  align-items:center;
+  gap:11px;
+  border:1px solid #d8d1c8;
+  background:#fff;
+  color:#38342f;
+  box-shadow:var(--shadow);
+}
+.appStateBanner.ready{display:none}
+.appStateBanner.error{border-color:#d7aaa5;background:#fff5f3;color:#7d342f}
+.appStateBanner.auth{border-color:#d2bb97;background:#faf5eb;color:#6f562e}
+.appStateBanner>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.appStateBanner strong{font-size:13px;font-weight:650}
+.appStateBanner span:not(.appStateSpinner){font-size:11px;line-height:1.35;color:var(--muted)}
+.appStateBanner button{margin-left:auto;flex:0 0 auto}
+.appStateSpinner{width:17px;height:17px;flex:0 0 auto;border:2px solid #d7d0c7;border-top-color:#171717;border-radius:50%;animation:crmSpin .8s linear infinite}
+.appStateBanner:not(.loading) .appStateSpinner{display:none}
+@keyframes crmSpin{to{transform:rotate(360deg)}}
+.statePanel{width:100%;min-height:280px;display:grid;place-items:center;padding:28px 16px}
+.statePanelInner{max-width:420px;text-align:center;padding:22px;border:1px solid var(--line);background:#fff}
+.statePanelInner h2{font-size:17px;font-weight:650;margin:0 0 7px}
+.statePanelInner p{font-size:12px;line-height:1.5;color:var(--muted);margin:0}
 
 body{
   color:var(--text);
@@ -169,9 +202,93 @@ dialog::backdrop{background:rgba(10,10,10,.68);backdrop-filter:blur(3px)}
 .statusDot.connected{background:#60755f}
 
 @media (max-width:1100px){.pendingLayout{grid-template-columns:repeat(2,minmax(250px,1fr))}}
-@media (max-width:700px){
-  header{align-items:flex-start;padding:16px 14px}.logo{width:170px;height:46px;min-width:170px}.logo img{width:170px;top:-40px}
-  .actions{justify-content:flex-start}.wrap{padding:10px 8px}
-  .pendingLayout{grid-template-columns:1fr}.photoGrid{grid-template-columns:repeat(2,1fr)}
-  .toolbar .field{min-width:calc(50% - 6px)}.toolbar .search{min-width:100%}
+@media (max-width:760px){
+  body{padding-bottom:calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));background:#f5f3ef}
+  header{align-items:flex-start;min-height:auto;padding:calc(12px + env(safe-area-inset-top)) 12px 12px;gap:10px}
+  header .brand{width:100%;gap:10px;align-items:center}
+  header h1{font-size:15px;font-weight:600}
+  header .sub{max-width:calc(100vw - 150px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px}
+  .logo{width:124px;height:38px;min-width:124px}.logo img{width:124px;top:-29px}
+  .syncStatus{font-size:9px;padding:3px 7px;margin-top:4px}
+  .actions{width:100%;justify-content:flex-start;display:flex;flex-wrap:nowrap;overflow-x:auto;padding:1px 0 3px;scrollbar-width:none}
+  .actions::-webkit-scrollbar{display:none}
+  .actions button,.actions .btn{min-height:44px;white-space:nowrap;flex:0 0 auto}
+  .desktopUtility{display:none!important}.mobileUtility:not([hidden]){display:inline-flex}
+  #btnNew{order:-3}#btnSync{order:-2}#btnInstall{order:-1}
+
+  .wrap{padding:8px 8px 12px}
+  .tabs{
+    position:fixed;
+    z-index:900;
+    left:0;right:0;bottom:0;
+    height:calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
+    padding:6px 4px env(safe-area-inset-bottom);
+    display:grid;
+    grid-template-columns:repeat(6,minmax(0,1fr));
+    gap:0;
+    border:0;
+    border-top:1px solid #d6d0c8;
+    border-radius:0;
+    box-shadow:0 -8px 24px rgba(22,18,14,.11);
+    background:rgba(255,255,255,.96);
+    backdrop-filter:blur(16px);
+  }
+  .tab{min-width:0;min-height:54px;padding:5px 1px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:8px;line-height:1.05;text-align:center;border:0;background:transparent}
+  .tabIcon{display:block;font-size:18px;line-height:1;color:#8a837b;font-weight:500}
+  .tab.active{border:0;background:transparent;color:#111}
+  .tab.active .tabIcon{color:#111;transform:scale(1.08)}
+
+  .appStateBanner{margin-top:0;position:relative;padding:11px 12px}
+  .appStateBanner button{min-height:40px;padding:8px 10px}
+  .toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;padding:10px;gap:9px;margin-top:8px}
+  .toolbar .field{min-width:0;width:100%}
+  .toolbar .search{grid-column:1/-1;min-width:0}
+  #wrapLostFilter{min-width:0!important}
+  #wrapLostFilter button{width:100%;min-height:44px}
+  .kpiRow{grid-column:1/-1;margin:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;width:100%}
+  .kpi{min-width:0;padding:8px 7px}.kpi .n{font-size:17px}.kpi .t{font-size:9px;line-height:1.2}
+  select,input,textarea{font-size:16px;min-height:44px;padding:10px}
+  label{font-size:10px;margin-bottom:4px}
+
+  .boardWrap{margin-top:8px;border:0;background:transparent;box-shadow:none;overflow:visible}
+  .boardHint{padding:9px 4px;border:0;font-size:10px;line-height:1.35}
+  .board{display:block;padding:0;min-height:calc(100dvh - 330px);overflow:visible;scroll-snap-type:none}
+  .col{width:100%;min-width:0;max-width:none;max-height:none;margin:0 0 9px;border-radius:2px;scroll-snap-align:none}
+  .col.emptyStage{display:none}
+  .colHd{padding:11px 12px;position:sticky;top:0;z-index:3}
+  .colTitle{font-size:13px}.colTitle small{font-size:9px}
+  .dropZone{padding:9px;overflow:visible;min-height:0}
+  .card{padding:13px 12px;min-height:108px;box-shadow:0 4px 14px rgba(32,27,22,.06);touch-action:manipulation}
+  .card.grab{cursor:pointer}.card:hover{transform:none}
+  .cName{font-size:15px;font-weight:650}.rightTop{gap:5px;flex-wrap:wrap;justify-content:flex-end}
+  .badge{font-size:9px;padding:5px 6px}.dots{width:42px;height:42px}
+  .row{gap:6px}.chip{font-size:10px;padding:5px 7px}.meta,.scheduleState{font-size:10px}
+  .menu{position:fixed;left:8px;right:8px;bottom:calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 8px);top:auto;min-width:0;padding:8px;border-radius:8px}
+  .menu button{min-height:44px;font-size:14px}
+
+  .pendingLayout{grid-template-columns:1fr;gap:9px}.pendingGroup{min-height:0}.pendingGroup.emptyPending{display:none}
+  .pendingCard{padding:14px;min-height:96px}.pendingTitle{font-size:14px}.pendingMeta{font-size:11px}
+  .pendingToolbar{display:grid;grid-template-columns:1fr 1fr}.pendingToolbar button{min-height:44px}
+  .photoGrid{grid-template-columns:repeat(2,1fr)}
+  .summaryGrid{grid-template-columns:1fr 1fr}.sectionCard{min-width:0;width:100%;max-width:none}
+  .outlookStatusCard{min-width:0;width:100%;max-width:none}
+
+  dialog{width:100vw;max-width:none;height:100dvh;max-height:none;margin:0;border:0;border-radius:0}
+  dialog[open]{display:flex;flex-direction:column}
+  dialog .modalHd{position:sticky;top:0;z-index:10;flex:0 0 auto;padding:calc(12px + env(safe-area-inset-top)) 12px 11px}
+  dialog .modalBd{flex:1 1 auto;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch}
+  dialog .modalFt{position:sticky;bottom:0;z-index:10;flex:0 0 auto;padding:10px 12px calc(10px + env(safe-area-inset-bottom));align-items:stretch}
+  dialog .form{gap:11px}dialog .col-12,dialog .col-6,dialog .col-4,dialog .col-3{grid-column:span 12}
+  .modalQuick,.loginActions{width:100%;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .modalQuick button,.loginActions button{min-height:46px;width:100%}
+  #loginModal{width:100vw;height:100dvh}
+  #loginModal .modalBd{display:flex;align-items:center}
+  #loginModal .loginGrid{width:100%}
+  .toast{left:10px;right:10px;bottom:calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + 10px);max-width:none;font-size:12px}
+  .statePanel{min-height:45dvh}.statePanelInner{width:100%;padding:24px 18px}
+}
+
+@media (display-mode:standalone){
+  header{padding-top:calc(12px + env(safe-area-inset-top))}
+  #btnInstall{display:none!important}
 }

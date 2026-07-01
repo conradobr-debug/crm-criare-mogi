@@ -2,7 +2,13 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b0b" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CRM Criare" />
+  <meta name="format-detection" content="telephone=no" />
   <title>CRM Criare Mogi Guaçu</title>
   <style>
     :root{
@@ -405,6 +411,9 @@
     .toast.show{opacity:1; transform: translateY(0)}
   </style>
   <link rel="stylesheet" href="criare.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="assets/app-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="assets/app-icon-192.png" />
 </head>
 <body>
 
@@ -422,23 +431,30 @@
   <div class="actions">
     <button class="primary" id="btnNew">+ Novo lead</button>
     <button class="ghost" id="btnSync">Sincronizar</button>
-    <button class="ghost" id="btnSound">Som: OFF</button>
-    <button class="ghost" id="btnExportJson">Exportar backup</button>
-    <label class="btn ghost" for="importJson">Importar</label>
+    <button class="ghost mobileUtility" id="btnInstall" hidden>Instalar aplicativo</button>
+    <button class="ghost desktopUtility" id="btnSound">Som: OFF</button>
+    <button class="ghost desktopUtility" id="btnExportJson">Exportar backup</button>
+    <label class="btn ghost desktopUtility" for="importJson">Importar</label>
     <input id="importJson" type="file" accept="application/json" style="display:none" />
-    <button class="danger" id="btnWipe">Limpar local</button>
+    <button class="danger desktopUtility" id="btnWipe">Limpar local</button>
     <button class="ghost" id="btnSignOut">Sair</button>
   </div>
 </header>
 
 <div class="wrap">
   <div class="tabs" role="tablist" aria-label="Navegação">
-    <div class="tab active" data-tab="leads" role="tab" aria-selected="true">Leads</div>
-    <div class="tab" data-tab="closed" role="tab" aria-selected="false">Fechados</div>
-    <div class="tab" data-tab="specifiers" role="tab" aria-selected="false">Especificadores</div>
-    <div class="tab" data-tab="pending" role="tab" aria-selected="false">Pendências</div>
-    <div class="tab" data-tab="reports" role="tab" aria-selected="false">Relatórios</div>
-    <div class="tab" data-tab="config" role="tab" aria-selected="false">Config</div>
+    <div class="tab active" data-tab="leads" role="tab" tabindex="0" aria-selected="true"><span class="tabIcon" aria-hidden="true">●</span><span>Leads</span></div>
+    <div class="tab" data-tab="closed" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">✓</span><span>Fechados</span></div>
+    <div class="tab" data-tab="specifiers" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">◇</span><span>Parceiros</span></div>
+    <div class="tab" data-tab="pending" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">!</span><span>Pendências</span></div>
+    <div class="tab" data-tab="reports" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">↗</span><span>Relatórios</span></div>
+    <div class="tab" data-tab="config" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">⚙</span><span>Config</span></div>
+  </div>
+
+  <div class="appStateBanner loading" id="appStateBanner" role="status" aria-live="polite">
+    <span class="appStateSpinner" aria-hidden="true"></span>
+    <div><strong id="appStateTitle">Carregando seus dados</strong><span id="appStateMessage">Conectando à base compartilhada da Criare…</span></div>
+    <button class="ghost" id="btnRetryLoad" type="button" hidden>Tentar novamente</button>
   </div>
 
   <div class="toolbar">
@@ -483,7 +499,7 @@
 
   <div class="boardWrap">
     <div class="boardHint" id="boardHint"></div>
-    <div class="board" id="board"></div>
+    <div class="board" id="board" aria-busy="true"></div>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -495,17 +511,17 @@
         <div class="modalTitle">Entrar</div>
         <div class="modalSub">Use o e-mail e senha criados no Supabase (Auth).</div>
       </div>
-      <button class="ghost" id="btnCloseLogin">Fechar</button>
+      <button class="ghost" id="btnCloseLogin" hidden>Fechar</button>
     </div>
     <div class="modalBd">
       <div class="loginGrid">
         <div>
           <label>E-mail</label>
-          <input id="loginEmail" type="email" placeholder="ex.: conrado@empresa.com" />
+          <input id="loginEmail" type="email" inputmode="email" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ex.: conrado@empresa.com" />
         </div>
         <div>
           <label>Senha</label>
-          <input id="loginPass" type="password" placeholder="••••••••" />
+          <input id="loginPass" type="password" autocomplete="current-password" placeholder="••••••••" />
         </div>
         <div class="note" id="loginNote">
           Se o login falhar, verifique se o usuário foi criado no painel do Supabase e se o projeto está ativo.
@@ -1114,9 +1130,36 @@ let recordsFetchPromise = null;
 let recordsRefreshQueued = false;
 let bootPromise = null;
 let bootedUserId = null;
+let appDataState = "loading";
+let appDataTitle = "Carregando seus dados";
+let appDataMessage = "Conectando à base compartilhada da Criare…";
+let deferredInstallPrompt = null;
 
 let syncConnectionState = "offline";
 let lastSuccessfulSyncAt = null;
+
+function isMobileLayout(){ return window.matchMedia("(max-width: 760px)").matches; }
+function setAppDataState(state, title, message){
+  appDataState = state;
+  appDataTitle = title;
+  appDataMessage = message;
+  updateAppStateBanner();
+}
+function updateAppStateBanner(){
+  const banner = $("appStateBanner");
+  if(!banner) return;
+  banner.className = `appStateBanner ${appDataState}`;
+  $("appStateTitle").textContent = appDataTitle;
+  $("appStateMessage").textContent = appDataMessage;
+  $("btnRetryLoad").hidden = appDataState !== "error";
+}
+function statePanelHtml(){
+  const title = appDataState === "auth" ? "Entre para ver os dados" : appDataTitle;
+  const message = appDataState === "auth"
+    ? "Os leads, clientes fechados e pendências ficam na base compartilhada e aparecem depois do login."
+    : appDataMessage;
+  return `<div class="statePanel"><div class="statePanelInner"><h2>${escapeHtml(title)}</h2><p>${escapeHtml(message)}</p></div></div>`;
+}
 
 function syncAgeLabel(){
   if(!lastSuccessfulSyncAt) return "aguardando atualização";
@@ -1161,6 +1204,7 @@ function updateSessionLine(){
 }
 async function initSupabase(){
   if(!isConfigured()) return;
+  setAppDataState("loading", "Carregando seus dados", "Conectando à base compartilhada da Criare…");
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const { data, error } = await sb.auth.getSession();
   if(error){
@@ -1176,6 +1220,8 @@ async function initSupabase(){
   });
 
   if(!session?.user){
+    setAppDataState("auth", "Login necessário", "Entre com um usuário autorizado para carregar a base compartilhada.");
+    render();
     openLogin();
   }else{
     await bootAfterLogin();
@@ -1193,6 +1239,7 @@ async function handleAuthStateChange(event, newSession){
     hasInitialRecordSnapshot = false;
     await syncController.stop();
     lockApp();
+    openLogin();
     return;
   }
 
@@ -1220,12 +1267,15 @@ function lockApp(){
   hasInitialRecordSnapshot = false;
   hasInitialWeeklySnapshot = false;
   setSyncConnectionState("offline");
+  setAppDataState("auth", "Login necessário", "Entre novamente para carregar os dados compartilhados do CRM.");
   render();
 }
 function openLogin(){
-  $("loginModal").showModal();
+  $("btnCloseLogin").hidden = !session?.user;
+  if(!$("loginModal").open) $("loginModal").showModal();
 }
 function closeLogin(){
+  if(!session?.user) return;
   $("loginModal").close();
 }
 async function doLogin(){
@@ -1233,9 +1283,28 @@ async function doLogin(){
   const email = $("loginEmail").value.trim();
   const password = $("loginPass").value;
   if(!email || !password) return toast("Informe e-mail e senha.");
-  const { error } = await sb.auth.signInWithPassword({ email, password });
-  if(error) return toast("Login falhou. Verifique usuário/senha.");
-  closeLogin();
+  const button = $("btnLogin");
+  button.disabled = true;
+  button.textContent = "Entrando…";
+  setAppDataState("loading", "Carregando seus dados", "Login confirmado. Buscando leads, fechados e pendências…");
+  render();
+  try{
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if(error) throw error;
+    session = data.session;
+    updateSessionLine();
+    await bootAfterLogin();
+    if(bootedUserId === session?.user?.id) closeLogin();
+  }catch(error){
+    console.error("[CRM Auth] Login falhou.", error);
+    setAppDataState("auth", "Não foi possível entrar", "Confira o e-mail, a senha e sua conexão com a internet.");
+    $("loginNote").textContent = "Login não realizado. Confira o e-mail e a senha e tente novamente.";
+    toast("Login falhou. Verifique usuário e senha.");
+    render();
+  }finally{
+    button.disabled = false;
+    button.textContent = "Entrar";
+  }
 }
 async function doSignOut(){
   if(!sb) return;
@@ -1425,6 +1494,8 @@ async function bootAfterLogin(){
   if(bootPromise) return bootPromise;
 
   const userId = session.user.id;
+  setAppDataState("loading", "Carregando seus dados", "Buscando leads, clientes fechados e pendências…");
+  render();
   bootPromise = (async () => {
     hasInitialRecordSnapshot = false;
     hasInitialWeeklySnapshot = false;
@@ -1434,13 +1505,18 @@ async function bootAfterLogin(){
     await Promise.all([fetchConfig(), fetchProfiles()]);
     buildFilters();
     const loaded = await fetchRecords({ reason:"carga inicial", notifyNew:false, showError:true });
-    if(!loaded) return;
+    if(!loaded) throw new Error("Não foi possível carregar os registros compartilhados.");
     await Promise.all([fetchRecordEvents(), fetchWeeklyReports(), fetchPendingData(), fetchOutlookStatus()]);
     bootedUserId = userId;
+    setAppDataState("ready", "Dados carregados", `${records.length} registros e ${pendingItems.length} pendências sincronizados.`);
+    render();
+    if($("loginModal").open) closeLogin();
     await syncController.start();
   })().catch(error => {
     console.error("[CRM Boot] Falha ao iniciar aplicação.", error);
-    toast("Falha ao iniciar o CRM.");
+    setAppDataState("error", "Não foi possível carregar os dados", "Sua base continua segura. Verifique a conexão e toque em “Tentar novamente”.");
+    render();
+    toast("Falha ao carregar os dados. Tente novamente.");
     setSyncConnectionState("error");
   }).finally(() => {
     bootPromise = null;
@@ -1774,7 +1850,7 @@ function renderCard(r){
       : ``);
 
   return `
-    <div class="card ${stageClass(st)} grab" draggable="true" data-id="${escapeHtml(r.id)}" title="Clique para abrir detalhes">
+    <div class="card ${stageClass(st)} grab" draggable="${isMobileLayout() ? "false" : "true"}" data-id="${escapeHtml(r.id)}" title="Toque para abrir detalhes">
       <div class="cTop">
         <div class="cName">${escapeHtml(name)}</div>
         <div class="rightTop">
@@ -1892,7 +1968,7 @@ function renderPending(){
       <button class="ghost" type="button" data-pending-action="toggle-completed">${showCompletedPending ? "Ocultar concluídas" : `Mostrar concluídas (${totalCompleted})`}</button>
     </div>
     <div class="pendingLayout">
-      ${groups.map(group=>`<section class="pendingGroup">
+      ${groups.map(group=>`<section class="pendingGroup ${group.items.length ? "" : "emptyPending"}">
         <div class="pendingGroupHd"><h3>${escapeHtml(group.label)}</h3><span class="count">${group.items.length}</span></div>
         <div class="pendingList">${group.items.length ? group.items.map(renderPendingCard).join("") : `<div class="empty">Sem itens</div>`}</div>
       </section>`).join("")}
@@ -2248,6 +2324,13 @@ function updateLostBtn(){
 
 
 function render(){
+  updateAppStateBanner();
+  $("board").setAttribute("aria-busy", appDataState === "loading" ? "true" : "false");
+  if(appDataState !== "ready"){
+    renderKPIs([]);
+    $("board").innerHTML = statePanelHtml();
+    return;
+  }
   if(currentTab==="config"){
     $("board").innerHTML = renderConfig();
     return;
@@ -2278,7 +2361,7 @@ function render(){
   $("board").innerHTML = stages.map(stage=>{
     const list = byStage[stage] || [];
     return `
-      <div class="col" data-stage="${escapeHtml(stage)}">
+      <div class="col ${list.length ? "" : "emptyStage"}" data-stage="${escapeHtml(stage)}">
         <div class="colHd">
           <div class="colTitle">
             <div>${escapeHtml(stage)}</div>
@@ -2293,7 +2376,7 @@ function render(){
     `;
   }).join("");
 
-  wireDnD();
+  if(!isMobileLayout()) wireDnD();
   wireCardOpen();
 }
 
@@ -2734,6 +2817,7 @@ async function saveConfig(){
 
 /* ===== Tabs + filters ===== */
 function setTab(tab){
+  const tabChanged = currentTab !== tab;
   currentTab = tab;
   $("btnNew").textContent = tab === "specifiers" ? "+ Novo especificador" : (tab === "pending" ? "+ Nova pendência" : "+ Novo lead");
   $("btnNew").style.display = ["reports","config"].includes(tab) ? "none" : "";
@@ -2743,8 +2827,9 @@ function setTab(tab){
     el.setAttribute("aria-selected", on ? "true" : "false");
   });
 
-  const hint = tab==="leads" ? "" :
-               tab==="closed" ? "" :
+  const mobileHint = isMobileLayout() ? "Toque em um cartão para abrir. Etapas vazias ficam ocultas no celular." : "";
+  const hint = tab==="leads" ? mobileHint :
+               tab==="closed" ? mobileHint :
                tab==="specifiers" ? "Relacionamento contínuo com arquitetos, designers, corretores e parceiros." :
                tab==="pending" ? "Assistências, vistorias, peças e compras acompanhadas até a conclusão." :
                tab==="reports" ? "Resumo semanal: movimentação, qualidade e cobertura de acompanhamento." :
@@ -2754,10 +2839,19 @@ function setTab(tab){
   buildFilters();
   updateLostBtn();
   render();
+  if(tabChanged && isMobileLayout()) requestAnimationFrame(()=>window.scrollTo({top:0,behavior:"auto"}));
 }
 
 /* ===== UI Events ===== */
-document.querySelectorAll(".tab").forEach(el=> el.addEventListener("click", ()=>setTab(el.dataset.tab)));
+document.querySelectorAll(".tab").forEach(el=>{
+  el.addEventListener("click", ()=>setTab(el.dataset.tab));
+  el.addEventListener("keydown", event=>{
+    if(event.key === "Enter" || event.key === " "){
+      event.preventDefault();
+      setTab(el.dataset.tab);
+    }
+  });
+});
 
 $("fOwner").addEventListener("change", e=>{ filters.owner=e.target.value; render(); });
 $("fSource").addEventListener("change", e=>{ filters.source=e.target.value; render(); });
@@ -2903,7 +2997,10 @@ $("btnQuickDelete").addEventListener("click", async (e)=>{
 
 /* Login events */
 $("btnLogin").addEventListener("click", (e)=>{ e.preventDefault(); doLogin(); });
-$("btnCloseLogin").addEventListener("click", ()=> $("loginModal").close());
+$("btnCloseLogin").addEventListener("click", closeLogin);
+$("loginModal").addEventListener("cancel", event=>{
+  if(!session?.user) event.preventDefault();
+});
 
 $("btnSignOut").addEventListener("click", ()=> doSignOut());
 $("btnSync").addEventListener("click", async ()=>{
@@ -2912,6 +3009,42 @@ $("btnSync").addEventListener("click", async ()=>{
   if(!ok) return;
   toast("Sincronizado com sucesso.");
   syncController.resume("sincronização manual");
+});
+
+$("btnRetryLoad").addEventListener("click", async ()=>{
+  if(!sb || !session?.user) return openLogin();
+  bootedUserId = null;
+  await bootAfterLogin();
+});
+
+window.addEventListener("beforeinstallprompt", event=>{
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  $("btnInstall").hidden = false;
+});
+window.addEventListener("appinstalled", ()=>{
+  deferredInstallPrompt = null;
+  $("btnInstall").hidden = true;
+  toast("CRM instalado como aplicativo.");
+});
+$("btnInstall").addEventListener("click", async ()=>{
+  if(deferredInstallPrompt){
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    $("btnInstall").hidden = true;
+    return;
+  }
+  const isiOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  toast(isiOS
+    ? "No Safari: toque em Compartilhar e depois em “Adicionar à Tela de Início”."
+    : "No menu do navegador, escolha “Instalar aplicativo” ou “Adicionar à tela inicial”.");
+});
+
+let resizeRenderTimer = null;
+window.addEventListener("resize", ()=>{
+  clearTimeout(resizeRenderTimer);
+  resizeRenderTimer = setTimeout(()=>{ setTab(currentTab); }, 180);
 });
 
 /* Config tab button delegation */
@@ -3121,9 +3254,25 @@ $("btnWipe").addEventListener("click", ()=>{
   }
 });
 
+function prepareInstallExperience(){
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  const mobileDevice = /android|iphone|ipad|ipod/i.test(navigator.userAgent) || isMobileLayout();
+  if(mobileDevice && !standalone) $("btnInstall").hidden = false;
+}
+
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("./service-worker.js").catch(error=>{
+      console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
+    });
+  });
+}
+
 /* Boot */
 (async function boot(){
   handleOutlookReturn();
+  prepareInstallExperience();
+  updateAppStateBanner();
   updateSessionLine();
   // disable sign out / sync until configured
   if(!isConfigured()){
