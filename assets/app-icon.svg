@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="CRM Criare">
+  <rect width="512" height="512" rx="112" fill="#0b0b0b"/>
+  <path d="M366 151c-29-27-65-41-108-41-85 0-148 63-148 146s63 146 148 146c43 0 79-14 108-41l-43-49c-18 16-39 24-65 24-46 0-80-34-80-80s34-80 80-80c26 0 47 8 65 24z" fill="#c8b39f"/>
+  <circle cx="374" cy="256" r="30" fill="#f2f0ec"/>
+</svg>

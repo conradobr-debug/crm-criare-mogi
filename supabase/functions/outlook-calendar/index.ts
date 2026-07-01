@@ -5,8 +5,12 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const MICROSOFT_CLIENT_ID = Deno.env.get("MICROSOFT_CLIENT_ID") || "";
 const MICROSOFT_CLIENT_SECRET = Deno.env.get("MICROSOFT_CLIENT_SECRET") || "";
 const TOKEN_ENCRYPTION_KEY = Deno.env.get("OUTLOOK_TOKEN_ENCRYPTION_KEY") || "";
-const MAKE_WEBHOOK_URL = Deno.env.get("MAKE_CALENDAR_WEBHOOK_URL") || "";
-const MAKE_WEBHOOK_SECRET = Deno.env.get("MAKE_CALENDAR_WEBHOOK_SECRET") || "";
+const MAKE_WEBHOOK_URL = Deno.env.get("MAKE_CALENDAR_WEBHOOK_URL")
+  || Deno.env.get("MAKE_WEBHOOK_URL")
+  || "";
+const MAKE_WEBHOOK_SECRET = Deno.env.get("MAKE_CALENDAR_WEBHOOK_SECRET")
+  || Deno.env.get("MAKE_WEBHOOK_SECRET")
+  || "";
 const ALLOWED_OUTLOOK_EMAIL = (Deno.env.get("OUTLOOK_ALLOWED_EMAIL") || "criaremg@hotmail.com").toLowerCase();
 const CONNECTOR_USER_EMAIL = (Deno.env.get("OUTLOOK_CONNECTOR_USER_EMAIL") || "").toLowerCase();
 const CRM_PUBLIC_URL = Deno.env.get("CRM_PUBLIC_URL") || "https://conradobr-debug.github.io/crm-criare-mogi/";
