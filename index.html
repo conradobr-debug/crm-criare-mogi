@@ -997,7 +997,11 @@ function whatsappNumber(value){
 function openWhatsAppFor(record=null){
   const number = whatsappNumber(record?.phone || $("phone").value);
   if(!number) return toast("Informe um telefone válido com DDD para abrir o WhatsApp.");
-  window.open(`https://wa.me/${number}`, "_blank", "noopener,noreferrer");
+  const mobileDevice = /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+  const destination = mobileDevice
+    ? `https://wa.me/${number}`
+    : `https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
+  window.open(destination, "_blank", "noopener,noreferrer");
 }
 async function callWhatsAppSummary(conversation){
   if(!sb || !session?.access_token) throw new Error("Entre no CRM novamente.");
