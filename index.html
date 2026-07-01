@@ -729,6 +729,26 @@
           <textarea id="notes"></textarea>
         </div>
 
+        <div class="col-12 whatsappWorkspace">
+          <div class="whatsappWorkspaceHd">
+            <div>
+              <div class="whatsappWorkspaceTitle">WhatsApp do cliente</div>
+              <div class="fieldHelp">Abra a conversa diretamente ou cole um trecho para criar um resumo comercial.</div>
+            </div>
+            <button class="whatsappAction" id="btnWhatsApp" type="button">Abrir conversa</button>
+          </div>
+          <label for="whatsappConversation">Conversa para resumir</label>
+          <textarea id="whatsappConversation" class="whatsappConversation" placeholder="Cole aqui somente o trecho relevante da conversa. O texto colado não será salvo no CRM."></textarea>
+          <div class="whatsappPrivacy">Ao gerar, o trecho poderá ser enviado ao serviço de IA configurado. Evite documentos, senhas e dados sensíveis. Apenas o resumo será salvo.</div>
+          <div class="whatsappActions">
+            <button class="primary" id="btnSummarizeWhatsApp" type="button">Gerar resumo</button>
+            <button class="ghost" id="btnClearWhatsAppConversation" type="button">Limpar conversa colada</button>
+          </div>
+          <label for="whatsappSummary">Resumo da conversa</label>
+          <textarea id="whatsappSummary" class="whatsappSummary" placeholder="O resumo mostrará necessidades, interesses, objeções, compromissos e o próximo passo recomendado."></textarea>
+          <div class="whatsappSummaryMeta" id="whatsappSummaryMeta">Nenhum resumo gerado.</div>
+        </div>
+
         <div class="col-12">
           <label>Detalhes do próximo agendamento</label>
           <textarea id="nextActionDetails" placeholder="Ex.: confirmar recebimento da planta, revisar briefing e combinar data da apresentação."></textarea>
@@ -747,6 +767,7 @@
         <button class="ghost" id="btnCancel">Cancelar</button>
         <button class="primary" id="btnSave">Salvar</button>
         <button class="primary" id="btnOutlook">Salvar e criar compromisso</button>
+        <button class="whatsappAction" id="btnWhatsAppFooter" type="button">WhatsApp</button>
         <button class="ghost" id="btnLogContact">Registrar contato agora</button>
         <button class="primary" id="btnQuickClosed" style="border-color: rgba(76,237,187,.75); background: rgba(76,237,187,.14)">Fechou</button>
         <button class="ghost" id="btnQuickLost" style="border-color: rgba(255,216,138,.65); background: rgba(255,216,138,.10)">Perdeu</button>
@@ -966,6 +987,81 @@ async function saveOutlookEvent(recordId){
     record.outlook_synced_at = nowISO();
   }
   return result;
+}
+function whatsappNumber(value){
+  let digits = String(value || "").replace(/\D/g, "");
+  if(digits.startsWith("00")) digits = digits.slice(2);
+  if((digits.length === 10 || digits.length === 11) && !digits.startsWith("55")) digits = `55${digits}`;
+  return digits.length >= 12 && digits.length <= 13 ? digits : "";
+}
+function openWhatsAppFor(record=null){
+  const number = whatsappNumber(record?.phone || $("phone").value);
+  if(!number) return toast("Informe um telefone válido com DDD para abrir o WhatsApp.");
+  window.open(`https://wa.me/${number}`, "_blank", "noopener,noreferrer");
+}
+async function callWhatsAppSummary(conversation){
+  if(!sb || !session?.access_token) throw new Error("Entre no CRM novamente.");
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/whatsapp-summary`, {
+    method:"POST",
+    headers:{
+      "content-type":"application/json",
+      "apikey":SUPABASE_ANON_KEY,
+      "authorization":`Bearer ${session.access_token}`
+    },
+    body:JSON.stringify({
+      conversation,
+      customer_name:`${$("firstName").value} ${$("lastName").value}`.trim(),
+      stage:$("stage").value,
+      rooms:$("rooms").value,
+      city:$("city").value,
+      notes:$("notes").value
+    })
+  });
+  const result = await response.json().catch(()=>({}));
+  if(!response.ok){
+    const error = new Error(result.error || "Falha ao gerar o resumo.");
+    error.code = result.code || "SUMMARY_ERROR";
+    throw error;
+  }
+  return result;
+}
+function localWhatsAppSummary(conversation){
+  const normalized = conversation.replace(/\r/g, "").trim();
+  const lines = normalized.split("\n").map(line=>line.trim()).filter(Boolean);
+  const useful = lines.filter(line=>line.length >= 12).slice(-18);
+  const lower = normalized.toLowerCase();
+  const money = [...normalized.matchAll(/R\$\s?[\d.]+(?:,\d{2})?/gi)].map(match=>match[0]);
+  const dateMentions = [...normalized.matchAll(/\b\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?\b/g)].map(match=>match[0]);
+  const objections = useful.filter(line=>/preç|caro|orçamento|prazo|demora|concorr|pensar|marido|esposa|decidir|financ/i.test(line)).slice(-4);
+  const needs = useful.filter(line=>/cozinha|quarto|sala|banheiro|closet|lavanderia|apartamento|casa|móvel|projeto|planta|medida|acabamento|cor\b|mdf|mdp/i.test(line)).slice(-5);
+  const commitments = useful.filter(line=>/vou |vamos |envio|mandar|retorno|confirm|agend|combina|ficou para|até |amanhã|semana/i.test(line)).slice(-4);
+  const quality = /projeto|personaliz|design|qualidade|arquit|planta|acabamento/i.test(lower)
+    ? "Potencial"
+    : (/só.*preço|mais barato|menor preço/i.test(lower) ? "Baixo potencial" : "Não avaliado");
+  const section = (items, empty="Não identificado no trecho.") => items.length ? items.map(item=>`• ${item}`).join("\n") : empty;
+  return {
+    summary:[
+      "Contexto", section(useful.slice(-4), "Trecho insuficiente para identificar o contexto."), "",
+      "Necessidades e interesses", section(needs), "",
+      "Objeções ou riscos", section(objections), "",
+      "Compromissos assumidos", section(commitments),
+      money.length ? `\nValores mencionados: ${[...new Set(money)].join(", ")}.` : "",
+      dateMentions.length ? `Datas mencionadas: ${[...new Set(dateMentions)].join(", ")}.` : "", "",
+      "Próximo passo recomendado", "• Confirmar com o cliente o próximo avanço e registrar uma data de acompanhamento no calendário."
+    ].filter(Boolean).join("\n"),
+    lead_quality:quality,
+    next_action_kind:"WhatsApp",
+    next_action_details:"Retomar os pontos combinados na conversa, confirmar pendências e definir o próximo avanço com data.",
+    model:"análise local"
+  };
+}
+function applyWhatsAppSummary(result){
+  $("whatsappSummary").value = result.summary || "";
+  $("whatsappSummary").dataset.model = result.model || "IA";
+  if(LEAD_QUALITIES.includes(result.lead_quality) && result.lead_quality !== "Não avaliado") $("leadQuality").value = result.lead_quality;
+  if([...$("nextActionKind").options].some(option=>option.value===result.next_action_kind)) $("nextActionKind").value = result.next_action_kind;
+  if(result.next_action_details) $("nextActionDetails").value = result.next_action_details;
+  $("whatsappSummaryMeta").textContent = `Resumo gerado por ${result.model || "IA"}. Revise antes de salvar.`;
 }
 function handleOutlookReturn(){
   const url = new URL(window.location.href);
@@ -1873,6 +1969,7 @@ function renderCard(r){
 
       <div class="menu" data-menu="${escapeHtml(r.id)}">
         <button type="button" data-act="edit" data-id="${escapeHtml(r.id)}">Editar</button>
+        <button type="button" data-act="whatsapp" data-id="${escapeHtml(r.id)}">Abrir WhatsApp</button>
         <button type="button" data-act="schedule" data-id="${escapeHtml(r.id)}">Agendar no calendário</button>
         <button type="button" data-act="logContact" data-id="${escapeHtml(r.id)}">Registrar contato agora</button>
         ${!isSpecifier(r) && r.pipeline==="lead" && st!=="Perdido" ? `<button type="button" data-act="toClosed" data-id="${escapeHtml(r.id)}">Fechou</button>` : ``}
@@ -2547,6 +2644,7 @@ document.addEventListener("click", async (e)=>{
 
     closeAllMenus();
     if(act==="edit"){ openModal(r); return; }
+    if(act==="whatsapp"){ openWhatsAppFor(r); return; }
     if(act==="schedule"){ openModal(r, { focusSchedule:true }); return; }
     if(act==="logContact"){ await registerContactNow(r); return; }
     if(act==="toClosed"){ await markAsClosed(r); return; }
@@ -2614,6 +2712,12 @@ function openModal(record=null, options={}){
   $("email").value = record?.email || "";
   $("estimate").value = (record?.estimate ?? "");
   $("notes").value = record?.notes || "";
+  $("whatsappConversation").value = "";
+  $("whatsappSummary").value = record?.whatsapp_summary || "";
+  $("whatsappSummary").dataset.model = record?.whatsapp_summary_model || "";
+  $("whatsappSummaryMeta").textContent = record?.whatsapp_summary_updated_at
+    ? `Último resumo: ${fmtBRDateTime(record.whatsapp_summary_updated_at)}${record.whatsapp_summary_model ? ` • ${record.whatsapp_summary_model}` : ""}.`
+    : "Nenhum resumo gerado.";
   $("nextActionDetails").value = record?.next_action_details || "";
   const nextActionAt = getNextActionAt(record);
   $("nextAction").value = nextActionAt ? inputDateValue(nextActionAt) : (record?.next_action || "");
@@ -2690,6 +2794,9 @@ async function upsertFromForm(){
   const nextActionDate = $("nextAction").value || null;
   const nextActionAt = localScheduleIso(nextActionDate, $("nextActionTime").value || "09:00");
 
+  const existingRecord = records.find(record=>record.id===id);
+  const whatsappSummary = $("whatsappSummary").value.trim();
+  const summaryChanged = (existingRecord?.whatsapp_summary || "") !== whatsappSummary;
   const payload = {
     record_type: kind,
     first_name: firstName,
@@ -2719,6 +2826,9 @@ async function upsertFromForm(){
     investment_profile: kind === "specifier" ? "A definir" : ($("investmentProfile").value || "A definir"),
     decision_due_at: kind === "specifier" ? null : ($("decisionDueAt").value || null),
     preferred_contact: kind === "specifier" ? "WhatsApp" : ($("preferredContact").value || "WhatsApp"),
+    whatsapp_summary: whatsappSummary || null,
+    whatsapp_summary_updated_at: whatsappSummary ? (summaryChanged ? nowISO() : existingRecord?.whatsapp_summary_updated_at || nowISO()) : null,
+    whatsapp_summary_model: whatsappSummary ? ($("whatsappSummary").dataset.model || "edição manual") : null,
     lost_reason: (kind !== "specifier" && pipeline==="lead" && stage==="Perdido") ? ($("lostReason").value || null) : null
   };
 
@@ -2900,6 +3010,35 @@ $("pipeline").addEventListener("change", ()=>{
   updateLostReasonVisibility();
 });
 $("stage").addEventListener("change", updateLostReasonVisibility);
+$("btnWhatsApp").addEventListener("click", ()=>openWhatsAppFor());
+$("btnWhatsAppFooter").addEventListener("click", ()=>openWhatsAppFor());
+$("btnClearWhatsAppConversation").addEventListener("click", ()=>{
+  $("whatsappConversation").value = "";
+  toast("Conversa colada removida da tela.");
+});
+$("btnSummarizeWhatsApp").addEventListener("click", async ()=>{
+  const conversation = $("whatsappConversation").value.trim();
+  if(conversation.length < 40) return toast("Cole um trecho maior da conversa.");
+  const button = $("btnSummarizeWhatsApp");
+  button.disabled = true;
+  button.textContent = "Analisando conversa...";
+  try{
+    let result;
+    try{
+      result = await callWhatsAppSummary(conversation);
+    }catch(error){
+      console.warn("[CRM WhatsApp] IA externa indisponível; usando análise local.", error);
+      result = localWhatsAppSummary(conversation);
+      toast("IA indisponível; resumo local criado para você revisar.");
+    }
+    applyWhatsAppSummary(result);
+    $("whatsappConversation").value = "";
+    if(result.model !== "análise local") toast("Resumo criado. Revise e salve o cliente.");
+  }finally{
+    button.disabled = false;
+    button.textContent = "Gerar resumo";
+  }
+});
 
 $("btnSave").addEventListener("click", async (e)=>{
   e.preventDefault();
