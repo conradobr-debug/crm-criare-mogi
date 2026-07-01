@@ -88,5 +88,8 @@ export const ANALYSIS_MODE_GUIDANCE: Record<string, string> = {
   "Analisar o atendimento": "Foque comunicação, velocidade e qualidade dos retornos, promessas, prazos, clareza, falhas da Criare, experiência e recuperação de confiança.",
   "Somente pendências": "Liste apenas pendências e prazos, agrupadas por Criare, Cliente, Terceiros e Responsável indefinido, finalizando com a ação mais urgente.",
   "Somente riscos": "Liste e classifique apenas riscos, evidências, consequências e mitigação recomendada.",
-  "Preparar uma resposta": "Analise o contexto mínimo necessário e produza uma mensagem de WhatsApp equilibrada, sem emojis, com um único micro-CTA e sem promessa não confirmada.",
+  "Atualizar análise": "Compare a conversa nova com a análise anterior. Destaque mudanças de etapa, temperatura, potencial, promessas, pendências, riscos e próxima ação. Não repita como novidade o que não mudou.",
+  "Preparar resposta enxuta": "Analise o contexto mínimo e produza uma mensagem de WhatsApp com 2 a 4 frases, sem emojis, com um único micro-CTA e sem promessa não confirmada.",
+  "Preparar resposta equilibrada": "Analise o contexto mínimo e produza uma mensagem de WhatsApp com 1 ou 2 parágrafos, sem emojis, com um único micro-CTA e sem promessa não confirmada.",
+  "Preparar resposta premium": "Somente se o contexto justificar, produza uma mensagem de WhatsApp com 3 a 5 parágrafos. Acolha, reconheça a questão, explique sem transferir culpa, proponha solução ou alternativa e termine com um único micro-CTA. Não use emojis nem promessa não confirmada.",
 };
