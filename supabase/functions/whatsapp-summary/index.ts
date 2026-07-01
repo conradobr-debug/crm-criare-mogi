@@ -104,6 +104,9 @@ Deno.serve(async (request: Request) => {
     const requestedMode = clean(body.analysis_mode, 80) || "Resumo gerencial";
     const analysisMode = ANALYSIS_MODE_GUIDANCE[requestedMode] ? requestedMode : "Resumo gerencial";
     const modeGuidance = ANALYSIS_MODE_GUIDANCE[analysisMode];
+    const previousAnalysis = analysisMode === "Atualizar análise"
+      ? redactSensitive(clean(body.previous_analysis, 10000))
+      : "";
     const today = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 
     const prompt = `DATA DE REFERÊNCIA: ${today}
@@ -112,6 +115,8 @@ ORIENTAÇÃO DO MODO: ${modeGuidance}
 
 CONTEXTO ATUAL DO CRM:
 ${JSON.stringify(context)}
+
+${previousAnalysis ? `ANÁLISE ANTERIOR PARA COMPARAÇÃO:\n---\n${previousAnalysis}\n---` : ""}
 
 CONVERSA DO WHATSAPP (dados sensíveis detectáveis já foram ocultados):
 ---

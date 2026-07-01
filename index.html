@@ -745,7 +745,10 @@
             <option>Analisar o atendimento</option>
             <option>Somente pendências</option>
             <option>Somente riscos</option>
-            <option>Preparar uma resposta</option>
+            <option>Atualizar análise</option>
+            <option>Preparar resposta enxuta</option>
+            <option>Preparar resposta equilibrada</option>
+            <option>Preparar resposta premium</option>
           </select>
           <label for="whatsappConversation" style="margin-top:12px">Conversa para analisar</label>
           <textarea id="whatsappConversation" class="whatsappConversation" placeholder="Cole aqui somente o trecho relevante da conversa. O texto colado não será salvo no CRM."></textarea>
@@ -1025,6 +1028,7 @@ async function callWhatsAppSummary(conversation){
     body:JSON.stringify({
       conversation,
       analysis_mode:$("whatsappAnalysisMode").value,
+      previous_analysis:$("whatsappSummary").value,
       customer_name:`${$("firstName").value} ${$("lastName").value}`.trim(),
       stage:$("stage").value,
       rooms:$("rooms").value,
