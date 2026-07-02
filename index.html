@@ -733,7 +733,7 @@
           <div class="whatsappWorkspaceHd">
             <div>
               <div class="whatsappWorkspaceTitle">WhatsApp do cliente</div>
-              <div class="fieldHelp">Abra a conversa diretamente ou cole um trecho para análise comercial e operacional.</div>
+              <div class="fieldHelp">As mensagens sincronizadas aparecem aqui automaticamente. Você ainda pode colar um trecho manualmente.</div>
             </div>
             <button class="whatsappAction" id="btnWhatsApp" type="button">Abrir conversa</button>
           </div>
@@ -751,9 +751,11 @@
             <option>Preparar resposta premium</option>
           </select>
           <label for="whatsappConversation" style="margin-top:12px">Conversa para analisar</label>
-          <textarea id="whatsappConversation" class="whatsappConversation" placeholder="Cole aqui somente o trecho relevante da conversa. O texto colado não será salvo no CRM."></textarea>
-          <div class="whatsappPrivacy">Na análise automática, o trecho poderá ser enviado ao serviço de IA configurado. No modo manual, o CRM apenas copia o pedido e abre o seu GPT; você decide quando colar e enviar. Evite documentos, senhas e dados sensíveis. Apenas o resumo será salvo.</div>
+          <textarea id="whatsappConversation" class="whatsappConversation" placeholder="As mensagens sincronizadas aparecerão aqui. Também é possível colar um trecho manualmente."></textarea>
+          <div class="whatsappSummaryMeta" id="whatsappSyncStatus">Salve o cliente para sincronizar a conversa pelo telefone.</div>
+          <div class="whatsappPrivacy">Mensagens sincronizadas ficam protegidas pelo acesso do CRM. Ao usar a análise automática, o trecho poderá ser enviado ao serviço de IA configurado. Evite documentos, senhas e dados bancários.</div>
           <div class="whatsappActions">
+            <button class="ghost" id="btnRefreshWhatsApp" type="button">Atualizar mensagens</button>
             <button class="manualGptAction" id="btnOpenCustomGpt" type="button">Copiar e abrir meu GPT</button>
             <button class="ghost" id="btnImportCustomGpt" type="button">Importar resposta copiada</button>
             <button class="primary" id="btnSummarizeWhatsApp" type="button">Analisar automaticamente</button>
@@ -918,6 +920,7 @@ const TBL_EVENTS = "crm_record_events";
 const TBL_WEEKLY_REPORTS = "crm_weekly_reports";
 const TBL_PENDING = "crm_pending_items";
 const TBL_PENDING_ATTACHMENTS = "crm_pending_attachments";
+const TBL_WHATSAPP_MESSAGES = "crm_whatsapp_messages";
 const PENDING_PHOTO_BUCKET = "crm-pending-photos";
 
 /* ===== Helpers ===== */
@@ -1022,6 +1025,54 @@ function openWhatsAppFor(record=null){
     ? `https://wa.me/${number}`
     : `https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
   window.open(destination, "_blank", "noopener,noreferrer");
+}
+function formatWhatsAppTranscript(messages, customerName){
+  return messages.map(message=>{
+    const when = new Date(message.message_timestamp).toLocaleString("pt-BR", {
+      day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit"
+    });
+    const author = message.direction === "outbound" ? "Criare" : (message.contact_name || customerName || "Cliente");
+    return `[${when}] ${author}: ${message.body || `[${message.message_type || "mensagem"}]`}`;
+  }).join("\n");
+}
+async function fetchWhatsAppConversation(record=null, {notify=false}={}){
+  const status = $("whatsappSyncStatus");
+  if(!sb || !session?.user){
+    status.textContent = "Entre no CRM para carregar as mensagens.";
+    return false;
+  }
+  const recordId = record?.id || $("id").value;
+  const number = whatsappNumber(record?.phone || $("phone").value);
+  if(!recordId && !number){
+    status.textContent = "Salve o cliente com um telefone válido para sincronizar a conversa.";
+    return false;
+  }
+  status.textContent = "Buscando mensagens sincronizadas…";
+  let query = sb.from(TBL_WHATSAPP_MESSAGES).select("*").order("message_timestamp", {ascending:false}).limit(500);
+  query = recordId && number
+    ? query.or(`record_id.eq.${recordId},contact_wa_id.eq.${number}`)
+    : (recordId ? query.eq("record_id", recordId) : query.eq("contact_wa_id", number));
+  const {data, error} = await query;
+  if(error){
+    console.warn("[CRM WhatsApp] Sincronização indisponível.", error);
+    status.textContent = ["42P01","PGRST205"].includes(error.code)
+      ? "A sincronização automática ainda está sendo ativada."
+      : "Não foi possível atualizar as mensagens agora.";
+    if(notify) toast("Não foi possível atualizar as mensagens.");
+    return false;
+  }
+  const messages = (data || []).reverse();
+  if(!messages.length){
+    status.textContent = "Nenhuma mensagem sincronizada ainda. Novas conversas aparecerão automaticamente.";
+    if(notify) toast("Ainda não há mensagens sincronizadas para este telefone.");
+    return true;
+  }
+  const customerName = `${record?.first_name || $("firstName").value} ${record?.last_name || $("lastName").value}`.trim();
+  $("whatsappConversation").value = formatWhatsAppTranscript(messages, customerName);
+  const latest = messages[messages.length - 1];
+  status.textContent = `${messages.length} mensagem(ns) sincronizada(s) • última em ${fmtBRDateTime(latest.message_timestamp)}.`;
+  if(notify) toast("Conversa atualizada.");
+  return true;
 }
 const CRIARE_CUSTOM_GPT_URL = "https://chatgpt.com/g/g-6a456f7734cc81919d0d2a98941be765-analista-de-conversas-criare";
 function redactManualGptSensitive(value){
@@ -2872,6 +2923,7 @@ function openModal(record=null, options={}){
   $("fCity").value = prevCity;
 
   $("modal").showModal();
+  if(record?.id) fetchWhatsAppConversation(record);
   if(options.focusSchedule){
     setTimeout(()=>$("nextAction").focus(), 50);
   }
@@ -3124,6 +3176,10 @@ $("pipeline").addEventListener("change", ()=>{
 $("stage").addEventListener("change", updateLostReasonVisibility);
 $("btnWhatsApp").addEventListener("click", ()=>openWhatsAppFor());
 $("btnWhatsAppFooter").addEventListener("click", ()=>openWhatsAppFor());
+$("btnRefreshWhatsApp").addEventListener("click", ()=>{
+  const record = records.find(item=>item.id===$("id").value) || null;
+  fetchWhatsAppConversation(record, {notify:true});
+});
 $("btnOpenCustomGpt").addEventListener("click", async ()=>{
   const conversation = $("whatsappConversation").value.trim();
   if(conversation.length < 40) return toast("Cole um trecho maior da conversa.");
