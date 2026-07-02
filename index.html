@@ -295,6 +295,16 @@
     .reportBar{height:8px; border-radius:999px; background:#E8F1F2; overflow:hidden; margin-top:6px;}
     .reportBar > span{display:block; height:100%; background:linear-gradient(90deg,#96BAFF,#4CEDBB); border-radius:999px;}
     .formNotice{padding:10px 12px; border:1px solid #F3D69F; border-radius:12px; background:#FFF9ED; color:#745623; font-size:12px; line-height:1.4;}
+    .appointmentComposer{grid-column:span 12;display:grid;grid-template-columns:repeat(12,1fr);gap:10px;padding:14px;border:1px solid #DCE8EA;border-radius:14px;background:#FFFFFF;}
+    .appointmentComposerHd{grid-column:span 12;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+    .appointmentComposerTitle{font-size:13px;font-weight:650;color:var(--text);}
+    .appointmentList{grid-column:span 12;display:flex;flex-direction:column;gap:8px;}
+    .appointmentItem{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid #DCE8EA;border-radius:12px;background:#F8FBFC;}
+    .appointmentItemMain{min-width:0;font-size:12px;line-height:1.45;}
+    .appointmentItemMain b{font-weight:650;}
+    .appointmentItemMeta{color:var(--muted);font-size:11px;margin-top:2px;}
+    .appointmentItem button{padding:7px 9px;font-size:11px;flex:0 0 auto;}
+    .appointmentEmpty{padding:10px 12px;border:1px dashed #CCDDE0;border-radius:12px;color:var(--muted);font-size:12px;}
     @media (max-width:900px){.summaryGrid{grid-template-columns:repeat(2,minmax(140px,1fr));}}
     @media (max-width:520px){.summaryGrid{grid-template-columns:1fr;}}
 
@@ -362,7 +372,12 @@
     .col-6{grid-column: span 6;}
     .col-4{grid-column: span 4;}
     .col-3{grid-column: span 3;}
-    @media (max-width: 880px){ .col-6,.col-4,.col-3{grid-column: span 12;} }
+    @media (max-width: 880px){
+      .col-6,.col-4,.col-3{grid-column: span 12;}
+      #btnAddAppointment{width:100%;min-height:46px;}
+      .appointmentItem{flex-direction:column;}
+      .appointmentItem .btn,.appointmentItem button{width:100%;text-align:center;}
+    }
     .req{color:#ffd88a; font-weight:700}
     textarea{min-height:90px; resize:vertical}
     .modalFt{
@@ -594,8 +609,16 @@
           <label>Etapa</label>
           <select id="stage"></select>
         </div>
+        <div class="appointmentComposer" id="appointmentComposer">
+          <div class="appointmentComposerHd">
+            <div>
+              <div class="appointmentComposerTitle">Compromissos do cliente</div>
+              <div class="fieldHelp">Crie quantos acompanhamentos forem necessários. O mais próximo aparecerá no cartão.</div>
+            </div>
+          </div>
+
         <div class="col-4" id="wrapNextActionDate">
-          <label>Próximo acompanhamento</label>
+          <label>Data do novo compromisso</label>
           <input id="nextAction" type="date" />
         </div>
 
@@ -638,6 +661,18 @@
             <option value="120">2 horas antes</option>
             <option value="1440">1 dia antes</option>
           </select>
+        </div>
+
+        <div class="col-12">
+          <label>Detalhes do novo compromisso</label>
+          <textarea id="nextActionDetails" placeholder="Ex.: confirmar recebimento da planta, revisar briefing e combinar data da apresentação."></textarea>
+        </div>
+
+        <div class="col-12" style="display:flex;justify-content:flex-end">
+          <button class="primary" id="btnAddAppointment" type="button">+ Adicionar compromisso</button>
+        </div>
+
+        <div class="appointmentList" id="appointmentList"></div>
         </div>
 
         <div class="col-4" id="wrapLeadQuality">
@@ -769,11 +804,6 @@
           <label for="whatsappSummary">Resumo da conversa</label>
           <textarea id="whatsappSummary" class="whatsappSummary" placeholder="O resumo mostrará necessidades, interesses, objeções, compromissos e o próximo passo recomendado."></textarea>
           <div class="whatsappSummaryMeta" id="whatsappSummaryMeta">Nenhum resumo gerado.</div>
-        </div>
-
-        <div class="col-12">
-          <label>Detalhes do próximo agendamento</label>
-          <textarea id="nextActionDetails" placeholder="Ex.: confirmar recebimento da planta, revisar briefing e combinar data da apresentação."></textarea>
         </div>
 
         <div class="col-12" id="scheduleNotice">
@@ -944,7 +974,31 @@ function localScheduleIso(dateValue, timeValue="09:00"){
   const parsed = new Date(`${dateValue}T${timeValue || "09:00"}:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
-function getNextActionAt(r){
+function normalizeAppointments(record){
+  const stored = Array.isArray(record?.appointments) ? record.appointments : [];
+  if(stored.length) return stored.map(item=>({
+    id:item.id || crypto.randomUUID(),
+    starts_at:item.starts_at || null,
+    kind:item.kind || "Follow-up",
+    details:item.details || null,
+    duration_minutes:Number(item.duration_minutes || 30),
+    reminder_minutes:Number(item.reminder_minutes ?? 30),
+    status:item.status || "scheduled",
+    event_id:item.event_id || null,
+    web_link:item.web_link || null,
+    synced_at:item.synced_at || null
+  })).filter(item=>item.starts_at);
+  const legacy = getLegacyNextActionAt(record);
+  return legacy ? [{
+    id:crypto.randomUUID(), starts_at:legacy.toISOString(),
+    kind:record?.next_action_kind || "Follow-up", details:record?.next_action_details || null,
+    duration_minutes:Number(record?.next_action_duration_minutes || 30),
+    reminder_minutes:Number(record?.next_action_reminder_minutes ?? 30), status:"scheduled",
+    event_id:record?.outlook_event_id || null, web_link:record?.outlook_event_web_link || null,
+    synced_at:record?.outlook_synced_at || null
+  }] : [];
+}
+function getLegacyNextActionAt(r){
   if(r?.next_action_at){
     const parsed = new Date(r.next_action_at);
     if(!Number.isNaN(parsed.getTime())) return parsed;
@@ -954,6 +1008,22 @@ function getNextActionAt(r){
     if(!Number.isNaN(parsed.getTime())) return parsed;
   }
   return null;
+}
+function scheduledAppointments(record){
+  return normalizeAppointments(record)
+    .filter(item=>item.status === "scheduled" && item.starts_at)
+    .sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
+}
+function getNextActionAt(r){
+  const now = Date.now();
+  const scheduled = scheduledAppointments(r);
+  const upcoming = scheduled.find(item=>new Date(item.starts_at).getTime() >= now);
+  const selected = upcoming || scheduled[0];
+  if(selected){
+    const parsed = new Date(selected.starts_at);
+    if(!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return getLegacyNextActionAt(r);
 }
 function inputDateValue(date){
   if(!date || Number.isNaN(date.getTime())) return "";
@@ -970,7 +1040,8 @@ function scheduleStatus(r){
   const next = getNextActionAt(r);
   if(!next) return {kind:"warn", label:"Sem próximo acompanhamento"};
   const diffHours = (next.getTime() - Date.now()) / 3600000;
-  const action = r.next_action_kind || "Acompanhamento";
+  const nextAppointment = scheduledAppointments(r).find(item=>new Date(item.starts_at).getTime()===next.getTime());
+  const action = nextAppointment?.kind || r.next_action_kind || "Acompanhamento";
   if(diffHours < 0) return {kind:"late", label:`${action} atrasado • ${fmtBRDateTime(next.toISOString())}`};
   if(diffHours <= 168) return {kind:"ok", label:`${action} • ${fmtBRDateTime(next.toISOString())}`};
   return {kind:"ok", label:`${action} agendado • ${fmtBRDateTime(next.toISOString())}`};
@@ -1001,13 +1072,18 @@ async function fetchOutlookStatus(){
     return false;
   }
 }
-async function saveOutlookEvent(recordId){
-  const result = await callOutlook("create_event", {record_id:recordId});
+async function saveOutlookEvent(recordId, appointmentId){
+  const result = await callOutlook("create_event", {record_id:recordId, appointment_id:appointmentId});
   const record = records.find(r=>r.id===recordId);
   if(record){
-    record.outlook_event_id = result.event_id;
-    record.outlook_event_web_link = result.web_link;
-    record.outlook_synced_at = nowISO();
+    const appointments = normalizeAppointments(record);
+    const appointment = appointments.find(item=>item.id===appointmentId);
+    if(appointment){
+      appointment.event_id = result.event_id;
+      appointment.web_link = result.web_link;
+      appointment.synced_at = nowISO();
+      record.appointments = appointments;
+    }
   }
   return result;
 }
@@ -1368,6 +1444,7 @@ const filters = { owner:"Todos", source:"Todos", city:"", search:"" };
 let isDragging = false;
 let justDraggedAt = 0;
 let currentEditingId = null;
+let appointmentDrafts = [];
 
 let config = { sources: DEFAULT_SOURCES.slice(), lost_reasons: DEFAULT_LOST_REASONS.slice() };
 let profiles = [];   // [{id, display_name}]
@@ -2095,6 +2172,7 @@ function renderCard(r){
   if(r.pipeline==="lead") st = normalizeLeadStage(st); else st = normalizeClosedStage(st);
   const age = stageAge(r);
   const schedule = scheduleStatus(r);
+  const appointmentCount = scheduledAppointments(r).filter(item=>new Date(item.starts_at).getTime() >= Date.now()).length;
 
   const metaLines = [
     `Etapa <b>${escapeHtml(age.date)}</b>`,
@@ -2127,7 +2205,7 @@ function renderCard(r){
       </div>
 
       <div class="meta">${metaLines || "—"}</div>
-      <div class="scheduleState ${schedule.kind}">${escapeHtml(schedule.label)}</div>
+      <div class="scheduleState ${schedule.kind}">${escapeHtml(schedule.label)}${appointmentCount > 1 ? ` • +${appointmentCount - 1} futuro(s)` : ""}</div>
 
       <div class="menu" data-menu="${escapeHtml(r.id)}">
         <button type="button" data-act="edit" data-id="${escapeHtml(r.id)}">Editar</button>
@@ -2829,6 +2907,58 @@ function updateLostReasonVisibility(){
   const show = $("recordType").value !== "specifier" && $("pipeline").value==="lead" && $("stage").value==="Perdido";
   $("wrapLostReason").style.display = show ? "" : "none";
 }
+function clearAppointmentComposer(){
+  $("nextAction").value = "";
+  $("nextActionTime").value = "09:00";
+  $("nextActionKind").value = "Follow-up";
+  $("nextActionDuration").value = "30";
+  $("nextActionReminder").value = "30";
+  $("nextActionDetails").value = "";
+}
+function appointmentFromComposer(){
+  const date = $("nextAction").value;
+  if(!date) return null;
+  const startsAt = localScheduleIso(date, $("nextActionTime").value || "09:00");
+  if(!startsAt) return null;
+  return {
+    id:crypto.randomUUID(), starts_at:startsAt,
+    kind:$("nextActionKind").value || "Follow-up",
+    details:$("nextActionDetails").value.trim() || null,
+    duration_minutes:Number($("nextActionDuration").value || 30),
+    reminder_minutes:Number($("nextActionReminder").value || 30),
+    status:"scheduled", event_id:null, web_link:null, synced_at:null
+  };
+}
+function renderAppointmentList(){
+  const list = $("appointmentList");
+  if(!list) return;
+  const sorted = appointmentDrafts.slice().sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
+  list.innerHTML = sorted.length ? sorted.map(item=>{
+    const synced = Boolean(item.event_id || item.synced_at);
+    return `<div class="appointmentItem" data-appointment-id="${escapeHtml(item.id)}">
+      <div class="appointmentItemMain">
+        <b>${escapeHtml(item.kind)} • ${escapeHtml(fmtBRDateTime(item.starts_at))}</b>
+        ${item.details ? `<div>${escapeHtml(item.details)}</div>` : ""}
+        <div class="appointmentItemMeta">${item.duration_minutes || 30} min • lembrete ${item.reminder_minutes ? `${item.reminder_minutes} min antes` : "desativado"}${synced ? " • salvo no calendário" : " • aguardando salvar"}</div>
+      </div>
+      ${synced
+        ? (item.web_link ? `<a class="btn" href="${escapeHtml(item.web_link)}" target="_blank" rel="noopener noreferrer">Abrir</a>` : `<span class="appointmentItemMeta">No calendário</span>`)
+        : `<button class="ghost" type="button" data-remove-appointment="${escapeHtml(item.id)}">Remover</button>`}
+    </div>`;
+  }).join("") : `<div class="appointmentEmpty">Nenhum compromisso cadastrado. Preencha os campos acima e toque em “+ Adicionar compromisso”.</div>`;
+}
+function addAppointmentFromComposer({silent=false}={}){
+  const appointment = appointmentFromComposer();
+  if(!appointment){
+    if(!silent) toast("Escolha a data do compromisso.");
+    return false;
+  }
+  appointmentDrafts.push(appointment);
+  clearAppointmentComposer();
+  renderAppointmentList();
+  if(!silent) toast("Compromisso adicionado. Você pode incluir outro.");
+  return true;
+}
 function updateModalMode(kind){
   const specifier = kind === "specifier";
   document.querySelectorAll(".leadDiscoveryField").forEach(field=>field.style.display=specifier ? "none" : "");
@@ -2881,13 +3011,9 @@ function openModal(record=null, options={}){
   $("whatsappSummaryMeta").textContent = record?.whatsapp_summary_updated_at
     ? `Último resumo: ${fmtBRDateTime(record.whatsapp_summary_updated_at)}${record.whatsapp_summary_model ? ` • ${record.whatsapp_summary_model}` : ""}.`
     : "Nenhum resumo gerado.";
-  $("nextActionDetails").value = record?.next_action_details || "";
-  const nextActionAt = getNextActionAt(record);
-  $("nextAction").value = nextActionAt ? inputDateValue(nextActionAt) : (record?.next_action || "");
-  $("nextActionTime").value = nextActionAt ? inputTimeValue(nextActionAt) : "09:00";
-  $("nextActionKind").value = record?.next_action_kind || "Follow-up";
-  $("nextActionDuration").value = String(record?.next_action_duration_minutes || 30);
-  $("nextActionReminder").value = String(record?.next_action_reminder_minutes ?? 30);
+  appointmentDrafts = normalizeAppointments(record);
+  clearAppointmentComposer();
+  renderAppointmentList();
   $("leadQuality").value = LEAD_QUALITIES.includes(record?.lead_quality) ? record.lead_quality : "Não avaliado";
   $("specifierType").value = SPECIFIER_TYPES.includes(record?.specifier_type) ? record.specifier_type : SPECIFIER_TYPES[0];
   $("companyName").value = record?.company_name || "";
@@ -2955,8 +3081,12 @@ async function upsertFromForm(){
     return false;
   }
 
-  const nextActionDate = $("nextAction").value || null;
-  const nextActionAt = localScheduleIso(nextActionDate, $("nextActionTime").value || "09:00");
+  if($("nextAction").value) addAppointmentFromComposer({silent:true});
+  const appointments = appointmentDrafts.slice().sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
+  const activeAppointments = appointments.filter(item=>item.status === "scheduled" && item.starts_at);
+  const primaryAppointment = activeAppointments.find(item=>new Date(item.starts_at).getTime() >= Date.now()) || activeAppointments[0] || null;
+  const nextActionAt = primaryAppointment?.starts_at || null;
+  const nextActionDate = nextActionAt ? inputDateValue(new Date(nextActionAt)) : null;
 
   const existingRecord = records.find(record=>record.id===id);
   const whatsappSummary = $("whatsappSummary").value.trim();
@@ -2975,12 +3105,13 @@ async function upsertFromForm(){
     owner_id: $("owner").value || null,
     pipeline,
     stage,
+    appointments,
     next_action: nextActionDate,
     next_action_at: nextActionAt,
-    next_action_kind: nextActionDate ? ($("nextActionKind").value || "Follow-up") : null,
-    next_action_details: nextActionDate ? ($("nextActionDetails").value.trim() || null) : null,
-    next_action_duration_minutes: Number($("nextActionDuration").value || 30),
-    next_action_reminder_minutes: Number($("nextActionReminder").value || 30),
+    next_action_kind: primaryAppointment?.kind || null,
+    next_action_details: primaryAppointment?.details || null,
+    next_action_duration_minutes: Number(primaryAppointment?.duration_minutes || 30),
+    next_action_reminder_minutes: Number(primaryAppointment?.reminder_minutes ?? 30),
     specifier_type: kind === "specifier" ? ($("specifierType").value || SPECIFIER_TYPES[0]) : null,
     company_name: kind === "specifier" ? ($("companyName").value.trim() || null) : null,
     lead_quality: kind === "specifier" ? "Não avaliado" : ($("leadQuality").value || "Não avaliado"),
@@ -3176,6 +3307,14 @@ $("pipeline").addEventListener("change", ()=>{
 $("stage").addEventListener("change", updateLostReasonVisibility);
 $("btnWhatsApp").addEventListener("click", ()=>openWhatsAppFor());
 $("btnWhatsAppFooter").addEventListener("click", ()=>openWhatsAppFor());
+$("btnAddAppointment").addEventListener("click", ()=>addAppointmentFromComposer());
+$("appointmentList").addEventListener("click", event=>{
+  const button = event.target.closest("[data-remove-appointment]");
+  if(!button) return;
+  appointmentDrafts = appointmentDrafts.filter(item=>item.id!==button.dataset.removeAppointment);
+  renderAppointmentList();
+  toast("Compromisso removido da lista.");
+});
 $("btnRefreshWhatsApp").addEventListener("click", ()=>{
   const record = records.find(item=>item.id===$("id").value) || null;
   fetchWhatsAppConversation(record, {notify:true});
@@ -3245,17 +3384,23 @@ $("btnSave").addEventListener("click", async (e)=>{
 });
 $("btnOutlook").addEventListener("click", async (e)=>{
   e.preventDefault();
-  if(!$("nextAction").value) return toast("Escolha a data do acompanhamento.");
+  if($("nextAction").value) addAppointmentFromComposer({silent:true});
+  if(!appointmentDrafts.length) return toast("Adicione pelo menos um compromisso.");
   if(!outlookStatus.connected) return toast("Conecte o calendário central na aba Config.");
   $("btnOutlook").disabled=true;
   $("btnOutlook").textContent="Criando compromisso...";
   try{
     if(!(await upsertFromForm())) return;
     const id=$("id").value;
-    await saveOutlookEvent(id);
+    const record = records.find(item=>item.id===id);
+    const pendingAppointments = normalizeAppointments(record).filter(item=>item.status==="scheduled" && !item.event_id);
+    for(const appointment of pendingAppointments){
+      await saveOutlookEvent(id, appointment.id);
+    }
+    await fetchRecords({reason:"compromissos criados",notifyNew:false});
     closeModal();
     render();
-    toast("Compromisso salvo no calendário da Criare.");
+    toast(`${pendingAppointments.length} compromisso(s) salvo(s) no calendário da Criare.`);
   }catch(error){
     console.error("[CRM Outlook]",error);
     toast(error.message || "Erro ao criar compromisso no calendário.");
@@ -3530,6 +3675,10 @@ $("importJson").addEventListener("change", async (e)=>{
           next_action_details: r.next_action_details || null,
           next_action_duration_minutes: r.next_action_duration_minutes || 30,
           next_action_reminder_minutes: r.next_action_reminder_minutes ?? 30,
+          appointments: Array.isArray(r.appointments) ? r.appointments : [],
+          outlook_event_id: r.outlook_event_id || null,
+          outlook_event_web_link: r.outlook_event_web_link || null,
+          outlook_synced_at: r.outlook_synced_at || null,
           last_contact_at: r.last_contact_at || null,
           lead_quality: r.lead_quality || "Não avaliado",
           quality_notes: r.quality_notes || null,

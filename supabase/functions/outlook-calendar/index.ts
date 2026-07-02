@@ -325,6 +325,8 @@ function html(value: unknown): string {
 async function sendEventThroughMake(
   recordId: string,
   record: Record<string, any>,
+  appointmentId: string,
+  appointment: Record<string, any>,
   event: {
     title: string;
     body: string;
@@ -342,9 +344,10 @@ async function sendEventThroughMake(
       "x-crm-calendar-secret": MAKE_WEBHOOK_SECRET,
     },
     body: JSON.stringify({
-      operation: record.outlook_event_id ? "update" : "create",
+      operation: appointment.event_id ? "update" : "create",
       crm_record_id: recordId,
-      event_id: record.outlook_event_id || null,
+      crm_appointment_id: appointmentId,
+      event_id: appointment.event_id || null,
       subject: event.title,
       body_html: event.body,
       start_utc: event.start.toISOString(),
@@ -377,12 +380,7 @@ async function sendEventThroughMake(
     throw new Error("A Make criou o compromisso, mas não retornou o identificador do evento.");
   }
   const webLink = String(payload.web_link || payload.webLink || "").trim() || null;
-  const { error: updateError } = await admin.from("crm_records").update({
-    outlook_event_id: eventId,
-    outlook_event_web_link: webLink,
-    outlook_synced_at: new Date().toISOString(),
-  }).eq("id", recordId);
-  if (updateError) throw updateError;
+  await updateAppointmentSync(recordId, record, appointmentId, eventId, webLink);
 
   return {
     event_id: eventId,
@@ -390,11 +388,35 @@ async function sendEventThroughMake(
   };
 }
 
+async function updateAppointmentSync(
+  recordId: string,
+  record: Record<string, any>,
+  appointmentId: string,
+  eventId: string,
+  webLink: string | null,
+) {
+  const syncedAt = new Date().toISOString();
+  const appointments = Array.isArray(record.appointments)
+    ? record.appointments.map((item: Record<string, any>) => item.id === appointmentId
+      ? { ...item, event_id: eventId, web_link: webLink, synced_at: syncedAt }
+      : item)
+    : [];
+  const { error } = await admin.from("crm_records").update({
+    appointments,
+    outlook_event_id: eventId,
+    outlook_event_web_link: webLink,
+    outlook_synced_at: syncedAt,
+  }).eq("id", recordId);
+  if (error) throw error;
+}
+
 async function createOrUpdateEvent(request: Request, input: Json) {
   const user = await authenticatedUser(request);
   if (!user) return json(request, { error: "Sessão do CRM inválida." }, 401);
   const recordId = String(input.record_id || "");
   if (!recordId) return json(request, { error: "Lead ou especificador não informado." }, 400);
+  const appointmentId = String(input.appointment_id || "");
+  if (!appointmentId) return json(request, { error: "Compromisso não informado." }, 400);
 
   const { data: record, error } = await admin
     .from("crm_records")
@@ -403,17 +425,20 @@ async function createOrUpdateEvent(request: Request, input: Json) {
     .maybeSingle();
   if (error) throw error;
   if (!record) return json(request, { error: "Cadastro não encontrado." }, 404);
-  if (!record.next_action_at) return json(request, { error: "Defina a data e o horário do próximo acompanhamento." }, 400);
+  const appointments = Array.isArray(record.appointments) ? record.appointments : [];
+  const appointment = appointments.find((item: Record<string, any>) => item.id === appointmentId);
+  if (!appointment) return json(request, { error: "Compromisso não encontrado no cadastro." }, 404);
+  if (!appointment.starts_at) return json(request, { error: "Defina a data e o horário do compromisso." }, 400);
 
-  const start = new Date(record.next_action_at);
+  const start = new Date(appointment.starts_at);
   if (Number.isNaN(start.getTime())) return json(request, { error: "Data do acompanhamento inválida." }, 400);
-  const duration = Number(record.next_action_duration_minutes || 30);
-  const reminder = Number(record.next_action_reminder_minutes ?? 30);
+  const duration = Number(appointment.duration_minutes || 30);
+  const reminder = Number(appointment.reminder_minutes ?? 30);
   const end = new Date(start.getTime() + duration * 60_000);
   const fullName = [record.first_name, record.last_name].filter(Boolean).join(" ").trim() || "Contato";
-  const kind = record.next_action_kind || "Acompanhamento";
+  const kind = appointment.kind || "Acompanhamento";
   const title = `CRM Criare • ${kind} • ${fullName}`;
-  const details = record.next_action_details || "Realizar acompanhamento e definir o próximo passo.";
+  const details = appointment.details || "Realizar acompanhamento e definir o próximo passo.";
 
   const body = [
     `<p><strong>${html(details)}</strong></p>`,
@@ -438,7 +463,7 @@ async function createOrUpdateEvent(request: Request, input: Json) {
   };
 
   if (makeBridgeConfigured()) {
-    const result = await sendEventThroughMake(recordId, record, {
+    const result = await sendEventThroughMake(recordId, record, appointmentId, appointment, {
       title,
       body,
       start,
@@ -458,8 +483,8 @@ async function createOrUpdateEvent(request: Request, input: Json) {
   let eventResult = null;
   let eventResponse = null;
 
-  if (record.outlook_event_id) {
-    const update = await graph(`/me/events/${encodeURIComponent(record.outlook_event_id)}`, accessToken, {
+  if (appointment.event_id) {
+    const update = await graph(`/me/events/${encodeURIComponent(appointment.event_id)}`, accessToken, {
       method: "PATCH",
       body: JSON.stringify(eventPayload),
     });
@@ -484,12 +509,7 @@ async function createOrUpdateEvent(request: Request, input: Json) {
     eventResult = create.payload;
   }
 
-  const { error: updateError } = await admin.from("crm_records").update({
-    outlook_event_id: eventResult.id,
-    outlook_event_web_link: eventResult.webLink || null,
-    outlook_synced_at: new Date().toISOString(),
-  }).eq("id", recordId);
-  if (updateError) throw updateError;
+  await updateAppointmentSync(recordId, record, appointmentId, eventResult.id, eventResult.webLink || null);
 
   return json(request, {
     ok: true,
