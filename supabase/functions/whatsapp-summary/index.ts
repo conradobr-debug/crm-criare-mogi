@@ -9,6 +9,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") || "";
 const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") || "gpt-5-mini";
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || "";
+const GEMINI_MODEL = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash-lite";
 const CRM_PUBLIC_URL = Deno.env.get("CRM_PUBLIC_URL") || "https://conradobr-debug.github.io/crm-criare-mogi/";
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
@@ -74,6 +76,130 @@ function outputText(payload: Record<string, unknown>): string {
   return "";
 }
 
+const RESULT_PROPERTIES = {
+  summary: { type: "string" },
+  lead_quality: {
+    type: "string",
+    enum: ["Não avaliado", "Perfil Criare", "Potencial", "Baixo potencial", "Fora do perfil"],
+  },
+  next_action_kind: {
+    type: "string",
+    enum: ["Follow-up", "Reach-out", "Ligação", "WhatsApp", "Reunião", "Visita", "Apresentação"],
+  },
+  next_action_details: { type: "string" },
+};
+
+const RESULT_REQUIRED = ["summary", "lead_quality", "next_action_kind", "next_action_details"];
+
+type ProviderResult = {
+  result: Record<string, unknown>;
+  model: string;
+};
+
+function parseResult(text: string): Record<string, unknown> | null {
+  if (!text) return null;
+  try {
+    const result = JSON.parse(text);
+    return result && typeof result === "object" ? result as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+async function analyzeWithOpenAI(prompt: string, analysisMode: string): Promise<ProviderResult | null> {
+  if (!OPENAI_API_KEY) return null;
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "authorization": `Bearer ${OPENAI_API_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        store: false,
+        instructions: `${CRIARE_ANALYST_INSTRUCTIONS}\n${CRIARE_OPERATIONAL_KNOWLEDGE}`,
+        input: prompt,
+        max_output_tokens: analysisMode === "Análise completa" ? 6000 : 3500,
+        text: {
+          format: {
+            type: "json_schema",
+            name: "criare_conversation_analysis",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              required: RESULT_REQUIRED,
+              properties: RESULT_PROPERTIES,
+            },
+          },
+        },
+      }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.error("[WhatsApp Summary] OpenAI unavailable", { status: response.status });
+      return null;
+    }
+    const result = parseResult(outputText(payload));
+    return result ? { result, model: `ChatGPT • ${OPENAI_MODEL}` } : null;
+  } catch (error) {
+    console.error("[WhatsApp Summary] OpenAI request failed", {
+      name: error instanceof Error ? error.name : "Error",
+    });
+    return null;
+  }
+}
+
+async function analyzeWithGemini(prompt: string, analysisMode: string): Promise<ProviderResult | null> {
+  if (!GEMINI_API_KEY) return null;
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: `${CRIARE_ANALYST_INSTRUCTIONS}\n${CRIARE_OPERATIONAL_KNOWLEDGE}` }],
+          },
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: analysisMode === "Análise completa" ? 6000 : 3500,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "OBJECT",
+              required: RESULT_REQUIRED,
+              properties: {
+                summary: { type: "STRING" },
+                lead_quality: { type: "STRING", enum: RESULT_PROPERTIES.lead_quality.enum },
+                next_action_kind: { type: "STRING", enum: RESULT_PROPERTIES.next_action_kind.enum },
+                next_action_details: { type: "STRING" },
+              },
+            },
+          },
+        }),
+      },
+    );
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.error("[WhatsApp Summary] Gemini unavailable", { status: response.status });
+      return null;
+    }
+    const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const result = parseResult(typeof text === "string" ? text : "");
+    return result ? { result, model: `Gemini • ${GEMINI_MODEL}` } : null;
+  } catch (error) {
+    console.error("[WhatsApp Summary] Gemini request failed", {
+      name: error instanceof Error ? error.name : "Error",
+    });
+    return null;
+  }
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request) });
   if (request.method !== "POST") return json(request, { error: "Método não permitido." }, 405);
@@ -81,7 +207,7 @@ Deno.serve(async (request: Request) => {
   try {
     const user = await authenticatedUser(request);
     if (!user) return json(request, { error: "Sessão do CRM inválida." }, 401);
-    if (!OPENAI_API_KEY) {
+    if (!OPENAI_API_KEY && !GEMINI_API_KEY) {
       return json(request, {
         error: "A análise especializada ainda não foi ativada. O CRM usará a análise local.",
         code: "AI_NOT_CONFIGURED",
@@ -125,57 +251,22 @@ ${conversation}
 
 Produza a análise em português do Brasil. Preserve datas, valores, responsáveis, decisões e evidências importantes. O campo summary deve ser legível, com títulos e listas. Para lead_quality, avalie aderência ao perfil Criare separadamente do potencial comercial. Use “Não avaliado” se faltarem evidências. next_action_details deve ser uma ação concreta para o responsável executar.`;
 
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        "authorization": `Bearer ${OPENAI_API_KEY}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        store: false,
-        instructions: `${CRIARE_ANALYST_INSTRUCTIONS}\n${CRIARE_OPERATIONAL_KNOWLEDGE}`,
-        input: prompt,
-        max_output_tokens: analysisMode === "Análise completa" ? 6000 : 3500,
-        text: {
-          format: {
-            type: "json_schema",
-            name: "criare_conversation_analysis",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              required: ["summary", "lead_quality", "next_action_kind", "next_action_details"],
-              properties: {
-                summary: { type: "string" },
-                lead_quality: { type: "string", enum: ["Não avaliado", "Perfil Criare", "Potencial", "Baixo potencial", "Fora do perfil"] },
-                next_action_kind: { type: "string", enum: ["Follow-up", "Reach-out", "Ligação", "WhatsApp", "Reunião", "Visita", "Apresentação"] },
-                next_action_details: { type: "string" },
-              },
-            },
-          },
-        },
-      }),
-    });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      console.error("[WhatsApp Summary] OpenAI error", { status: response.status, message: payload?.error?.message });
+    const provider = await analyzeWithOpenAI(prompt, analysisMode) ||
+      await analyzeWithGemini(prompt, analysisMode);
+    if (!provider) {
       return json(request, {
         error: "A IA está temporariamente indisponível. O CRM usará a análise local.",
         code: "AI_UNAVAILABLE",
       }, 502);
     }
 
-    const text = outputText(payload);
-    if (!text) throw new Error("A OpenAI não retornou texto analisável.");
-    const result = JSON.parse(text);
+    const result = provider.result;
     return json(request, {
       summary: clean(result.summary, 8000),
       lead_quality: clean(result.lead_quality, 40),
       next_action_kind: clean(result.next_action_kind, 40),
       next_action_details: clean(result.next_action_details, 1000),
-      model: `ChatGPT • ${OPENAI_MODEL}`,
+      model: provider.model,
     });
   } catch (error) {
     console.error("[WhatsApp Summary] Unexpected error", error);
