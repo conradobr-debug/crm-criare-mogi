@@ -3,6 +3,21 @@
 O botão de WhatsApp usa o link oficial `wa.me` e não precisa de segredo ou
 serviço adicional.
 
+## Uso manual do GPT personalizado
+
+O botão `Copiar e abrir meu GPT` prepara a conversa com o contexto do cliente,
+o modo de análise e o formato de retorno esperado. O texto é copiado para a
+área de transferência e o GPT personalizado da Criare é aberto em uma nova aba.
+O usuário cola e envia a mensagem usando sua própria sessão do ChatGPT, sem
+consumir a API do CRM.
+
+Ao copiar a resposta do ChatGPT, o botão `Importar resposta copiada` preenche o
+resumo, a qualidade do lead e o próximo passo quando encontra o bloco JSON
+solicitado. Se o GPT devolver somente texto, a resposta completa é colocada no
+campo de resumo para revisão. O navegador pode exigir autorização para ler a
+área de transferência; nesse caso, o usuário pode colar a resposta diretamente
+no campo de resumo.
+
 O texto bruto colado pelo usuário é enviado apenas para processamento e não é
 gravado. O CRM persiste somente o resumo revisável nos campos adicionados pela
 migração `20260701161000_add_whatsapp_summary.sql`.
