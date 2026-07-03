@@ -15,3 +15,21 @@ document.addEventListener("criare-whatsapp-capture", () => {
     document.dispatchEvent(new CustomEvent("criare-whatsapp-result"));
   });
 });
+
+document.addEventListener("criare-whatsapp-open", () => {
+  let request = {};
+  try{
+    request = JSON.parse(document.documentElement.dataset.criareWhatsAppOpenRequest || "{}");
+  }catch(error){
+    request = {};
+  }
+  delete document.documentElement.dataset.criareWhatsAppOpenRequest;
+
+  chrome.runtime.sendMessage({type:"criare-open-whatsapp-chat", request}, result => {
+    const response = chrome.runtime.lastError
+      ? {ok:false, error:"A extensão Criare precisa ser atualizada e recarregada."}
+      : (result || {ok:false, error:"Não foi possível abrir a conversa."});
+    document.documentElement.dataset.criareWhatsAppOpenResult = JSON.stringify(response);
+    document.dispatchEvent(new CustomEvent("criare-whatsapp-open-result"));
+  });
+});

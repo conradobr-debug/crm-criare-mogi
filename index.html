@@ -1098,11 +1098,27 @@ function openWhatsAppFor(record=null){
   const number = whatsappNumber(record?.phone || $("phone").value);
   if(!number) return toast("Informe um telefone válido com DDD para abrir o WhatsApp.");
   const mobileDevice = /android|iphone|ipad|ipod/i.test(navigator.userAgent);
-  const destination = mobileDevice
-    ? `https://wa.me/${number}`
-    : `https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
-  window.open(destination, "_blank", "noopener,noreferrer");
+  if(mobileDevice){
+    window.open(`https://wa.me/${number}`, "_blank", "noopener,noreferrer");
+    return;
+  }
+  document.documentElement.dataset.criareWhatsAppOpenRequest = JSON.stringify({
+    phone:number,
+    customerName:`${record?.first_name || $("firstName").value} ${record?.last_name || $("lastName").value}`.trim()
+  });
+  document.dispatchEvent(new CustomEvent("criare-whatsapp-open"));
+  toast("Abrindo a conversa correta no WhatsApp Web…");
 }
+document.addEventListener("criare-whatsapp-open-result", ()=>{
+  let result;
+  try{
+    result = JSON.parse(document.documentElement.dataset.criareWhatsAppOpenResult || "{}");
+  }catch(error){
+    result = {ok:false};
+  }
+  delete document.documentElement.dataset.criareWhatsAppOpenResult;
+  if(!result.ok) toast(result.error || "Não foi possível abrir o WhatsApp Web. Atualize a extensão Criare.");
+});
 let whatsappCaptureTimer = null;
 function captureWhatsAppWebConversation(){
   const button = $("btnCaptureWhatsAppWeb");
@@ -1138,10 +1154,10 @@ document.addEventListener("criare-whatsapp-result", ()=>{
     result = {ok:false, error:"A extensão devolveu uma resposta inválida."};
   }
   delete document.documentElement.dataset.criareWhatsAppResult;
-  if(result.ok && result.extensionVersion !== "1.3.0"){
+  if(result.ok && result.extensionVersion !== "1.4.0"){
     result = {
       ok:false,
-      error:"A extensão Criare está desatualizada. Instale a versão 1.3 e atualize as abas do CRM e do WhatsApp Web."
+      error:"A extensão Criare está desatualizada. Instale a versão 1.4 e atualize as abas do CRM e do WhatsApp Web."
     };
   }
   if(!result.ok){

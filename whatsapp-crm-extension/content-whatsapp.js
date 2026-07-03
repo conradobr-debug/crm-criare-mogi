@@ -4,8 +4,9 @@ function cleanText(value){
 
 function activeChatTitle(){
   const main = document.querySelector("#main") || document.querySelector("main") || document.querySelector('[role="main"]');
-  const titled = main?.querySelector("header [title]");
-  return cleanText(titled?.getAttribute("title") || titled?.textContent || "");
+  const titled = main?.querySelector('header [data-testid="conversation-info-header-chat-title"]')
+    || main?.querySelector('header span[dir="auto"]');
+  return cleanText(titled?.textContent || titled?.getAttribute("title") || "");
 }
 
 function comparableText(value){
@@ -110,7 +111,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async ()=>{
     try{
       const title = activeChatTitle();
-      if(!sameCustomer(title, message.request || {})){
+      if(!message.request?.trustedTarget && !sameCustomer(title, message.request || {})){
         const expected = cleanText(message.request?.customerName) || "o cliente do CRM";
         sendResponse({
           ok:false,
