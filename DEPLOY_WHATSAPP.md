@@ -5,8 +5,9 @@
 A pasta `whatsapp-crm-extension` contém uma extensão local do Chrome que captura
 as mensagens já carregadas na conversa aberta no WhatsApp Web. Ela não envia
 mensagens, não desconecta o WhatsApp Business do celular e não possui mensalidade.
-Antes de importar, a extensão compara a conversa aberta com o nome ou telefone
-do cliente do CRM. Áudios são sinalizados explicitamente quando ainda não há
+Antes de importar, a extensão compara todas as conversas abertas no WhatsApp Web
+com o nome ou telefone do cliente do CRM. Somente a aba correspondente pode ser
+capturada. Áudios são sinalizados explicitamente quando ainda não há
 transcrição disponível.
 
 A captura reconhece os resultados inseridos pelas extensões WhatsApp Audio

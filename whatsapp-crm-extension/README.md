@@ -26,7 +26,9 @@ Somente as mensagens carregadas na tela são capturadas. Para incluir mensagens
 mais antigas, role a conversa para cima, aguarde o carregamento e capture novamente.
 
 Antes da captura, a extensão compara o nome ou telefone da conversa aberta com
-o cliente do CRM. Se não corresponder, ela interrompe a importação. Mensagens de
+o cliente do CRM em todas as abas abertas do WhatsApp Web. Somente a aba que
+corresponder pode ser importada; se nenhuma corresponder, a captura é interrompida.
+Mensagens de
 voz são identificadas no texto como `[Áudio sem transcrição]`; elas nunca são
 silenciosamente tratadas como se fossem mensagens vazias.
 

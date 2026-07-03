@@ -112,12 +112,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const title = activeChatTitle();
       if(!sameCustomer(title, message.request || {})){
         const expected = cleanText(message.request?.customerName) || "o cliente do CRM";
-        throw new Error(`A conversa aberta é “${title || "não identificada"}”, mas o cliente no CRM é “${expected}”. Abra a conversa correta antes de capturar.`);
+        sendResponse({
+          ok:false,
+          mismatch:true,
+          title:title || "não identificada",
+          extensionVersion:chrome.runtime.getManifest().version,
+          error:`A conversa aberta é “${title || "não identificada"}”, mas o cliente no CRM é “${expected}”.`
+        });
+        return;
       }
       const extracted = await extractLoadedMessages();
-      sendResponse({ok:true, title, ...extracted});
+      sendResponse({ok:true, title, extensionVersion:chrome.runtime.getManifest().version, ...extracted});
     }catch(error){
-      sendResponse({ok:false, error:error.message || "Não foi possível ler a conversa aberta."});
+      sendResponse({
+        ok:false,
+        extensionVersion:chrome.runtime.getManifest().version,
+        error:error.message || "Não foi possível ler a conversa aberta."
+      });
     }
   })();
   return true;
