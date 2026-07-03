@@ -768,7 +768,7 @@
           <div class="whatsappWorkspaceHd">
             <div>
               <div class="whatsappWorkspaceTitle">WhatsApp do cliente</div>
-              <div class="fieldHelp">Importe gratuitamente a conversa exportada pelo WhatsApp em TXT ou ZIP. Se a sincronização oficial estiver ativa, as mensagens também aparecerão automaticamente.</div>
+              <div class="fieldHelp">Com a extensão gratuita da Criare, abra a conversa no WhatsApp Web e capture as mensagens diretamente. A importação por TXT ou ZIP continua disponível como alternativa.</div>
             </div>
             <button class="whatsappAction" id="btnWhatsApp" type="button">Abrir conversa</button>
           </div>
@@ -790,6 +790,7 @@
           <div class="whatsappSummaryMeta" id="whatsappSyncStatus">Salve o cliente para sincronizar a conversa pelo telefone.</div>
           <div class="whatsappPrivacy">Mensagens sincronizadas ficam protegidas pelo acesso do CRM. Ao usar a análise automática, o trecho poderá ser enviado ao serviço de IA configurado. Evite documentos, senhas e dados bancários.</div>
           <div class="whatsappActions">
+            <button class="primary" id="btnCaptureWhatsAppWeb" type="button">Capturar do WhatsApp Web</button>
             <button class="ghost" id="btnRefreshWhatsApp" type="button">Atualizar mensagens</button>
             <button class="ghost" id="btnImportWhatsAppHistory" type="button">Importar conversa</button>
             <input id="whatsappHistoryFile" type="file" accept="text/plain,application/json,application/zip,.txt,.json,.jsonl,.ndjson,.zip" hidden />
@@ -1106,6 +1107,50 @@ function openWhatsAppFor(record=null){
     : `https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
   window.open(destination, "_blank", "noopener,noreferrer");
 }
+let whatsappCaptureTimer = null;
+function captureWhatsAppWebConversation(){
+  const button = $("btnCaptureWhatsAppWeb");
+  const status = $("whatsappSyncStatus");
+  button.disabled = true;
+  button.textContent = "Capturando conversa...";
+  status.textContent = "Lendo a conversa aberta no WhatsApp Web…";
+  const request = {
+    requestedAt:new Date().toISOString(),
+    phone:whatsappNumber($("phone").value),
+    customerName:`${$("firstName").value} ${$("lastName").value}`.trim()
+  };
+  document.documentElement.dataset.criareWhatsAppRequest = JSON.stringify(request);
+  document.dispatchEvent(new CustomEvent("criare-whatsapp-capture"));
+  clearTimeout(whatsappCaptureTimer);
+  whatsappCaptureTimer = setTimeout(()=>{
+    button.disabled = false;
+    button.textContent = "Capturar do WhatsApp Web";
+    status.textContent = "A extensão gratuita não respondeu. Instale ou reative a extensão Criare no Chrome.";
+    toast("Abra o WhatsApp Web e verifique se a extensão Criare está instalada.");
+  }, 12000);
+}
+document.addEventListener("criare-whatsapp-result", ()=>{
+  clearTimeout(whatsappCaptureTimer);
+  const button = $("btnCaptureWhatsAppWeb");
+  button.disabled = false;
+  button.textContent = "Capturar do WhatsApp Web";
+  let result;
+  try{
+    result = JSON.parse(document.documentElement.dataset.criareWhatsAppResult || "{}");
+  }catch(error){
+    result = {ok:false, error:"A extensão devolveu uma resposta inválida."};
+  }
+  delete document.documentElement.dataset.criareWhatsAppResult;
+  if(!result.ok){
+    $("whatsappSyncStatus").textContent = result.error || "Não foi possível capturar a conversa.";
+    return toast(result.error || "Não foi possível capturar a conversa.");
+  }
+  $("whatsappConversation").value = String(result.transcript || "").trim();
+  const title = result.title ? ` de ${result.title}` : "";
+  const limited = result.limited ? " Role a conversa para cima e capture novamente para incluir mensagens anteriores." : "";
+  $("whatsappSyncStatus").textContent = `${result.count || 0} mensagem(ns) capturada(s)${title}.${limited}`;
+  toast("Conversa capturada. Agora escolha o tipo de análise.");
+});
 function formatWhatsAppTranscript(messages, customerName){
   return messages.map(message=>{
     const when = new Date(message.message_timestamp).toLocaleString("pt-BR", {
@@ -3377,6 +3422,7 @@ $("pipeline").addEventListener("change", ()=>{
 $("stage").addEventListener("change", updateLostReasonVisibility);
 $("btnWhatsApp").addEventListener("click", ()=>openWhatsAppFor());
 $("btnWhatsAppFooter").addEventListener("click", ()=>openWhatsAppFor());
+$("btnCaptureWhatsAppWeb").addEventListener("click", captureWhatsAppWebConversation);
 $("btnAddAppointment").addEventListener("click", ()=>addAppointmentFromComposer());
 $("appointmentList").addEventListener("click", event=>{
   const button = event.target.closest("[data-remove-appointment]");

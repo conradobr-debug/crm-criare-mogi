@@ -1,5 +1,19 @@
 # WhatsApp e resumo comercial
 
+## Captura gratuita pelo WhatsApp Web
+
+A pasta `whatsapp-crm-extension` contém uma extensão local do Chrome que captura
+as mensagens já carregadas na conversa aberta no WhatsApp Web. Ela não envia
+mensagens, não desconecta o WhatsApp Business do celular e não possui mensalidade.
+
+Para instalar, abra `chrome://extensions`, ative o modo do desenvolvedor, clique
+em **Carregar sem compactação** e selecione a pasta `whatsapp-crm-extension`.
+Depois, atualize as abas do CRM e do WhatsApp Web.
+
+A captura depende da estrutura visual do WhatsApp Web e pode precisar de ajuste
+se o WhatsApp alterar a página. Para conversas antigas, role para cima antes de
+capturar para que as mensagens desejadas estejam carregadas.
+
 O botão de WhatsApp usa o link oficial `wa.me` e não precisa de segredo ou
 serviço adicional.
 
