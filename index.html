@@ -768,7 +768,7 @@
           <div class="whatsappWorkspaceHd">
             <div>
               <div class="whatsappWorkspaceTitle">WhatsApp do cliente</div>
-              <div class="fieldHelp">As mensagens sincronizadas aparecem aqui automaticamente. Você ainda pode colar um trecho manualmente.</div>
+              <div class="fieldHelp">Importe gratuitamente a conversa exportada pelo WhatsApp em TXT ou ZIP. Se a sincronização oficial estiver ativa, as mensagens também aparecerão automaticamente.</div>
             </div>
             <button class="whatsappAction" id="btnWhatsApp" type="button">Abrir conversa</button>
           </div>
@@ -786,13 +786,13 @@
             <option>Preparar resposta premium</option>
           </select>
           <label for="whatsappConversation" style="margin-top:12px">Conversa para analisar</label>
-          <textarea id="whatsappConversation" class="whatsappConversation" placeholder="As mensagens sincronizadas aparecerão aqui. Também é possível colar um trecho manualmente."></textarea>
+          <textarea id="whatsappConversation" class="whatsappConversation" placeholder="Importe o arquivo exportado pelo WhatsApp, atualize as mensagens sincronizadas ou cole um trecho manualmente."></textarea>
           <div class="whatsappSummaryMeta" id="whatsappSyncStatus">Salve o cliente para sincronizar a conversa pelo telefone.</div>
           <div class="whatsappPrivacy">Mensagens sincronizadas ficam protegidas pelo acesso do CRM. Ao usar a análise automática, o trecho poderá ser enviado ao serviço de IA configurado. Evite documentos, senhas e dados bancários.</div>
           <div class="whatsappActions">
             <button class="ghost" id="btnRefreshWhatsApp" type="button">Atualizar mensagens</button>
-            <button class="ghost" id="btnImportWhatsAppHistory" type="button">Importar histórico</button>
-            <input id="whatsappHistoryFile" type="file" accept="application/json,.json,.jsonl,.ndjson" hidden />
+            <button class="ghost" id="btnImportWhatsAppHistory" type="button">Importar conversa</button>
+            <input id="whatsappHistoryFile" type="file" accept="text/plain,application/json,application/zip,.txt,.json,.jsonl,.ndjson,.zip" hidden />
             <button class="ghost" id="btnDownloadWhatsApp" type="button">Baixar conversa</button>
             <button class="manualGptAction" id="btnOpenCustomGpt" type="button">Copiar e abrir meu GPT</button>
             <button class="ghost" id="btnImportCustomGpt" type="button">Importar resposta copiada</button>
@@ -920,6 +920,7 @@
 
 <!-- Supabase via CDN -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
 <script>
 /*
@@ -1164,10 +1165,32 @@ function parseWhatsAppHistoryFile(text){
     return events;
   }
 }
+async function readWhatsAppImportFile(file){
+  const lowerName = String(file?.name || "").toLowerCase();
+  if(lowerName.endsWith(".txt") || file.type === "text/plain"){
+    return {kind:"transcript", text:await file.text()};
+  }
+  if(lowerName.endsWith(".zip") || file.type === "application/zip" || file.type === "application/x-zip-compressed"){
+    if(!window.JSZip) throw new Error("Não foi possível abrir o ZIP. Verifique sua conexão e tente novamente.");
+    const archive = await window.JSZip.loadAsync(file);
+    const textFiles = Object.values(archive.files).filter(entry=>!entry.dir && /\.txt$/i.test(entry.name));
+    if(!textFiles.length) throw new Error("O ZIP não contém a conversa em formato TXT.");
+    const preferred = textFiles.find(entry=>/(chat|conversa|whatsapp)/i.test(entry.name)) || textFiles[0];
+    return {kind:"transcript", text:await preferred.async("string")};
+  }
+  return {kind:"history", payload:parseWhatsAppHistoryFile(await file.text())};
+}
 async function importWhatsAppHistoryFile(file){
   if(!sb || !session?.access_token) throw new Error("Entre no CRM novamente.");
   if(!file || file.size > 25 * 1024 * 1024) throw new Error("Escolha um arquivo de histórico com até 25 MB.");
-  const payload = parseWhatsAppHistoryFile(await file.text());
+  const imported = await readWhatsAppImportFile(file);
+  if(imported.kind === "transcript"){
+    const transcript = String(imported.text || "").trim();
+    if(transcript.length < 40) throw new Error("A conversa exportada está vazia ou muito curta.");
+    $("whatsappConversation").value = transcript;
+    $("whatsappSyncStatus").textContent = `Conversa importada de ${file.name}. Escolha o tipo de análise e clique em Analisar automaticamente ou use o seu GPT.`;
+    return "transcript";
+  }
   const response = await fetch(`${SUPABASE_URL}/functions/v1/whatsapp-webhook`, {
     method:"POST",
     headers:{
@@ -1176,7 +1199,7 @@ async function importWhatsAppHistoryFile(file){
       "authorization":`Bearer ${session.access_token}`,
       "x-crm-history-import":"1"
     },
-    body:JSON.stringify(payload)
+    body:JSON.stringify(imported.payload)
   });
   if(!response.ok) throw new Error((await response.text()) || "Não foi possível importar o histórico.");
   const record = records.find(item=>item.id===$("id").value) || null;
@@ -3372,17 +3395,17 @@ $("whatsappHistoryFile").addEventListener("change", async event=>{
   if(!file) return;
   const button = $("btnImportWhatsAppHistory");
   button.disabled = true;
-  button.textContent = "Importando histórico...";
+  button.textContent = "Importando conversa...";
   try{
     await importWhatsAppHistoryFile(file);
-    toast("Histórico importado e vinculado aos clientes pelo telefone.");
+    toast("Conversa importada. Agora escolha o tipo de análise.");
   }catch(error){
     console.error("[CRM WhatsApp] Falha ao importar histórico.", error);
     toast(error.message || "Não foi possível importar o histórico.");
   }finally{
     event.target.value = "";
     button.disabled = false;
-    button.textContent = "Importar histórico";
+    button.textContent = "Importar conversa";
   }
 });
 $("btnDownloadWhatsApp").addEventListener("click", downloadWhatsAppConversation);
