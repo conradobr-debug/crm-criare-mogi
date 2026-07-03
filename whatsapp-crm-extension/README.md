@@ -41,9 +41,10 @@ extensões **WhatsApp Audio Transcriber** (`wt-transcription-result`) e
 **WhatsApp Parakeet Transcription** (`parakeet-wa-transcribe-result`). O texto
 gerado é incluído na conversa como `[Transcrição de áudio]`.
 
-Sem uma delas instalada, ou se a transcrição falhar, o CRM mantém o marcador
-`[Áudio sem transcrição]`. A primeira carga do modelo Parakeet pode demorar e,
-nesse caso, basta aguardar a conclusão no WhatsApp Web e capturar novamente.
+Para não travar o CRM, a captura aguarda no máximo 12 segundos pelas transcrições.
+Sem uma delas instalada, ou se o processamento ainda não terminou, o CRM mantém
+o marcador `[Áudio sem transcrição]`. A transcrição continua no WhatsApp Web;
+quando terminar, basta capturar novamente para incorporar o texto.
 
 ## Privacidade e limites
 

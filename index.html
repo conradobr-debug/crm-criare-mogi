@@ -1126,7 +1126,7 @@ function captureWhatsAppWebConversation(){
   $("whatsappConversation").value = "";
   button.disabled = true;
   button.textContent = "Capturando conversa...";
-  status.textContent = "Lendo a conversa e transcrevendo os áudios compatíveis… isso pode levar alguns minutos.";
+  status.textContent = "Lendo a conversa e iniciando a transcrição dos áudios…";
   const request = {
     requestedAt:new Date().toISOString(),
     phone:whatsappNumber($("phone").value),
@@ -1138,9 +1138,9 @@ function captureWhatsAppWebConversation(){
   whatsappCaptureTimer = setTimeout(()=>{
     button.disabled = false;
     button.textContent = "Capturar do WhatsApp Web";
-    status.textContent = "A extensão gratuita não respondeu. Instale ou reative a extensão Criare no Chrome.";
-    toast("Abra o WhatsApp Web e verifique se a extensão Criare está instalada.");
-  }, 300000);
+    status.textContent = "A captura demorou além do esperado. Abra novamente a conversa pelo CRM e tente outra vez.";
+    toast("A captura foi interrompida com segurança; nenhuma conversa foi importada.");
+  }, 30000);
 }
 document.addEventListener("criare-whatsapp-result", ()=>{
   clearTimeout(whatsappCaptureTimer);
@@ -1154,10 +1154,10 @@ document.addEventListener("criare-whatsapp-result", ()=>{
     result = {ok:false, error:"A extensão devolveu uma resposta inválida."};
   }
   delete document.documentElement.dataset.criareWhatsAppResult;
-  if(result.ok && result.extensionVersion !== "1.5.0"){
+  if(result.ok && result.extensionVersion !== "1.6.0"){
     result = {
       ok:false,
-      error:"A extensão Criare está desatualizada. Instale a versão 1.5 e atualize as abas do CRM e do WhatsApp Web."
+      error:"A extensão Criare está desatualizada. Instale a versão 1.6 e atualize as abas do CRM e do WhatsApp Web."
     };
   }
   if(!result.ok){
@@ -1170,7 +1170,7 @@ document.addEventListener("criare-whatsapp-result", ()=>{
   const audioPending = Math.max(0, Number(result.audioCount || 0) - Number(result.audioTranscribed || 0));
   const audioDone = result.audioTranscribed ? ` ${result.audioTranscribed} áudio(s) transcrito(s).` : "";
   const audioWarning = audioPending
-    ? ` ${audioPending} áudio(s) ficaram sem transcrição${result.audioExtensionDetected ? "" : "; instale uma extensão compatível"}.`
+    ? ` ${audioPending} áudio(s) ficaram sem transcrição${result.audioExtensionDetected ? "; a transcrição continua no WhatsApp e pode ser incorporada capturando novamente" : "; instale uma extensão compatível"}.`
     : "";
   $("whatsappSyncStatus").textContent = `${result.count || 0} mensagem(ns) capturada(s)${title}.${audioDone}${audioWarning}${limited}`;
   toast("Conversa capturada. Agora escolha o tipo de análise.");

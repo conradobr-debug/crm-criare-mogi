@@ -56,7 +56,7 @@ async function transcribeCompatibleAudios(main){
   }
   if(!started) return {voiceCount:voiceNodes.length, compatible:voiceNodes.some(node=>node.querySelector(".wt-btn-container, .parakeet-wa-transcribe-container"))};
 
-  const deadline = Date.now() + 240000;
+  const deadline = Date.now() + 12000;
   while(Date.now() < deadline){
     const unfinished = voiceNodes.filter(node=>!transcriptFromNode(node) && !transcriptionFailed(node));
     if(!unfinished.length) break;

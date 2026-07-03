@@ -14,7 +14,8 @@ transcrição disponível.
 A captura reconhece os resultados inseridos pelas extensões WhatsApp Audio
 Transcriber e WhatsApp Parakeet Transcription. Quando os botões dessas extensões
 estão disponíveis, o CRM solicita a transcrição dos áudios carregados antes de
-montar o texto da conversa.
+montar o texto da conversa. A espera é limitada a 12 segundos; transcrições mais
+demoradas continuam no WhatsApp Web e entram numa captura posterior.
 
 Para instalar, abra `chrome://extensions`, ative o modo do desenvolvedor, clique
 em **Carregar sem compactação** e selecione a pasta `whatsapp-crm-extension`.
