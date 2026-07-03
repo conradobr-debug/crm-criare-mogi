@@ -18,15 +18,16 @@ para que o histórico seja associado à pessoa correta.
 ## Uso
 
 1. Abra o cliente no CRM.
-2. Clique em **Abrir conversa** e deixe a nova aba carregar no WhatsApp Web.
+2. Clique em **Abrir conversa** e deixe a aba do WhatsApp Web carregar o cliente.
 3. Volte ao CRM e clique em **Capturar do WhatsApp Web**.
 4. Escolha o tipo de análise e use **Analisar automaticamente** ou o GPT da Criare.
 
 Somente as mensagens carregadas na tela são capturadas. Para incluir mensagens
 mais antigas, role a conversa para cima, aguarde o carregamento e capture novamente.
 
-Ao abrir a conversa, a extensão registra a aba exata criada para o telefone do
-cliente. A captura aceita somente essa aba. Se o usuário não clicar em **Abrir
+Ao abrir a conversa, a extensão reutiliza a aba mais recente do WhatsApp Web —
+ou cria uma quando não existe — e registra essa aba para o telefone do cliente.
+A captura aceita somente essa aba. Se o usuário não clicar em **Abrir
 conversa** naquele cliente primeiro, a captura é recusada; nenhuma outra aba ou
 conversa anterior é reutilizada.
 Mensagens de

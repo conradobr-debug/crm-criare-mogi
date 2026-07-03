@@ -1154,10 +1154,10 @@ document.addEventListener("criare-whatsapp-result", ()=>{
     result = {ok:false, error:"A extensão devolveu uma resposta inválida."};
   }
   delete document.documentElement.dataset.criareWhatsAppResult;
-  if(result.ok && result.extensionVersion !== "1.4.0"){
+  if(result.ok && result.extensionVersion !== "1.5.0"){
     result = {
       ok:false,
-      error:"A extensão Criare está desatualizada. Instale a versão 1.4 e atualize as abas do CRM e do WhatsApp Web."
+      error:"A extensão Criare está desatualizada. Instale a versão 1.5 e atualize as abas do CRM e do WhatsApp Web."
     };
   }
   if(!result.ok){

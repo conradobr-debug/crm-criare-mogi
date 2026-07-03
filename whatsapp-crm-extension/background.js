@@ -17,7 +17,11 @@ async function openCustomerChat(request){
     return {ok:false, error:"O telefone do cliente está incompleto."};
   }
   const url = `https://web.whatsapp.com/send/?phone=${phone}&type=phone_number&app_absent=0`;
-  const tab = await chrome.tabs.create({url, active:true});
+  const openTabs = await chrome.tabs.query({url:"https://web.whatsapp.com/*"});
+  const reusable = openTabs.sort((a,b)=>(b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
+  const tab = reusable
+    ? await chrome.tabs.update(reusable.id, {url, active:true})
+    : await chrome.tabs.create({url, active:true});
   await saveTarget(phone, tab.id);
   return {ok:true, extensionVersion:chrome.runtime.getManifest().version};
 }
