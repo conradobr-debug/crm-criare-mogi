@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Criare CRM — Capturar WhatsApp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Leva a conversa aberta no WhatsApp Web diretamente para o CRM Criare.",
   "permissions": ["tabs"],
   "host_permissions": [
@@ -10,6 +10,10 @@
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Criare CRM — Capturar WhatsApp",
+    "default_popup": "popup.html"
   },
   "content_scripts": [
     {

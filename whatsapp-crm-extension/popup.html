@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Criare CRM</title>
+  <style>
+    body{width:310px;margin:0;padding:18px;font:14px/1.45 Arial,sans-serif;color:#17243c;background:#f5f7f5}
+    h1{font-size:17px;margin:0 0 5px;font-weight:600} p{margin:7px 0;color:#526071}
+    .ok{display:inline-flex;align-items:center;gap:7px;color:#196b45;font-weight:600;margin-bottom:8px}
+    .ok:before{content:"";width:9px;height:9px;border-radius:50%;background:#29a36a}
+    ol{padding-left:20px;margin:12px 0 16px} li{margin:6px 0}
+    button{width:100%;border:0;border-radius:9px;padding:11px;margin-top:8px;cursor:pointer;font-weight:600}
+    #openCrm{background:#17243c;color:white} #openWhatsApp{background:white;color:#196b45;border:1px solid #cbd7d0}
+    small{display:block;color:#788493;margin-top:12px}
+  </style>
+</head>
+<body>
+  <div class="ok">Extensão ativa</div>
+  <h1>Capturar conversa no CRM</h1>
+  <ol>
+    <li>Abra a conversa desejada no WhatsApp Web.</li>
+    <li>Abra o cliente no CRM.</li>
+    <li>Clique em <b>Capturar do WhatsApp Web</b> dentro do CRM.</li>
+  </ol>
+  <button id="openCrm">Abrir CRM</button>
+  <button id="openWhatsApp">Abrir WhatsApp Web</button>
+  <small>O clique no ícone mostra este guia; a captura acontece dentro do cliente correto no CRM.</small>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -11,6 +11,10 @@ WhatsApp Web e envia o texto para o campo de análise do CRM Criare.
 4. Escolha esta pasta `whatsapp-crm-extension`.
 5. Atualize as abas do CRM e do WhatsApp Web.
 
+Ao clicar no ícone da extensão, será exibido um guia com atalhos para abrir o
+CRM e o WhatsApp Web. A captura é iniciada pelo botão dentro do cliente no CRM,
+para que o histórico seja associado à pessoa correta.
+
 ## Uso
 
 1. Abra o cliente no CRM.
