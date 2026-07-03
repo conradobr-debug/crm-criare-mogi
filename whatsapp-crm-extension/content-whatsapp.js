@@ -24,9 +24,51 @@ function sameCustomer(title, request){
   return tokens.filter(token=>active.includes(token)).length >= required;
 }
 
-function extractLoadedMessages(){
+function voiceMessageNodes(main){
+  return [...main.querySelectorAll("[data-pre-plain-text]")].filter(node=>
+    node.querySelector('[aria-label="Mensagem de voz"], [aria-label*="voice message" i], [data-testid="audio-download"]')
+  );
+}
+
+function transcriptFromNode(node){
+  const whisperResult = node.querySelector(".wt-transcription-result:not(.error) .wt-result-text");
+  const parakeetResult = node.querySelector(".parakeet-wa-transcribe-result span");
+  return cleanText(whisperResult?.textContent || parakeetResult?.textContent || "");
+}
+
+function transcriptionFailed(node){
+  if(node.querySelector(".wt-transcription-result.error")) return true;
+  const parakeetText = cleanText(node.querySelector(".parakeet-wa-transcribe-result span")?.textContent || "");
+  return /failed|error|erro|limit/i.test(parakeetText);
+}
+
+async function transcribeCompatibleAudios(main){
+  const voiceNodes = voiceMessageNodes(main);
+  const pending = voiceNodes.filter(node=>!transcriptFromNode(node) && !transcriptionFailed(node));
+  let started = 0;
+  for(const node of pending){
+    const button = node.querySelector(".wt-transcribe-btn:not(.success), .parakeet-wa-transcribe-btn");
+    if(button && !button.disabled){
+      button.click();
+      started += 1;
+    }
+  }
+  if(!started) return {voiceCount:voiceNodes.length, compatible:voiceNodes.some(node=>node.querySelector(".wt-btn-container, .parakeet-wa-transcribe-container"))};
+
+  const deadline = Date.now() + 240000;
+  while(Date.now() < deadline){
+    const unfinished = voiceNodes.filter(node=>!transcriptFromNode(node) && !transcriptionFailed(node));
+    if(!unfinished.length) break;
+    await new Promise(resolve=>setTimeout(resolve, 750));
+  }
+  return {voiceCount:voiceNodes.length, compatible:true};
+}
+
+async function extractLoadedMessages(){
   const main = document.querySelector("#main") || document.querySelector("main") || document.querySelector('[role="main"]');
   if(!main) throw new Error("Abra uma conversa no WhatsApp Web antes de capturar.");
+
+  const transcription = await transcribeCompatibleAudios(main);
 
   const nodes = [...main.querySelectorAll("[data-pre-plain-text]")];
   if(!nodes.length) throw new Error("A conversa ainda não carregou. Aguarde alguns segundos e tente novamente.");
@@ -40,8 +82,8 @@ function extractLoadedMessages(){
     let body = cleanText(node.innerText || node.textContent);
     if(hasVoiceMessage){
       audioCount += 1;
-      const looksLikeTranscript = body.length > 35 && !/^(\d{1,2}:\d{2}|mensagem de voz)$/i.test(body);
-      body = looksLikeTranscript ? `[Transcrição de áudio] ${body}` : "[Áudio sem transcrição]";
+      const transcript = transcriptFromNode(node);
+      body = transcript ? `[Transcrição de áudio] ${transcript}` : "[Áudio sem transcrição]";
     }
     if(!body) continue;
     const line = `${prefix}${prefix && !prefix.endsWith(" ") ? " " : ""}${body}`.trim();
@@ -57,22 +99,26 @@ function extractLoadedMessages(){
     transcript:selected.join("\n"),
     count:selected.length,
     audioCount,
+    audioTranscribed:voiceMessageNodes(main).filter(node=>!!transcriptFromNode(node)).length,
+    audioExtensionDetected:transcription.compatible,
     limited:messages.length >= maximum
   };
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if(message?.type !== "criare-extract-active-chat") return false;
-  try{
-    const title = activeChatTitle();
-    if(!sameCustomer(title, message.request || {})){
-      const expected = cleanText(message.request?.customerName) || "o cliente do CRM";
-      throw new Error(`A conversa aberta é “${title || "não identificada"}”, mas o cliente no CRM é “${expected}”. Abra a conversa correta antes de capturar.`);
+  (async ()=>{
+    try{
+      const title = activeChatTitle();
+      if(!sameCustomer(title, message.request || {})){
+        const expected = cleanText(message.request?.customerName) || "o cliente do CRM";
+        throw new Error(`A conversa aberta é “${title || "não identificada"}”, mas o cliente no CRM é “${expected}”. Abra a conversa correta antes de capturar.`);
+      }
+      const extracted = await extractLoadedMessages();
+      sendResponse({ok:true, title, ...extracted});
+    }catch(error){
+      sendResponse({ok:false, error:error.message || "Não foi possível ler a conversa aberta."});
     }
-    const extracted = extractLoadedMessages();
-    sendResponse({ok:true, title, ...extracted});
-  }catch(error){
-    sendResponse({ok:false, error:error.message || "Não foi possível ler a conversa aberta."});
-  }
-  return false;
+  })();
+  return true;
 });

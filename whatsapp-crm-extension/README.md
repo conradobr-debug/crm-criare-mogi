@@ -30,6 +30,17 @@ o cliente do CRM. Se não corresponder, ela interrompe a importação. Mensagens
 voz são identificadas no texto como `[Áudio sem transcrição]`; elas nunca são
 silenciosamente tratadas como se fossem mensagens vazias.
 
+## Transcrição de áudio compatível
+
+Ao capturar, a extensão reconhece e aciona automaticamente os botões das
+extensões **WhatsApp Audio Transcriber** (`wt-transcription-result`) e
+**WhatsApp Parakeet Transcription** (`parakeet-wa-transcribe-result`). O texto
+gerado é incluído na conversa como `[Transcrição de áudio]`.
+
+Sem uma delas instalada, ou se a transcrição falhar, o CRM mantém o marcador
+`[Áudio sem transcrição]`. A primeira carga do modelo Parakeet pode demorar e,
+nesse caso, basta aguardar a conclusão no WhatsApp Web e capturar novamente.
+
 ## Privacidade e limites
 
 A extensão não envia mensagens e não acessa outras conversas. O texto passa do

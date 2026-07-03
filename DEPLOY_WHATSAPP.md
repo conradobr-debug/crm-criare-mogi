@@ -9,6 +9,11 @@ Antes de importar, a extensão compara a conversa aberta com o nome ou telefone
 do cliente do CRM. Áudios são sinalizados explicitamente quando ainda não há
 transcrição disponível.
 
+A captura reconhece os resultados inseridos pelas extensões WhatsApp Audio
+Transcriber e WhatsApp Parakeet Transcription. Quando os botões dessas extensões
+estão disponíveis, o CRM solicita a transcrição dos áudios carregados antes de
+montar o texto da conversa.
+
 Para instalar, abra `chrome://extensions`, ative o modo do desenvolvedor, clique
 em **Carregar sem compactação** e selecione a pasta `whatsapp-crm-extension`.
 Depois, atualize as abas do CRM e do WhatsApp Web.

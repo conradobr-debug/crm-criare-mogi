@@ -768,7 +768,7 @@
           <div class="whatsappWorkspaceHd">
             <div>
               <div class="whatsappWorkspaceTitle">WhatsApp do cliente</div>
-              <div class="fieldHelp">Abra a conversa pelo botão ao lado e depois capture as mensagens. O CRM confere o nome ou telefone antes de importar para evitar misturar clientes.</div>
+              <div class="fieldHelp">Abra a conversa pelo botão ao lado e depois capture as mensagens. O CRM confere o cliente e aproveita as transcrições de áudio das extensões compatíveis.</div>
             </div>
             <button class="whatsappAction" id="btnWhatsApp" type="button">Abrir conversa</button>
           </div>
@@ -1109,7 +1109,7 @@ function captureWhatsAppWebConversation(){
   const status = $("whatsappSyncStatus");
   button.disabled = true;
   button.textContent = "Capturando conversa...";
-  status.textContent = "Lendo a conversa aberta no WhatsApp Web…";
+  status.textContent = "Lendo a conversa e transcrevendo os áudios compatíveis… isso pode levar alguns minutos.";
   const request = {
     requestedAt:new Date().toISOString(),
     phone:whatsappNumber($("phone").value),
@@ -1123,7 +1123,7 @@ function captureWhatsAppWebConversation(){
     button.textContent = "Capturar do WhatsApp Web";
     status.textContent = "A extensão gratuita não respondeu. Instale ou reative a extensão Criare no Chrome.";
     toast("Abra o WhatsApp Web e verifique se a extensão Criare está instalada.");
-  }, 12000);
+  }, 300000);
 }
 document.addEventListener("criare-whatsapp-result", ()=>{
   clearTimeout(whatsappCaptureTimer);
@@ -1144,8 +1144,12 @@ document.addEventListener("criare-whatsapp-result", ()=>{
   $("whatsappConversation").value = String(result.transcript || "").trim();
   const title = result.title ? ` de ${result.title}` : "";
   const limited = result.limited ? " Role a conversa para cima e capture novamente para incluir mensagens anteriores." : "";
-  const audioWarning = result.audioCount ? ` ${result.audioCount} áudio(s) identificado(s) ainda precisam de transcrição.` : "";
-  $("whatsappSyncStatus").textContent = `${result.count || 0} mensagem(ns) capturada(s)${title}.${audioWarning}${limited}`;
+  const audioPending = Math.max(0, Number(result.audioCount || 0) - Number(result.audioTranscribed || 0));
+  const audioDone = result.audioTranscribed ? ` ${result.audioTranscribed} áudio(s) transcrito(s).` : "";
+  const audioWarning = audioPending
+    ? ` ${audioPending} áudio(s) ficaram sem transcrição${result.audioExtensionDetected ? "" : "; instale uma extensão compatível"}.`
+    : "";
+  $("whatsappSyncStatus").textContent = `${result.count || 0} mensagem(ns) capturada(s)${title}.${audioDone}${audioWarning}${limited}`;
   toast("Conversa capturada. Agora escolha o tipo de análise.");
 });
 function formatWhatsAppTranscript(messages, customerName){
