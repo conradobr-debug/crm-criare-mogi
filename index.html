@@ -791,6 +791,9 @@
           <div class="whatsappPrivacy">Mensagens sincronizadas ficam protegidas pelo acesso do CRM. Ao usar a análise automática, o trecho poderá ser enviado ao serviço de IA configurado. Evite documentos, senhas e dados bancários.</div>
           <div class="whatsappActions">
             <button class="ghost" id="btnRefreshWhatsApp" type="button">Atualizar mensagens</button>
+            <button class="ghost" id="btnImportWhatsAppHistory" type="button">Importar histórico</button>
+            <input id="whatsappHistoryFile" type="file" accept="application/json,.json,.jsonl,.ndjson" hidden />
+            <button class="ghost" id="btnDownloadWhatsApp" type="button">Baixar conversa</button>
             <button class="manualGptAction" id="btnOpenCustomGpt" type="button">Copiar e abrir meu GPT</button>
             <button class="ghost" id="btnImportCustomGpt" type="button">Importar resposta copiada</button>
             <button class="primary" id="btnSummarizeWhatsApp" type="button">Analisar automaticamente</button>
@@ -1149,6 +1152,50 @@ async function fetchWhatsAppConversation(record=null, {notify=false}={}){
   status.textContent = `${messages.length} mensagem(ns) sincronizada(s) • última em ${fmtBRDateTime(latest.message_timestamp)}.`;
   if(notify) toast("Conversa atualizada.");
   return true;
+}
+function parseWhatsAppHistoryFile(text){
+  const content = String(text || "").trim();
+  if(!content) throw new Error("O arquivo está vazio.");
+  try{
+    return JSON.parse(content);
+  }catch(error){
+    const events = content.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).map(line=>JSON.parse(line));
+    if(!events.length) throw error;
+    return events;
+  }
+}
+async function importWhatsAppHistoryFile(file){
+  if(!sb || !session?.access_token) throw new Error("Entre no CRM novamente.");
+  if(!file || file.size > 25 * 1024 * 1024) throw new Error("Escolha um arquivo de histórico com até 25 MB.");
+  const payload = parseWhatsAppHistoryFile(await file.text());
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/whatsapp-webhook`, {
+    method:"POST",
+    headers:{
+      "content-type":"application/json",
+      "apikey":SUPABASE_ANON_KEY,
+      "authorization":`Bearer ${session.access_token}`,
+      "x-crm-history-import":"1"
+    },
+    body:JSON.stringify(payload)
+  });
+  if(!response.ok) throw new Error((await response.text()) || "Não foi possível importar o histórico.");
+  const record = records.find(item=>item.id===$("id").value) || null;
+  await fetchWhatsAppConversation(record);
+}
+function downloadWhatsAppConversation(){
+  const conversation = $("whatsappConversation").value.trim();
+  if(!conversation) return toast("Atualize as mensagens antes de baixar a conversa.");
+  const customer = `${$("firstName").value} ${$("lastName").value}`.trim() || "cliente";
+  const safeName = customer.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
+  const blob = new Blob([conversation], {type:"text/plain;charset=utf-8"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `whatsapp-${safeName || "cliente"}-${new Date().toISOString().slice(0,10)}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+  toast("Conversa baixada.");
 }
 const CRIARE_CUSTOM_GPT_URL = "https://chatgpt.com/g/g-6a456f7734cc81919d0d2a98941be765-analista-de-conversas-criare";
 function redactManualGptSensitive(value){
@@ -3319,6 +3366,26 @@ $("btnRefreshWhatsApp").addEventListener("click", ()=>{
   const record = records.find(item=>item.id===$("id").value) || null;
   fetchWhatsAppConversation(record, {notify:true});
 });
+$("btnImportWhatsAppHistory").addEventListener("click", ()=>$("whatsappHistoryFile").click());
+$("whatsappHistoryFile").addEventListener("change", async event=>{
+  const file = event.target.files?.[0];
+  if(!file) return;
+  const button = $("btnImportWhatsAppHistory");
+  button.disabled = true;
+  button.textContent = "Importando histórico...";
+  try{
+    await importWhatsAppHistoryFile(file);
+    toast("Histórico importado e vinculado aos clientes pelo telefone.");
+  }catch(error){
+    console.error("[CRM WhatsApp] Falha ao importar histórico.", error);
+    toast(error.message || "Não foi possível importar o histórico.");
+  }finally{
+    event.target.value = "";
+    button.disabled = false;
+    button.textContent = "Importar histórico";
+  }
+});
+$("btnDownloadWhatsApp").addEventListener("click", downloadWhatsAppConversation);
 $("btnOpenCustomGpt").addEventListener("click", async ()=>{
   const conversation = $("whatsappConversation").value.trim();
   if(conversation.length < 40) return toast("Cole um trecho maior da conversa.");

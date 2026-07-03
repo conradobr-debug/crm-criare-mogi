@@ -4,6 +4,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const VERIFY_TOKEN = Deno.env.get("WHATSAPP_VERIFY_TOKEN") || "";
 const META_APP_SECRET = Deno.env.get("META_APP_SECRET") || "";
+const D360_WEBHOOK_SECRET = Deno.env.get("D360_WEBHOOK_SECRET") || "";
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -69,6 +70,30 @@ async function validSignature(raw: string, signature: string | null): Promise<bo
   return mismatch === 0;
 }
 
+function constantTimeEqual(left: string, right: string): boolean {
+  if (!left || left.length !== right.length) return false;
+  let mismatch = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    mismatch |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return mismatch === 0;
+}
+
+async function authenticatedCrmUser(request: Request): Promise<boolean> {
+  const authorization = request.headers.get("authorization") || "";
+  const token = authorization.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return false;
+  const { data, error } = await admin.auth.getUser(token);
+  return !error && Boolean(data.user);
+}
+
+async function validRequest(request: Request, raw: string): Promise<boolean> {
+  const providerSecret = request.headers.get("x-crm-webhook-secret") || "";
+  if (D360_WEBHOOK_SECRET && constantTimeEqual(providerSecret, D360_WEBHOOK_SECRET)) return true;
+  if (request.headers.get("x-crm-history-import") === "1" && await authenticatedCrmUser(request)) return true;
+  return validSignature(raw, request.headers.get("x-hub-signature-256"));
+}
+
 async function findRecordId(contactWaId: string): Promise<string | null> {
   const { data, error } = await admin.from("crm_records").select("id,phone");
   if (error) throw error;
@@ -83,6 +108,7 @@ async function saveMessage(input: {
   contactWaId: string;
   contactName?: string | null;
   source?: string;
+  status?: string | null;
 }) {
   const { message, value, wabaId, direction } = input;
   const contactWaId = digits(input.contactWaId);
@@ -101,7 +127,7 @@ async function saveMessage(input: {
     body: content.body,
     media_id: content.mediaId,
     source: input.source || "cloud_api",
-    status: direction === "outbound" ? "sent" : "received",
+    status: input.status || (direction === "outbound" ? "sent" : "received"),
     message_timestamp: asDate(message.timestamp),
     updated_at: new Date().toISOString(),
     metadata: {
@@ -111,6 +137,30 @@ async function saveMessage(input: {
   };
   const { error } = await admin.from("crm_whatsapp_messages").upsert(payload, { onConflict: "meta_message_id" });
   if (error) throw error;
+}
+
+async function processHistoryEvent(payload: AnyJson) {
+  const data = payload?.data || payload;
+  const wabaId = data?.id || null;
+  const value = { metadata: data?.metadata || {} };
+  for (const historyChunk of data?.history || []) {
+    for (const thread of historyChunk?.threads || []) {
+      const contactWaId = digits(thread?.id);
+      if (!contactWaId) continue;
+      for (const message of thread?.messages || []) {
+        const direction = digits(message?.from) === contactWaId ? "inbound" : "outbound";
+        await saveMessage({
+          message,
+          value,
+          wabaId,
+          direction,
+          contactWaId,
+          source: "history_sync",
+          status: message?.history_context?.status || (direction === "outbound" ? "sent" : "received"),
+        });
+      }
+    }
+  }
 }
 
 async function processChange(change: AnyJson, wabaId: string | null) {
@@ -138,7 +188,7 @@ async function processChange(change: AnyJson, wabaId: string | null) {
   }
 
   if (field === "smb_message_echoes") {
-    const echoes = value.messages || value.message_echoes || value.echoes || [];
+    const echoes = value.message_echoes || value.messages || value.echoes || [];
     for (const message of echoes) {
       const waId = digits(message.to || message.recipient_id || message.context?.from);
       await saveMessage({
@@ -150,6 +200,22 @@ async function processChange(change: AnyJson, wabaId: string | null) {
         contactName: contacts.get(waId),
         source: "whatsapp_business_app",
       });
+    }
+  }
+}
+
+async function processPayload(payload: AnyJson | AnyJson[]) {
+  if (Array.isArray(payload)) {
+    for (const item of payload) await processPayload(item);
+    return;
+  }
+  if (payload?.event === "history" || payload?.data?.history) {
+    await processHistoryEvent(payload);
+    return;
+  }
+  if (payload?.object === "whatsapp_business_account") {
+    for (const entry of payload.entry || []) {
+      for (const change of entry.changes || []) await processChange(change, entry.id || null);
     }
   }
 }
@@ -168,17 +234,13 @@ Deno.serve(async (request: Request) => {
 
   if (request.method !== "POST") return new Response("Método não permitido", { status: 405 });
   const raw = await request.text();
-  if (!await validSignature(raw, request.headers.get("x-hub-signature-256"))) {
+  if (!await validRequest(request, raw)) {
     return new Response("Assinatura inválida", { status: 401 });
   }
 
   try {
     const payload = JSON.parse(raw);
-    if (payload?.object === "whatsapp_business_account") {
-      for (const entry of payload.entry || []) {
-        for (const change of entry.changes || []) await processChange(change, entry.id || null);
-      }
-    }
+    await processPayload(payload);
   } catch (error) {
     console.error("[WhatsApp webhook]", error instanceof Error ? error.message : String(error));
     if (request.headers.get("x-crm-debug") === VERIFY_TOKEN) {
