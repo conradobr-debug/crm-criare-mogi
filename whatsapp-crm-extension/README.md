@@ -60,6 +60,10 @@ Quando o cadastro possui nome e sobrenome, mas o WhatsApp mostra apenas o
 primeiro nome no cabeçalho, a conversa ainda é reconhecida como correta. Números
 exibidos no cabeçalho continuam sendo validados pelo telefone completo.
 
+A deduplicação usa o identificador único de cada mensagem do WhatsApp, e não
+mais apenas o texto. Assim, mensagens repetidas e vários áudios sem transcrição
+são preservados separadamente no histórico.
+
 A foto exibida no cabeçalho da conversa é copiada para uma área privada do CRM;
 o endereço temporário do WhatsApp não é gravado no cadastro.
 Mensagens de

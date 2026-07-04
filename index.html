@@ -1152,7 +1152,7 @@ document.addEventListener("criare-whatsapp-open-result", ()=>{
   delete document.documentElement.dataset.criareWhatsAppOpenResult;
   if(!result.ok) toast(result.error || "Não foi possível abrir o WhatsApp Web. Atualize a extensão Criare.");
 });
-const WHATSAPP_EXTENSION_VERSION = "1.9.3";
+const WHATSAPP_EXTENSION_VERSION = "1.9.4";
 const whatsappAutoSyncWaiters = new Map();
 const whatsappExtensionPingWaiters = new Map();
 let whatsappCaptureTimer = null;
@@ -1236,28 +1236,51 @@ function requestWhatsAppAutomaticSync(record){
 }
 
 function mergeWhatsAppMessages(record, result){
-  const storedEntries = Array.isArray(record?.whatsapp_message_entries)
-    ? record.whatsapp_message_entries.map(entry=>String(entry || "").trim()).filter(Boolean)
+  const normalizeEntry = entry=>{
+    if(entry && typeof entry === "object"){
+      const text = String(entry.text || "").trim();
+      const id = String(entry.id || "").trim();
+      return text ? {id:id || null, text} : null;
+    }
+    const text = String(entry || "").trim();
+    return text ? {id:null, text} : null;
+  };
+  let storedEntries = Array.isArray(record?.whatsapp_message_entries)
+    ? record.whatsapp_message_entries.map(normalizeEntry).filter(Boolean)
     : [];
-  const legacyEntries = storedEntries.length
-    ? []
-    : String(record?.whatsapp_transcript || "").split("\n").map(entry=>entry.trim()).filter(Boolean);
+  if(!storedEntries.length){
+    storedEntries = String(record?.whatsapp_transcript || "").split("\n").map(normalizeEntry).filter(Boolean);
+  }
   const incomingEntries = Array.isArray(result?.entries)
-    ? result.entries.map(entry=>String(entry || "").trim()).filter(Boolean)
-    : String(result?.transcript || "").split("\n").map(entry=>entry.trim()).filter(Boolean);
-  const merged = [...storedEntries, ...legacyEntries];
-  const seen = new Set(merged);
+    ? result.entries.map(normalizeEntry).filter(Boolean)
+    : String(result?.transcript || "").split("\n").map(normalizeEntry).filter(Boolean);
+  const merged = storedEntries.map(entry=>({...entry}));
+  const seenIds = new Set(merged.map(entry=>entry.id).filter(Boolean));
+  const legacyByText = new Map();
+  for(let index=0; index<merged.length; index+=1){
+    if(merged[index].id) continue;
+    if(!legacyByText.has(merged[index].text)) legacyByText.set(merged[index].text, []);
+    legacyByText.get(merged[index].text).push(index);
+  }
   let addedCount = 0;
   for(const entry of incomingEntries){
-    if(seen.has(entry)) continue;
-    seen.add(entry);
-    merged.push(entry);
+    if(entry.id && seenIds.has(entry.id)) continue;
+    const legacyMatches = legacyByText.get(entry.text);
+    if(legacyMatches?.length){
+      const legacyIndex = legacyMatches.shift();
+      merged[legacyIndex] = {...entry};
+      if(entry.id) seenIds.add(entry.id);
+      continue;
+    }
+    if(!entry.id && merged.some(saved=>saved.text===entry.text)) continue;
+    merged.push({...entry});
+    if(entry.id) seenIds.add(entry.id);
     addedCount += 1;
   }
   const entries = merged.slice(-5000);
   return {
     entries,
-    transcript:entries.join("\n"),
+    transcript:entries.map(entry=>entry.text).join("\n"),
     addedCount,
     totalCount:entries.length
   };

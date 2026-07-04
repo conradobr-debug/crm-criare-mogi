@@ -1,4 +1,4 @@
-const CRIARE_CONTENT_SCRIPT_VERSION = "1.9.3";
+const CRIARE_CONTENT_SCRIPT_VERSION = "1.9.4";
 
 function cleanText(value){
   return String(value || "").replace(/\u200e|\u200f/g, "").replace(/\n{3,}/g, "\n\n").trim();
@@ -191,10 +191,11 @@ async function extractLoadedMessages(){
   const nodes = loadedMessageNodes(main);
   if(!nodes.length) throw new Error("A conversa ainda não carregou. Aguarde alguns segundos e tente novamente.");
 
-  const seen = new Set();
-  const messages = [];
+  const seenIds = new Set();
+  const entries = [];
   let audioCount = 0;
-  for(const node of nodes){
+  for(let index=0; index<nodes.length; index+=1){
+    const node = nodes[index];
     const detailNode = node.hasAttribute("data-pre-plain-text") ? node : node.querySelector("[data-pre-plain-text]");
     const prefix = cleanText(detailNode?.getAttribute("data-pre-plain-text"));
     const hasVoiceMessage = !!node.querySelector('[aria-label="Mensagem de voz"], [aria-label*="voice message" i], [data-testid="audio-download"]');
@@ -207,16 +208,17 @@ async function extractLoadedMessages(){
     }
     if(!body) continue;
     const line = `${prefix}${prefix && !prefix.endsWith(" ") ? " " : ""}${body}`.trim();
-    if(seen.has(line)) continue;
-    seen.add(line);
-    messages.push(line);
+    const messageId = cleanText(node.getAttribute("data-testid")) || `${prefix}|${index}`;
+    if(seenIds.has(messageId)) continue;
+    seenIds.add(messageId);
+    entries.push({id:messageId, text:line});
   }
 
-  if(!messages.length) throw new Error("Não encontrei mensagens de texto carregadas nesta conversa.");
+  if(!entries.length) throw new Error("Não encontrei mensagens carregadas nesta conversa.");
   const maximum = 500;
-  const selected = messages.slice(-maximum);
+  const selected = entries.slice(-maximum);
   return {
-    transcript:selected.join("\n"),
+    transcript:selected.map(entry=>entry.text).join("\n"),
     entries:selected,
     count:selected.length,
     audioCount,
@@ -225,7 +227,7 @@ async function extractLoadedMessages(){
     olderHistoryRequested:olderHistory.requested,
     olderHistoryLoaded:olderHistory.loaded,
     profilePhotoUrl:profilePhotoUrl(main),
-    limited:messages.length >= maximum
+    limited:entries.length >= maximum
   };
 }
 
