@@ -1152,7 +1152,7 @@ document.addEventListener("criare-whatsapp-open-result", ()=>{
   delete document.documentElement.dataset.criareWhatsAppOpenResult;
   if(!result.ok) toast(result.error || "Não foi possível abrir o WhatsApp Web. Atualize a extensão Criare.");
 });
-const WHATSAPP_EXTENSION_VERSION = "1.9.2";
+const WHATSAPP_EXTENSION_VERSION = "1.9.3";
 const whatsappAutoSyncWaiters = new Map();
 const whatsappExtensionPingWaiters = new Map();
 let whatsappCaptureTimer = null;

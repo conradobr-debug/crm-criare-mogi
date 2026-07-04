@@ -1,4 +1,4 @@
-const CRIARE_CONTENT_SCRIPT_VERSION = "1.9.2";
+const CRIARE_CONTENT_SCRIPT_VERSION = "1.9.3";
 
 function cleanText(value){
   return String(value || "").replace(/\u200e|\u200f/g, "").replace(/\n{3,}/g, "\n\n").trim();
@@ -27,6 +27,9 @@ function sameCustomer(title, request){
   if(expectedDigits && activeDigits && activeDigits.endsWith(expectedDigits.slice(-10))) return true;
   const tokens = expectedName.split(" ").filter(token=>token.length >= 3);
   if(!tokens.length) return false;
+  const activeTokens = active.split(" ").filter(Boolean);
+  const firstName = tokens[0];
+  if(firstName && activeTokens.length === 1 && activeTokens[0] === firstName) return true;
   const required = Math.min(2, tokens.length);
   return tokens.filter(token=>active.includes(token)).length >= required;
 }

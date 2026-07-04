@@ -1,4 +1,4 @@
-const CACHE_NAME = "crm-criare-shell-v12";
+const CACHE_NAME = "crm-criare-shell-v13";
 const APP_SHELL = [
   "./",
   "./index.html",

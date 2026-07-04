@@ -56,6 +56,10 @@ WhatsApp Web. Se o Chrome manteve um leitor antigo depois de uma atualização, 
 aba é recarregada automaticamente. A captura é recusada quando a quantidade
 lida for menor que a quantidade de mensagens visíveis, protegendo o histórico.
 
+Quando o cadastro possui nome e sobrenome, mas o WhatsApp mostra apenas o
+primeiro nome no cabeçalho, a conversa ainda é reconhecida como correta. Números
+exibidos no cabeçalho continuam sendo validados pelo telefone completo.
+
 A foto exibida no cabeçalho da conversa é copiada para uma área privada do CRM;
 o endereço temporário do WhatsApp não é gravado no cadastro.
 Mensagens de
