@@ -13,6 +13,10 @@ function comparableText(value){
   return cleanText(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
+function normalizedUiText(value){
+  return cleanText(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
 function sameCustomer(title, request){
   const active = comparableText(title);
   const expectedName = comparableText(request?.customerName);
@@ -38,9 +42,52 @@ function loadedMessageNodes(main){
   return [...main.querySelectorAll("[data-pre-plain-text]")];
 }
 
+function olderMessagesButton(main){
+  const phrases = [
+    "clique neste aviso para carregar mensagens mais antigas do seu celular",
+    "click this message to load older messages from your phone"
+  ];
+  return [...main.querySelectorAll("button,[role='button']")].find(button=>{
+    const text = normalizedUiText(button.textContent);
+    return phrases.some(phrase=>text.includes(normalizedUiText(phrase)));
+  }) || null;
+}
+
+async function loadOlderMessagesFromPhone(main){
+  const button = olderMessagesButton(main);
+  if(!button) return {requested:false, loaded:false};
+  const before = loadedMessageNodes(main).length;
+  button.click();
+  const deadline = Date.now() + 20000;
+  while(Date.now() < deadline){
+    await new Promise(resolve=>setTimeout(resolve, 800));
+    if(!olderMessagesButton(main)){
+      return {requested:true, loaded:true, before, after:loadedMessageNodes(main).length};
+    }
+  }
+  return {requested:true, loaded:false, before, after:loadedMessageNodes(main).length};
+}
+
+function profilePhotoUrl(main){
+  const image = main?.querySelector('header[data-testid="conversation-header"] img') || main?.querySelector("header img");
+  const source = String(image?.getAttribute("src") || "").trim();
+  return /^(https:|data:image\/)/i.test(source) ? source : "";
+}
+
+function conversationUnavailable(){
+  const text = normalizedUiText(document.body?.innerText || "");
+  return [
+    "o numero de telefone compartilhado atraves do link e invalido",
+    "este numero de telefone nao esta no whatsapp",
+    "phone number shared via url is invalid",
+    "this phone number isnt on whatsapp",
+    "this phone number is not on whatsapp"
+  ].some(phrase=>text.includes(normalizedUiText(phrase)));
+}
+
 function chatLoadState(request={}){
   const main = document.querySelector("#main") || document.querySelector("main") || document.querySelector('[role="main"]');
-  if(!main) return {ready:false, title:"", count:0};
+  if(!main) return {ready:false, title:"", count:0, unavailable:conversationUnavailable()};
   const title = activeChatTitle();
   const count = loadedMessageNodes(main).length;
   return {
@@ -48,7 +95,10 @@ function chatLoadState(request={}){
     empty:Boolean(title && !count),
     title,
     count,
-    matches:sameCustomer(title, request)
+    matches:sameCustomer(title, request),
+    profilePhotoUrl:profilePhotoUrl(main),
+    olderMessagesAvailable:Boolean(olderMessagesButton(main)),
+    unavailable:conversationUnavailable()
   };
 }
 
@@ -90,6 +140,7 @@ async function extractLoadedMessages(){
   const main = document.querySelector("#main") || document.querySelector("main") || document.querySelector('[role="main"]');
   if(!main) throw new Error("Abra uma conversa no WhatsApp Web antes de capturar.");
 
+  const olderHistory = await loadOlderMessagesFromPhone(main);
   const transcription = await transcribeCompatibleAudios(main);
 
   const nodes = loadedMessageNodes(main);
@@ -125,6 +176,9 @@ async function extractLoadedMessages(){
     audioCount,
     audioTranscribed:voiceMessageNodes(main).filter(node=>!!transcriptFromNode(node)).length,
     audioExtensionDetected:transcription.compatible,
+    olderHistoryRequested:olderHistory.requested,
+    olderHistoryLoaded:olderHistory.loaded,
+    profilePhotoUrl:profilePhotoUrl(main),
     limited:messages.length >= maximum
   };
 }

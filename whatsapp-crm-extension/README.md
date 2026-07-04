@@ -1,8 +1,9 @@
 # Extensão Criare CRM — Capturar WhatsApp
 
-Esta extensão gratuita abre cada cliente no WhatsApp Web, captura as mensagens
-carregadas e grava o histórico no CRM Criare. A atualização pode ser individual
-ou em lote, sempre processando uma conversa por vez.
+Esta extensão gratuita abre cada cliente no WhatsApp Web, carrega o histórico
+antigo disponível no celular, captura as mensagens e a foto de perfil e grava
+o conteúdo no CRM Criare. A atualização pode ser individual ou em lote, sempre
+processando uma conversa por vez.
 
 ## Instalação única no Chrome
 
@@ -26,10 +27,18 @@ para que o histórico seja associado à pessoa correta.
 Somente as mensagens carregadas na tela são capturadas. Para incluir mensagens
 mais antigas, role a conversa para cima, aguarde o carregamento e capture novamente.
 
+Quando o WhatsApp mostra o aviso **Clique neste aviso para carregar mensagens
+mais antigas do seu celular**, a extensão aciona o carregamento automaticamente
+e aguarda até 20 segundos antes de continuar. Contatos sem conversa são
+classificados como **sem conversa**, sem interromper a atualização em lote.
+
 Na atualização automática, a extensão reutiliza uma única aba do WhatsApp Web,
 navega pelo telefone cadastrado, aguarda o histórico correto e devolve o
 resultado ao registro correspondente. O modo em lote só avança depois que o
 cliente atual terminou, evitando a mistura de conversas.
+
+A foto exibida no cabeçalho da conversa é copiada para uma área privada do CRM;
+o endereço temporário do WhatsApp não é gravado no cadastro.
 Mensagens de
 voz são identificadas no texto como `[Áudio sem transcrição]`; elas nunca são
 silenciosamente tratadas como se fossem mensagens vazias.

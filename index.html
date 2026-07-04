@@ -207,6 +207,9 @@
     .card.grab{cursor:grab;}
     .card.grab:active{cursor:grabbing;}
     .cTop{display:flex; justify-content:space-between; gap:10px; align-items:flex-start}
+    .customerIdentity{display:flex;align-items:center;gap:9px;min-width:0}
+    .customerAvatar{width:34px;height:34px;flex:0 0 34px;border-radius:50%;object-fit:cover;border:1px solid rgba(18,35,52,.18);background:#fff}
+    .customerAvatarFallback{display:grid;place-items:center;font-size:10px;font-weight:700;color:var(--muted)}
     .cName{font-weight:700; font-size:14px; letter-spacing:.2px; line-height:1.15;}
     .rightTop{display:flex; gap:8px; align-items:center}
 
@@ -555,9 +558,12 @@
   <!-- Details modal -->
   <dialog id="modal">
     <div class="modalHd">
-      <div>
-        <div class="modalTitle" id="modalTitle">Detalhes</div>
-        <div class="modalSub" id="modalRequirement">Obrigatório: Nome, Sobrenome, Telefone, Cidade, Ambiente.</div>
+      <div class="modalCustomerIdentity">
+        <img id="modalCustomerAvatar" class="modalCustomerAvatar" alt="Foto do cliente" hidden />
+        <div>
+          <div class="modalTitle" id="modalTitle">Detalhes</div>
+          <div class="modalSub" id="modalRequirement">Obrigatório: Nome, Sobrenome, Telefone, Cidade, Ambiente.</div>
+        </div>
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-left:auto">
         <button class="ghost" id="btnCloseModal">Fechar</button>
@@ -769,7 +775,7 @@
           <div class="whatsappWorkspaceHd">
             <div>
               <div class="whatsappWorkspaceTitle">WhatsApp do cliente</div>
-              <div class="fieldHelp">Atualize a conversa diretamente pelo CRM. A extensão abre o cliente correto, captura as mensagens e grava o histórico sem precisar trocar de tela.</div>
+              <div class="fieldHelp">Atualize diretamente pelo CRM. A extensão abre o cliente correto, carrega o histórico antigo disponível, captura as mensagens e salva também a foto do perfil.</div>
             </div>
             <button class="whatsappAction" id="btnWhatsApp" type="button">Abrir conversa</button>
           </div>
@@ -929,7 +935,7 @@
       <div class="whatsappBulkCurrent" id="whatsappBulkCurrent">Mantenha o Chrome e o WhatsApp Web abertos durante a atualização.</div>
       <div class="whatsappBulkStats">
         <div><strong id="whatsappBulkSuccess">0</strong><span>atualizadas</span></div>
-        <div><strong id="whatsappBulkEmpty">0</strong><span>sem histórico</span></div>
+        <div><strong id="whatsappBulkEmpty">0</strong><span>sem conversa</span></div>
         <div><strong id="whatsappBulkFailed">0</strong><span>com falha</span></div>
       </div>
       <div class="whatsappBulkFailures" id="whatsappBulkFailures" hidden></div>
@@ -979,6 +985,7 @@ const TBL_PENDING = "crm_pending_items";
 const TBL_PENDING_ATTACHMENTS = "crm_pending_attachments";
 const TBL_WHATSAPP_MESSAGES = "crm_whatsapp_messages";
 const PENDING_PHOTO_BUCKET = "crm-pending-photos";
+const WHATSAPP_AVATAR_BUCKET = "crm-whatsapp-avatars";
 
 /* ===== Helpers ===== */
 const $ = (id) => document.getElementById(id);
@@ -1145,7 +1152,7 @@ document.addEventListener("criare-whatsapp-open-result", ()=>{
   delete document.documentElement.dataset.criareWhatsAppOpenResult;
   if(!result.ok) toast(result.error || "Não foi possível abrir o WhatsApp Web. Atualize a extensão Criare.");
 });
-const WHATSAPP_EXTENSION_VERSION = "1.7.0";
+const WHATSAPP_EXTENSION_VERSION = "1.8.0";
 const whatsappAutoSyncWaiters = new Map();
 let whatsappCaptureTimer = null;
 let whatsappBulkCancelled = false;
@@ -1180,7 +1187,7 @@ function requestWhatsAppAutomaticSync(record){
     const timer = setTimeout(()=>{
       whatsappAutoSyncWaiters.delete(requestId);
       resolve({ok:false, requestId, error:"A atualização demorou além do esperado."});
-    }, 50000);
+    }, 90000);
     whatsappAutoSyncWaiters.set(requestId, {resolve, timer});
     document.documentElement.dataset.criareWhatsAppAutoSyncRequest = JSON.stringify(request);
     document.dispatchEvent(new CustomEvent("criare-whatsapp-auto-sync"));
@@ -1204,27 +1211,70 @@ async function saveWhatsAppCapture(targetRecords, result){
   const saved = [];
   for(const record of targetRecords){
     const transcript = mergeWhatsAppTranscripts(record.whatsapp_transcript, result.transcript);
+    let photoPath = record.whatsapp_profile_photo_path || null;
+    let photoUpdatedAt = record.whatsapp_profile_photo_updated_at || null;
+    if(result.profilePhotoDataUrl){
+      try{
+        photoPath = await uploadWhatsAppProfilePhoto(record.id, result.profilePhotoDataUrl);
+        photoUpdatedAt = nowISO();
+      }catch(error){
+        console.warn("[CRM WhatsApp] A conversa foi salva, mas a foto não pôde ser atualizada.", error);
+      }
+    }
     const patch = {
       whatsapp_transcript:transcript || record.whatsapp_transcript || null,
       whatsapp_transcript_updated_at:nowISO(),
       whatsapp_sync_message_count:Number(result.count || 0),
-      whatsapp_sync_error:null
+      whatsapp_sync_error:null,
+      whatsapp_channel_status:result.noConversation ? "not_available" : (result.empty ? "no_messages" : "conversation"),
+      whatsapp_profile_photo_path:photoPath,
+      whatsapp_profile_photo_updated_at:photoUpdatedAt
     };
     const {data, error} = await sb.from(TBL_RECORDS).update(patch).eq("id", record.id).select("*").single();
     if(error) throw new Error(error.message || "Não foi possível gravar a conversa no CRM.");
     const index = records.findIndex(item=>item.id===data.id);
     if(index>=0) records[index]=data;
+    if(photoPath){
+      const {data:signed} = await sb.storage.from(WHATSAPP_AVATAR_BUCKET).createSignedUrl(photoPath, 3600);
+      if(signed?.signedUrl) whatsappAvatarUrls.set(photoPath, signed.signedUrl);
+    }
     saved.push(data);
   }
   return saved;
+}
+
+function dataUrlToBlob(dataUrl){
+  const match = String(dataUrl || "").match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/i);
+  if(!match) throw new Error("Formato de foto inválido.");
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for(let index=0; index<binary.length; index+=1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], {type:match[1].toLowerCase()});
+}
+
+async function uploadWhatsAppProfilePhoto(recordId, dataUrl){
+  const blob = dataUrlToBlob(dataUrl);
+  if(blob.size > 1572864) throw new Error("A foto de perfil ultrapassa 1,5 MB.");
+  const path = `${recordId}/profile`;
+  const {error} = await sb.storage.from(WHATSAPP_AVATAR_BUCKET).upload(path, blob, {
+    upsert:true,
+    contentType:blob.type,
+    cacheControl:"3600"
+  });
+  if(error) throw error;
+  return path;
 }
 
 function whatsappCaptureStatus(result){
   const audioPending = Math.max(0, Number(result.audioCount || 0) - Number(result.audioTranscribed || 0));
   const audioDone = result.audioTranscribed ? ` ${result.audioTranscribed} áudio(s) transcrito(s).` : "";
   const audioWarning = audioPending ? ` ${audioPending} áudio(s) ainda sem transcrição.` : "";
-  if(result.empty) return "Conversa aberta, mas ainda não há mensagens no histórico.";
-  return `${result.count || 0} mensagem(ns) atualizada(s) e gravada(s) no CRM.${audioDone}${audioWarning}`;
+  const older = result.olderHistoryRequested
+    ? (result.olderHistoryLoaded ? " O histórico antigo do celular também foi carregado." : " O WhatsApp não concluiu o carregamento do histórico antigo.")
+    : "";
+  if(result.noConversation) return "Este contato não possui conversa no WhatsApp; o cadastro foi mantido normalmente.";
+  if(result.empty) return "Contato localizado no WhatsApp, mas ainda não há mensagens no histórico.";
+  return `${result.count || 0} mensagem(ns) atualizada(s) e gravada(s) no CRM.${audioDone}${audioWarning}${older}`;
 }
 
 async function captureWhatsAppWebConversation(){
@@ -1238,13 +1288,17 @@ async function captureWhatsAppWebConversation(){
   try{
     const result = await requestWhatsAppAutomaticSync(record);
     if(result.ok && result.extensionVersion !== WHATSAPP_EXTENSION_VERSION){
-      throw new Error("A extensão Criare está desatualizada. Instale a versão 1.7 e atualize as abas do CRM e do WhatsApp Web.");
+      throw new Error("A extensão Criare está desatualizada. Instale a versão 1.8 e atualize as abas do CRM e do WhatsApp Web.");
     }
     if(!result.ok) throw new Error(result.error || "Não foi possível atualizar a conversa.");
     const [saved] = await saveWhatsAppCapture([record], result);
     $("whatsappConversation").value = saved.whatsapp_transcript || "";
+    const modalAvatarUrl = whatsappAvatarUrls.get(saved.whatsapp_profile_photo_path) || "";
+    $("modalCustomerAvatar").hidden = !modalAvatarUrl;
+    $("modalCustomerAvatar").src = modalAvatarUrl;
+    render();
     status.textContent = whatsappCaptureStatus(result);
-    toast(result.empty ? "Cliente verificado; não há mensagens para importar." : "Conversa atualizada e gravada no CRM.");
+    toast(result.empty ? "Cliente verificado; não há conversa para importar." : "Conversa e foto atualizadas no CRM.");
   }catch(error){
     status.textContent = error.message || "Não foi possível atualizar a conversa.";
     toast(status.textContent);
@@ -1268,7 +1322,7 @@ document.addEventListener("criare-whatsapp-result", ()=>{
   if(result.ok && result.extensionVersion !== WHATSAPP_EXTENSION_VERSION){
     result = {
       ok:false,
-      error:"A extensão Criare está desatualizada. Instale a versão 1.7 e atualize as abas do CRM e do WhatsApp Web."
+      error:"A extensão Criare está desatualizada. Instale a versão 1.8 e atualize as abas do CRM e do WhatsApp Web."
     };
   }
   if(!result.ok){
@@ -1314,7 +1368,10 @@ function updateWhatsAppBulkUi({done, total, success, empty, failed, current="", 
 async function saveWhatsAppSyncError(targetRecords, message){
   const ids = targetRecords.map(record=>record.id);
   if(!ids.length) return;
-  const {error} = await sb.from(TBL_RECORDS).update({whatsapp_sync_error:String(message || "Falha na atualização").slice(0,500)}).in("id", ids);
+  const {error} = await sb.from(TBL_RECORDS).update({
+    whatsapp_sync_error:String(message || "Falha na atualização").slice(0,500),
+    whatsapp_channel_status:"error"
+  }).in("id", ids);
   if(error) console.warn("[CRM WhatsApp] Não foi possível registrar a falha.", error);
 }
 
@@ -1351,7 +1408,7 @@ async function syncAllWhatsAppConversations(){
     try{
       const result = await requestWhatsAppAutomaticSync(representative);
       if(result.ok && result.extensionVersion !== WHATSAPP_EXTENSION_VERSION){
-        throw new Error("Instale a extensão Criare 1.7 antes de continuar.");
+        throw new Error("Instale a extensão Criare 1.8 antes de continuar.");
       }
       if(!result.ok) throw new Error(result.error || "Falha ao carregar a conversa.");
       await saveWhatsAppCapture(targetRecords, result);
@@ -1734,6 +1791,7 @@ let weeklyReportsSupported = true;
 let pendingItems = [];
 let pendingAttachments = [];
 let pendingPhotosBuffer = [];
+let whatsappAvatarUrls = new Map();
 let pendingSupported = true;
 let showCompletedPending = false;
 let outlookStatus = { configured:false, connected:false, account_email:null, provider:null };
@@ -1877,6 +1935,7 @@ function lockApp(){
   weeklyReports = [];
   pendingItems = [];
   pendingAttachments = [];
+  whatsappAvatarUrls = new Map();
   hasInitialRecordSnapshot = false;
   hasInitialWeeklySnapshot = false;
   setSyncConnectionState("offline");
@@ -2042,6 +2101,24 @@ function recordsStateVersion(items){
     .join("|");
 }
 
+async function refreshWhatsAppAvatarUrls(items=records){
+  const paths = [...new Set(items.map(record=>record.whatsapp_profile_photo_path).filter(Boolean))];
+  const next = new Map();
+  if(!paths.length){
+    whatsappAvatarUrls = next;
+    return;
+  }
+  const {data, error} = await sb.storage.from(WHATSAPP_AVATAR_BUCKET).createSignedUrls(paths, 3600);
+  if(error){
+    console.warn("[CRM WhatsApp] Fotos de perfil temporariamente indisponíveis.", error);
+    return;
+  }
+  for(const item of data || []){
+    if(item?.path && item?.signedUrl) next.set(item.path, item.signedUrl);
+  }
+  whatsappAvatarUrls = next;
+}
+
 async function fetchRecords({ reason="sincronização", notifyNew=true, showError=false }={}){
   if(!sb || !session?.user) return false;
 
@@ -2065,6 +2142,7 @@ async function fetchRecords({ reason="sincronização", notifyNew=true, showErro
     const loadedRecords = data || [];
     const changed = previousVersion !== recordsStateVersion(loadedRecords);
     records = loadedRecords;
+    await refreshWhatsAppAvatarUrls(records);
     if(hadInitialSnapshot && notifyNew){
       records
         .filter(record => !previousIds.has(record.id))
@@ -2446,6 +2524,11 @@ function renderKPIs(scope){
 
 function renderCard(r){
   const name = fullName(r);
+  const avatarUrl = whatsappAvatarUrls.get(r.whatsapp_profile_photo_path) || "";
+  const initials = `${r.first_name?.[0] || ""}${r.last_name?.[0] || ""}`.toUpperCase() || "?";
+  const avatar = avatarUrl
+    ? `<img class="customerAvatar" src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" />`
+    : `<span class="customerAvatar customerAvatarFallback" aria-hidden="true">${escapeHtml(initials)}</span>`;
   let st = r.stage || (r.pipeline==="lead" ? "Novo" : "Contrato realizado");
   if(r.pipeline==="lead") st = normalizeLeadStage(st); else st = normalizeClosedStage(st);
   const age = stageAge(r);
@@ -2466,7 +2549,7 @@ function renderCard(r){
   return `
     <div class="card ${stageClass(st)} grab" draggable="${isMobileLayout() ? "false" : "true"}" data-id="${escapeHtml(r.id)}" title="Toque para abrir detalhes">
       <div class="cTop">
-        <div class="cName">${escapeHtml(name)}</div>
+        <div class="customerIdentity">${avatar}<div class="cName">${escapeHtml(name)}</div></div>
         <div class="rightTop">
           <span class="badge" title="Responsável">${escapeHtml(profileNameById(r.owner_id))}</span>
           ${stuckTag}
@@ -3274,6 +3357,9 @@ function openModal(record=null, options={}){
     : (kind === "specifier" ? "Detalhes do especificador" : "Detalhes do cliente");
 
   $("id").value = record?.id || "";
+  const modalAvatarUrl = whatsappAvatarUrls.get(record?.whatsapp_profile_photo_path) || "";
+  $("modalCustomerAvatar").hidden = !modalAvatarUrl;
+  $("modalCustomerAvatar").src = modalAvatarUrl;
   $("firstName").value = record?.first_name || "";
   $("lastName").value = record?.last_name || "";
   $("phone").value = record?.phone || "";
@@ -3283,9 +3369,13 @@ function openModal(record=null, options={}){
   $("estimate").value = (record?.estimate ?? "");
   $("notes").value = record?.notes || "";
   $("whatsappConversation").value = record?.whatsapp_transcript || "";
-  $("whatsappSyncStatus").textContent = record?.whatsapp_transcript_updated_at
-    ? `Histórico atualizado em ${fmtBRDateTime(record.whatsapp_transcript_updated_at)} • ${Number(record.whatsapp_sync_message_count || 0)} mensagem(ns) na última captura.${record.whatsapp_sync_error ? ` Última tentativa: ${record.whatsapp_sync_error}` : ""}`
-    : (isNew ? "Salve o cliente antes de atualizar a conversa." : "Conversa ainda não atualizada automaticamente.");
+  $("whatsappSyncStatus").textContent = record?.whatsapp_channel_status === "not_available"
+    ? `Sem conversa no WhatsApp • verificado em ${fmtBRDateTime(record.whatsapp_transcript_updated_at)}.`
+    : (record?.whatsapp_channel_status === "no_messages"
+      ? `Contato localizado no WhatsApp, mas sem mensagens • verificado em ${fmtBRDateTime(record.whatsapp_transcript_updated_at)}.`
+      : (record?.whatsapp_transcript_updated_at
+        ? `Histórico atualizado em ${fmtBRDateTime(record.whatsapp_transcript_updated_at)} • ${Number(record.whatsapp_sync_message_count || 0)} mensagem(ns) na última captura.${record.whatsapp_sync_error ? ` Última tentativa: ${record.whatsapp_sync_error}` : ""}`
+        : (isNew ? "Salve o cliente antes de atualizar a conversa." : "Conversa ainda não atualizada automaticamente.")));
   $("whatsappAnalysisMode").value = "Resumo gerencial";
   $("whatsappSummary").value = record?.whatsapp_summary || "";
   $("whatsappSummary").dataset.model = record?.whatsapp_summary_model || "";

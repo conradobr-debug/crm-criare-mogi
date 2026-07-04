@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Criare CRM — Atualizar WhatsApp",
-  "version": "1.7.0",
-  "description": "Atualiza conversas do WhatsApp Web diretamente no CRM Criare, individualmente ou em lote.",
+  "version": "1.8.0",
+  "description": "Atualiza conversas e fotos do WhatsApp Web diretamente no CRM Criare, individualmente ou em lote.",
   "permissions": ["tabs", "storage"],
   "host_permissions": [
     "https://web.whatsapp.com/*",
+    "https://*.whatsapp.net/*",
     "https://conradobr-debug.github.io/crm-criare-mogi/*"
   ],
   "background": {

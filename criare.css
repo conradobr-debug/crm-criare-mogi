@@ -190,6 +190,8 @@ label{color:#625d57;font-weight:600}
 dialog{border-radius:3px;border-color:#cfc7bd;background:#f8f6f2;color:#171717;box-shadow:0 24px 70px rgba(0,0,0,.35)}
 dialog::backdrop{background:rgba(10,10,10,.68);backdrop-filter:blur(3px)}
 .modalHd{color:#fff;background:#0b0b0b;border-color:#343434}
+.modalCustomerIdentity{display:flex;align-items:center;gap:12px;min-width:0}
+.modalCustomerAvatar{width:48px;height:48px;flex:0 0 48px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,.35);background:#fff}
 .modalHd .modalSub{color:rgba(255,255,255,.62)}
 .modalHd button{border-color:rgba(255,255,255,.35);color:#fff}
 .modalBd{background:#f5f2ed}

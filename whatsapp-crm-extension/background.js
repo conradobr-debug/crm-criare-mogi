@@ -18,10 +18,17 @@ function sleep(ms){
 async function waitForChat(tabId, request, {previousTitle="", allowSameTitle=false, timeoutMs=24000}={}){
   const deadline = Date.now() + timeoutMs;
   let emptyChecks = 0;
+  let unavailableChecks = 0;
   await sleep(1500);
   while(Date.now() < deadline){
     try{
       const state = await chrome.tabs.sendMessage(tabId, {type:"criare-chat-load-state", request});
+      if(state?.unavailable){
+        unavailableChecks += 1;
+        if(unavailableChecks >= 3) return {ready:true, empty:true, unavailable:true, state};
+      }else{
+        unavailableChecks = 0;
+      }
       const correctConversation = Boolean(state?.matches || allowSameTitle || (state?.title && state.title !== previousTitle));
       if(correctConversation && state?.ready) return {ready:true, empty:false, state};
       if(correctConversation && state?.empty){
@@ -36,6 +43,39 @@ async function waitForChat(tabId, request, {previousTitle="", allowSameTitle=fal
     await sleep(1000);
   }
   return {ready:false, empty:false, state:null};
+}
+
+function bytesToBase64(bytes){
+  let binary = "";
+  const chunkSize = 0x8000;
+  for(let offset=0; offset<bytes.length; offset+=chunkSize){
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function profilePhotoDataUrl(source){
+  if(!source) return "";
+  if(source.startsWith("data:image/")) return source.length <= 1500000 ? source : "";
+  if(!source.startsWith("https://")) return "";
+  try{
+    const response = await fetch(source, {credentials:"omit", cache:"no-store"});
+    if(!response.ok) return "";
+    const blob = await response.blob();
+    if(!blob.type.startsWith("image/") || blob.size > 1500000) return "";
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    return `data:${blob.type};base64,${bytesToBase64(bytes)}`;
+  }catch(error){
+    return "";
+  }
+}
+
+async function withProfilePhoto(result, source){
+  const dataUrl = await profilePhotoDataUrl(source || result?.profilePhotoUrl || "");
+  const cleanResult = {...result};
+  delete cleanResult.profilePhotoUrl;
+  if(dataUrl) cleanResult.profilePhotoDataUrl = dataUrl;
+  return cleanResult;
 }
 
 async function reusableWhatsAppTab({active=true}={}){
@@ -85,9 +125,10 @@ async function syncCustomerChat(request){
     };
   }
   if(loaded.empty){
-    return {
+    return withProfilePhoto({
       ok:true,
       empty:true,
+      noConversation:Boolean(loaded.unavailable),
       transcript:"",
       count:0,
       title:loaded.state?.title || "",
@@ -95,13 +136,14 @@ async function syncCustomerChat(request){
       audioTranscribed:0,
       audioExtensionDetected:false,
       extensionVersion:chrome.runtime.getManifest().version
-    };
+    }, loaded.state?.profilePhotoUrl);
   }
   const result = await chrome.tabs.sendMessage(tab.id, {
     type:"criare-extract-active-chat",
     request:{...request, trustedTarget:true}
   });
-  return result || {ok:false, extensionVersion:chrome.runtime.getManifest().version, error:"A conversa não devolveu mensagens."};
+  if(!result) return {ok:false, extensionVersion:chrome.runtime.getManifest().version, error:"A conversa não devolveu mensagens."};
+  return withProfilePhoto(result, result.profilePhotoUrl || loaded.state?.profilePhotoUrl);
 }
 
 async function captureCustomerChat(request){
