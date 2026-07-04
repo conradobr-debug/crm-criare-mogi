@@ -47,6 +47,10 @@ acrescenta somente mensagens novas, preserva as anteriores e pode ser repetida
 sem duplicar o conteúdo. Se um telefone inválido abrir um aviso no WhatsApp, a
 extensão fecha esse aviso antes de avançar para o próximo cliente.
 
+Antes de extrair, a extensão aguarda a quantidade de mensagens carregadas ficar
+estável. Isso evita salvar apenas o último áudio ou a última mensagem enquanto
+os demais balões ainda estão aparecendo na tela.
+
 A foto exibida no cabeçalho da conversa é copiada para uma área privada do CRM;
 o endereço temporário do WhatsApp não é gravado no cadastro.
 Mensagens de

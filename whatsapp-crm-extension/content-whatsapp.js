@@ -42,6 +42,20 @@ function loadedMessageNodes(main){
   return [...main.querySelectorAll("[data-pre-plain-text]")];
 }
 
+async function waitForMessagesToSettle(main, {timeoutMs=6000}={}){
+  const deadline = Date.now() + timeoutMs;
+  let previousCount = -1;
+  let stableChecks = 0;
+  while(Date.now() < deadline){
+    const currentCount = loadedMessageNodes(main).length;
+    stableChecks = currentCount === previousCount ? stableChecks + 1 : 0;
+    previousCount = currentCount;
+    if(currentCount > 0 && stableChecks >= 3) return currentCount;
+    await new Promise(resolve=>setTimeout(resolve, 500));
+  }
+  return loadedMessageNodes(main).length;
+}
+
 function olderMessagesButton(main){
   const phrases = [
     "clique neste aviso para carregar mensagens mais antigas do seu celular",
@@ -164,7 +178,9 @@ async function extractLoadedMessages(){
   const main = document.querySelector("#main") || document.querySelector("main") || document.querySelector('[role="main"]');
   if(!main) throw new Error("Abra uma conversa no WhatsApp Web antes de capturar.");
 
+  await waitForMessagesToSettle(main);
   const olderHistory = await loadOlderMessagesFromPhone(main);
+  if(olderHistory.requested) await waitForMessagesToSettle(main);
   const transcription = await transcribeCompatibleAudios(main);
 
   const nodes = loadedMessageNodes(main);

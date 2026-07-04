@@ -19,6 +19,8 @@ async function waitForChat(tabId, request, {previousTitle="", allowSameTitle=fal
   const deadline = Date.now() + timeoutMs;
   let emptyChecks = 0;
   let unavailableChecks = 0;
+  let stableMessageChecks = 0;
+  let previousMessageCount = -1;
   await sleep(1500);
   while(Date.now() < deadline){
     try{
@@ -30,7 +32,15 @@ async function waitForChat(tabId, request, {previousTitle="", allowSameTitle=fal
         unavailableChecks = 0;
       }
       const correctConversation = Boolean(state?.matches || allowSameTitle || (state?.title && state.title !== previousTitle));
-      if(correctConversation && state?.ready) return {ready:true, empty:false, state};
+      if(correctConversation && state?.ready){
+        const currentCount = Number(state.count || 0);
+        stableMessageChecks = currentCount === previousMessageCount ? stableMessageChecks + 1 : 0;
+        previousMessageCount = currentCount;
+        if(stableMessageChecks >= 2) return {ready:true, empty:false, state};
+      }else{
+        stableMessageChecks = 0;
+        previousMessageCount = -1;
+      }
       if(correctConversation && state?.empty){
         emptyChecks += 1;
         if(emptyChecks >= 10) return {ready:true, empty:true, state};
