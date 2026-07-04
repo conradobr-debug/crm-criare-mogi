@@ -3420,7 +3420,6 @@ function openModal(record=null, options={}){
   $("fCity").value = prevCity;
 
   $("modal").showModal();
-  if(record?.id) fetchWhatsAppConversation(record);
   if(options.focusSchedule){
     setTimeout(()=>$("nextAction").focus(), 50);
   }
