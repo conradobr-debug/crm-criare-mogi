@@ -1,7 +1,8 @@
 # Extensão Criare CRM — Capturar WhatsApp
 
-Esta extensão gratuita captura as mensagens já carregadas na conversa aberta no
-WhatsApp Web e envia o texto para o campo de análise do CRM Criare.
+Esta extensão gratuita abre cada cliente no WhatsApp Web, captura as mensagens
+carregadas e grava o histórico no CRM Criare. A atualização pode ser individual
+ou em lote, sempre processando uma conversa por vez.
 
 ## Instalação única no Chrome
 
@@ -17,19 +18,18 @@ para que o histórico seja associado à pessoa correta.
 
 ## Uso
 
-1. Abra o cliente no CRM.
-2. Clique em **Abrir conversa** e deixe a aba do WhatsApp Web carregar o cliente.
-3. Volte ao CRM e clique em **Capturar do WhatsApp Web**.
-4. Escolha o tipo de análise e use **Analisar automaticamente** ou o GPT da Criare.
+1. Mantenha o WhatsApp Web conectado no Chrome.
+2. Abra o cliente e clique em **Atualizar esta conversa**; ou use **Atualizar
+   WhatsApp** no topo do CRM para percorrer todos os telefones cadastrados.
+3. Escolha o tipo de análise e use **Analisar automaticamente** ou o GPT da Criare.
 
 Somente as mensagens carregadas na tela são capturadas. Para incluir mensagens
 mais antigas, role a conversa para cima, aguarde o carregamento e capture novamente.
 
-Ao abrir a conversa, a extensão reutiliza a aba mais recente do WhatsApp Web —
-ou cria uma quando não existe — e registra essa aba para o telefone do cliente.
-A captura aceita somente essa aba. Se o usuário não clicar em **Abrir
-conversa** naquele cliente primeiro, a captura é recusada; nenhuma outra aba ou
-conversa anterior é reutilizada.
+Na atualização automática, a extensão reutiliza uma única aba do WhatsApp Web,
+navega pelo telefone cadastrado, aguarda o histórico correto e devolve o
+resultado ao registro correspondente. O modo em lote só avança depois que o
+cliente atual terminou, evitando a mistura de conversas.
 Mensagens de
 voz são identificadas no texto como `[Áudio sem transcrição]`; elas nunca são
 silenciosamente tratadas como se fossem mensagens vazias.

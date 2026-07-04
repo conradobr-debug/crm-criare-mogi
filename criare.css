@@ -148,6 +148,18 @@ label{color:#625d57;font-weight:600}
 .manualGptSteps{display:flex;gap:8px;flex-wrap:wrap;margin:-4px 0 14px;color:#655f58;font-size:10px;line-height:1.35}
 .manualGptSteps span{padding:6px 8px;border:1px solid #d8d2ca;background:#fff;border-radius:2px}
 .whatsappSummaryMeta{margin-top:6px;color:#716b64;font-size:10px;line-height:1.4}
+.whatsappBulkModal{width:min(620px,94vw)}
+.whatsappBulkBody{display:flex;flex-direction:column;gap:14px}
+.whatsappBulkProgress{height:9px;overflow:hidden;border:1px solid #ccc5bc;background:#e8e3dc}
+.whatsappBulkProgress span{display:block;width:0;height:100%;background:#647a63;transition:width .25s ease}
+.whatsappBulkCount{font-size:20px;font-weight:600;color:#24211e}
+.whatsappBulkCurrent{min-height:36px;color:#68615a;font-size:12px;line-height:1.45}
+.whatsappBulkStats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.whatsappBulkStats div{display:flex;flex-direction:column;gap:2px;padding:12px;border:1px solid #d6d0c8;background:#fff}
+.whatsappBulkStats strong{font-size:22px;font-weight:600}
+.whatsappBulkStats span{font-size:10px;color:#736c64}
+.whatsappBulkFailures{max-height:150px;overflow:auto;padding:10px;border:1px solid #d7aaa5;background:#fff5f3;color:#7d342f;font-size:11px;line-height:1.5}
+.whatsappBulkFooter{align-items:center}
 
 .card{border-radius:2px;border-color:#d8d2ca;background:#fff;box-shadow:0 5px 18px rgba(40,32,25,.055)}
 .card:hover{border-color:#8d8378;background:#fff}
@@ -287,6 +299,7 @@ dialog::backdrop{background:rgba(10,10,10,.68);backdrop-filter:blur(3px)}
   .whatsappWorkspace{padding:12px}.whatsappWorkspaceHd{align-items:flex-start;flex-direction:column}.whatsappWorkspaceHd button{width:100%;min-height:46px}
   .whatsappActions{display:grid;grid-template-columns:1fr 1fr}.whatsappActions button{min-height:46px;width:100%}
   .whatsappActions .manualGptAction{grid-column:1/-1}
+  .whatsappBulkModal{width:100vw}
   .manualGptSteps{display:grid;grid-template-columns:1fr}.manualGptSteps span{padding:8px 9px}
   .whatsappConversation{min-height:190px}.whatsappSummary{min-height:260px}
   .summaryGrid{grid-template-columns:1fr 1fr}.sectionCard{min-width:0;width:100%;max-width:none}

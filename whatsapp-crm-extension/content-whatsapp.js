@@ -26,9 +26,30 @@ function sameCustomer(title, request){
 }
 
 function voiceMessageNodes(main){
-  return [...main.querySelectorAll("[data-pre-plain-text]")].filter(node=>
+  return loadedMessageNodes(main).filter(node=>
     node.querySelector('[aria-label="Mensagem de voz"], [aria-label*="voice message" i], [data-testid="audio-download"]')
   );
+}
+
+function loadedMessageNodes(main){
+  const containers = [...main.querySelectorAll('[data-testid^="conv-msg-"]')]
+    .filter(node=>!node.querySelector('[data-testid="system_message"]'));
+  if(containers.length) return containers;
+  return [...main.querySelectorAll("[data-pre-plain-text]")];
+}
+
+function chatLoadState(request={}){
+  const main = document.querySelector("#main") || document.querySelector("main") || document.querySelector('[role="main"]');
+  if(!main) return {ready:false, title:"", count:0};
+  const title = activeChatTitle();
+  const count = loadedMessageNodes(main).length;
+  return {
+    ready:Boolean(title && count),
+    empty:Boolean(title && !count),
+    title,
+    count,
+    matches:sameCustomer(title, request)
+  };
 }
 
 function transcriptFromNode(node){
@@ -71,16 +92,18 @@ async function extractLoadedMessages(){
 
   const transcription = await transcribeCompatibleAudios(main);
 
-  const nodes = [...main.querySelectorAll("[data-pre-plain-text]")];
+  const nodes = loadedMessageNodes(main);
   if(!nodes.length) throw new Error("A conversa ainda não carregou. Aguarde alguns segundos e tente novamente.");
 
   const seen = new Set();
   const messages = [];
   let audioCount = 0;
   for(const node of nodes){
-    const prefix = cleanText(node.getAttribute("data-pre-plain-text"));
+    const detailNode = node.hasAttribute("data-pre-plain-text") ? node : node.querySelector("[data-pre-plain-text]");
+    const prefix = cleanText(detailNode?.getAttribute("data-pre-plain-text"));
     const hasVoiceMessage = !!node.querySelector('[aria-label="Mensagem de voz"], [aria-label*="voice message" i], [data-testid="audio-download"]');
-    let body = cleanText(node.innerText || node.textContent);
+    const bodyNode = detailNode || node;
+    let body = cleanText(bodyNode.innerText || bodyNode.textContent);
     if(hasVoiceMessage){
       audioCount += 1;
       const transcript = transcriptFromNode(node);
@@ -107,6 +130,10 @@ async function extractLoadedMessages(){
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if(message?.type === "criare-chat-load-state"){
+    sendResponse({ok:true, extensionVersion:chrome.runtime.getManifest().version, ...chatLoadState(message.request || {})});
+    return false;
+  }
   if(message?.type !== "criare-extract-active-chat") return false;
   (async ()=>{
     try{
