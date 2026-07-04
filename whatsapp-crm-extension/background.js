@@ -184,12 +184,13 @@ async function syncCustomerChat(request){
       type:"criare-extract-active-chat",
       request:{...request, trustedTarget:true}
     });
-    if(!result?.ok || Number(result.count || 0) >= visibleCount) break;
-    await sleep(1200);
+    if(!result?.ok) break;
+    await sleep(attempt === 0 ? 3000 : 1200);
     try{
       const currentState = await chrome.tabs.sendMessage(tab.id, {type:"criare-chat-load-state", request});
       visibleCount = Math.max(visibleCount, Number(currentState?.count || 0));
     }catch(error){}
+    if(Number(result.count || 0) >= visibleCount) break;
   }
   if(!result) return {ok:false, extensionVersion:chrome.runtime.getManifest().version, error:"A conversa não devolveu mensagens."};
   if(result.ok && visibleCount > 0 && Number(result.count || 0) < visibleCount){

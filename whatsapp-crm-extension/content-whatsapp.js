@@ -1,4 +1,4 @@
-const CRIARE_CONTENT_SCRIPT_VERSION = "1.9.4";
+const CRIARE_CONTENT_SCRIPT_VERSION = "1.9.5";
 
 function cleanText(value){
   return String(value || "").replace(/\u200e|\u200f/g, "").replace(/\n{3,}/g, "\n\n").trim();
@@ -47,7 +47,8 @@ function loadedMessageNodes(main){
   return [...main.querySelectorAll("[data-pre-plain-text]")];
 }
 
-async function waitForMessagesToSettle(main, {timeoutMs=6000}={}){
+async function waitForMessagesToSettle(main, {timeoutMs=12000, minWaitMs=6000}={}){
+  const startedAt = Date.now();
   const deadline = Date.now() + timeoutMs;
   let previousCount = -1;
   let stableChecks = 0;
@@ -55,7 +56,7 @@ async function waitForMessagesToSettle(main, {timeoutMs=6000}={}){
     const currentCount = loadedMessageNodes(main).length;
     stableChecks = currentCount === previousCount ? stableChecks + 1 : 0;
     previousCount = currentCount;
-    if(currentCount > 0 && stableChecks >= 3) return currentCount;
+    if(currentCount > 0 && stableChecks >= 3 && Date.now() - startedAt >= minWaitMs) return currentCount;
     await new Promise(resolve=>setTimeout(resolve, 500));
   }
   return loadedMessageNodes(main).length;

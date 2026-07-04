@@ -64,6 +64,10 @@ A deduplicação usa o identificador único de cada mensagem do WhatsApp, e não
 mais apenas o texto. Assim, mensagens repetidas e vários áudios sem transcrição
 são preservados separadamente no histórico.
 
+O leitor mantém uma espera mínima antes da primeira extração e confere a
+quantidade de mensagens novamente alguns segundos depois. Se mensagens mais
+antigas aparecerem com atraso, uma segunda extração é feita automaticamente.
+
 A foto exibida no cabeçalho da conversa é copiada para uma área privada do CRM;
 o endereço temporário do WhatsApp não é gravado no cadastro.
 Mensagens de
