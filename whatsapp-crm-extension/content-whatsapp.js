@@ -1,3 +1,5 @@
+const CRIARE_CONTENT_SCRIPT_VERSION = "1.9.2";
+
 function cleanText(value){
   return String(value || "").replace(/\u200e|\u200f/g, "").replace(/\n{3,}/g, "\n\n").trim();
 }
@@ -225,12 +227,16 @@ async function extractLoadedMessages(){
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if(message?.type === "criare-content-script-status"){
+    sendResponse({ok:true, contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION});
+    return false;
+  }
   if(message?.type === "criare-prepare-next-chat"){
-    sendResponse({ok:true, dismissed:dismissUnavailableDialog(), extensionVersion:chrome.runtime.getManifest().version});
+    sendResponse({ok:true, dismissed:dismissUnavailableDialog(), extensionVersion:chrome.runtime.getManifest().version, contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION});
     return false;
   }
   if(message?.type === "criare-chat-load-state"){
-    sendResponse({ok:true, extensionVersion:chrome.runtime.getManifest().version, ...chatLoadState(message.request || {})});
+    sendResponse({ok:true, extensionVersion:chrome.runtime.getManifest().version, contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION, ...chatLoadState(message.request || {})});
     return false;
   }
   if(message?.type !== "criare-extract-active-chat") return false;
@@ -249,11 +255,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
       const extracted = await extractLoadedMessages();
-      sendResponse({ok:true, title, extensionVersion:chrome.runtime.getManifest().version, ...extracted});
+      sendResponse({ok:true, title, extensionVersion:chrome.runtime.getManifest().version, contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION, ...extracted});
     }catch(error){
       sendResponse({
         ok:false,
         extensionVersion:chrome.runtime.getManifest().version,
+        contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,
         error:error.message || "Não foi possível ler a conversa aberta."
       });
     }

@@ -51,6 +51,11 @@ Antes de extrair, a extensão aguarda a quantidade de mensagens carregadas ficar
 estável. Isso evita salvar apenas o último áudio ou a última mensagem enquanto
 os demais balões ainda estão aparecendo na tela.
 
+A extensão também verifica a versão do leitor que está rodando dentro da aba do
+WhatsApp Web. Se o Chrome manteve um leitor antigo depois de uma atualização, a
+aba é recarregada automaticamente. A captura é recusada quando a quantidade
+lida for menor que a quantidade de mensagens visíveis, protegendo o histórico.
+
 A foto exibida no cabeçalho da conversa é copiada para uma área privada do CRM;
 o endereço temporário do WhatsApp não é gravado no cadastro.
 Mensagens de

@@ -15,6 +15,25 @@ function sleep(ms){
   return new Promise(resolve=>setTimeout(resolve, ms));
 }
 
+async function ensureCurrentWhatsAppContentScript(tabId){
+  const expectedVersion = chrome.runtime.getManifest().version;
+  let reloaded = false;
+  for(let attempt=0; attempt<24; attempt+=1){
+    try{
+      const status = await chrome.tabs.sendMessage(tabId, {type:"criare-content-script-status"});
+      if(status?.contentScriptVersion === expectedVersion) return {ok:true, reloaded};
+    }catch(error){
+      // A aba pode estar navegando ou ainda usar o leitor de uma versão anterior.
+    }
+    if(!reloaded){
+      await chrome.tabs.reload(tabId);
+      reloaded = true;
+    }
+    await sleep(1000);
+  }
+  throw new Error("A aba do WhatsApp Web não carregou o leitor atualizado. Recarregue a aba e tente novamente.");
+}
+
 async function waitForChat(tabId, request, {previousTitle="", allowSameTitle=false, timeoutMs=30000}={}){
   const deadline = Date.now() + timeoutMs;
   let emptyChecks = 0;
@@ -129,6 +148,7 @@ async function syncCustomerChat(request){
   const allowSameTitle = String(reusable.url || "").includes(phone);
   const tab = await chrome.tabs.update(reusable.id, {url, active:false});
   await saveTarget(phone, tab.id);
+  await ensureCurrentWhatsAppContentScript(tab.id);
   const loaded = await waitForChat(tab.id, request, {
     previousTitle:previousState?.title || "",
     allowSameTitle
@@ -157,11 +177,28 @@ async function syncCustomerChat(request){
       extensionVersion:chrome.runtime.getManifest().version
     }, loaded.state?.profilePhotoUrl);
   }
-  const result = await chrome.tabs.sendMessage(tab.id, {
-    type:"criare-extract-active-chat",
-    request:{...request, trustedTarget:true}
-  });
+  let result = null;
+  let visibleCount = Number(loaded.state?.count || 0);
+  for(let attempt=0; attempt<3; attempt+=1){
+    result = await chrome.tabs.sendMessage(tab.id, {
+      type:"criare-extract-active-chat",
+      request:{...request, trustedTarget:true}
+    });
+    if(!result?.ok || Number(result.count || 0) >= visibleCount) break;
+    await sleep(1200);
+    try{
+      const currentState = await chrome.tabs.sendMessage(tab.id, {type:"criare-chat-load-state", request});
+      visibleCount = Math.max(visibleCount, Number(currentState?.count || 0));
+    }catch(error){}
+  }
   if(!result) return {ok:false, extensionVersion:chrome.runtime.getManifest().version, error:"A conversa não devolveu mensagens."};
+  if(result.ok && visibleCount > 0 && Number(result.count || 0) < visibleCount){
+    return {
+      ok:false,
+      extensionVersion:chrome.runtime.getManifest().version,
+      error:`O WhatsApp exibe ${visibleCount} mensagem(ns), mas apenas ${Number(result.count || 0)} puderam ser lidas. Nada foi substituído; recarregue o WhatsApp Web e tente novamente.`
+    };
+  }
   return withProfilePhoto(result, result.profilePhotoUrl || loaded.state?.profilePhotoUrl);
 }
 
