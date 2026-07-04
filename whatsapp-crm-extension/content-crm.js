@@ -51,3 +51,20 @@ document.addEventListener("criare-whatsapp-auto-sync", () => {
     document.dispatchEvent(new CustomEvent("criare-whatsapp-auto-sync-result"));
   });
 });
+
+document.addEventListener("criare-whatsapp-extension-ping", () => {
+  let request = {};
+  try{
+    request = JSON.parse(document.documentElement.dataset.criareWhatsAppExtensionPingRequest || "{}");
+  }catch(error){
+    request = {};
+  }
+  delete document.documentElement.dataset.criareWhatsAppExtensionPingRequest;
+  chrome.runtime.sendMessage({type:"criare-extension-status"}, result => {
+    const response = chrome.runtime.lastError
+      ? {ok:false, requestId:request.requestId, error:"Extensão Criare indisponível neste computador."}
+      : {...(result || {ok:false}), requestId:request.requestId};
+    document.documentElement.dataset.criareWhatsAppExtensionPingResult = JSON.stringify(response);
+    document.dispatchEvent(new CustomEvent("criare-whatsapp-extension-ping-result"));
+  });
+});

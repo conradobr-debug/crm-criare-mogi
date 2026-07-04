@@ -15,7 +15,7 @@ function sleep(ms){
   return new Promise(resolve=>setTimeout(resolve, ms));
 }
 
-async function waitForChat(tabId, request, {previousTitle="", allowSameTitle=false, timeoutMs=24000}={}){
+async function waitForChat(tabId, request, {previousTitle="", allowSameTitle=false, timeoutMs=30000}={}){
   const deadline = Date.now() + timeoutMs;
   let emptyChecks = 0;
   let unavailableChecks = 0;
@@ -33,7 +33,7 @@ async function waitForChat(tabId, request, {previousTitle="", allowSameTitle=fal
       if(correctConversation && state?.ready) return {ready:true, empty:false, state};
       if(correctConversation && state?.empty){
         emptyChecks += 1;
-        if(emptyChecks >= 4) return {ready:true, empty:true, state};
+        if(emptyChecks >= 10) return {ready:true, empty:true, state};
       }else{
         emptyChecks = 0;
       }
@@ -104,6 +104,12 @@ async function syncCustomerChat(request){
   }
   const url = `https://web.whatsapp.com/send/?phone=${phone}&type=phone_number&app_absent=0`;
   const reusable = await reusableWhatsAppTab({active:false});
+  try{
+    await chrome.tabs.sendMessage(reusable.id, {type:"criare-prepare-next-chat"});
+    await sleep(300);
+  }catch(error){
+    // A aba pode ainda estar carregando; a navegação abaixo continua normalmente.
+  }
   let previousState = null;
   try{
     previousState = await chrome.tabs.sendMessage(reusable.id, {type:"criare-chat-load-state", request});
@@ -125,6 +131,9 @@ async function syncCustomerChat(request){
     };
   }
   if(loaded.empty){
+    if(loaded.unavailable){
+      try{ await chrome.tabs.sendMessage(tab.id, {type:"criare-prepare-next-chat"}); }catch(error){}
+    }
     return withProfilePhoto({
       ok:true,
       empty:true,
@@ -176,6 +185,10 @@ async function captureCustomerChat(request){
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if(message?.type === "criare-extension-status"){
+    sendResponse({ok:true, extensionVersion:chrome.runtime.getManifest().version});
+    return false;
+  }
   if(message?.type === "criare-open-whatsapp-chat"){
     openCustomerChat(message.request).then(sendResponse).catch(()=>sendResponse({
       ok:false,

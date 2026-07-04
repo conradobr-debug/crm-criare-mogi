@@ -74,15 +74,39 @@ function profilePhotoUrl(main){
   return /^(https:|data:image\/)/i.test(source) ? source : "";
 }
 
-function conversationUnavailable(){
-  const text = normalizedUiText(document.body?.innerText || "");
+function unavailablePhrases(){
   return [
     "o numero de telefone compartilhado atraves do link e invalido",
     "este numero de telefone nao esta no whatsapp",
     "phone number shared via url is invalid",
     "this phone number isnt on whatsapp",
     "this phone number is not on whatsapp"
-  ].some(phrase=>text.includes(normalizedUiText(phrase)));
+  ];
+}
+
+function unavailableDialog(){
+  const candidates = [...document.querySelectorAll('[role="dialog"], [role="alertdialog"], [data-animate-modal-popup="true"]')];
+  return candidates.find(node=>{
+    const text = normalizedUiText(node.textContent);
+    return unavailablePhrases().some(phrase=>text.includes(normalizedUiText(phrase)));
+  }) || null;
+}
+
+function conversationUnavailable(){
+  if(unavailableDialog()) return true;
+  if(document.querySelector("#main")) return false;
+  const text = normalizedUiText(document.body?.innerText || "");
+  return unavailablePhrases().some(phrase=>text.includes(normalizedUiText(phrase)));
+}
+
+function dismissUnavailableDialog(){
+  const dialog = unavailableDialog();
+  if(!dialog) return false;
+  const buttons = [...dialog.querySelectorAll("button,[role='button']")];
+  const preferred = buttons.find(button=>/^(ok|entendi|fechar|close)$/i.test(cleanText(button.textContent))) || buttons[buttons.length - 1];
+  if(!preferred) return false;
+  preferred.click();
+  return true;
 }
 
 function chatLoadState(request={}){
@@ -172,6 +196,7 @@ async function extractLoadedMessages(){
   const selected = messages.slice(-maximum);
   return {
     transcript:selected.join("\n"),
+    entries:selected,
     count:selected.length,
     audioCount,
     audioTranscribed:voiceMessageNodes(main).filter(node=>!!transcriptFromNode(node)).length,
@@ -184,6 +209,10 @@ async function extractLoadedMessages(){
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if(message?.type === "criare-prepare-next-chat"){
+    sendResponse({ok:true, dismissed:dismissUnavailableDialog(), extensionVersion:chrome.runtime.getManifest().version});
+    return false;
+  }
   if(message?.type === "criare-chat-load-state"){
     sendResponse({ok:true, extensionVersion:chrome.runtime.getManifest().version, ...chatLoadState(message.request || {})});
     return false;

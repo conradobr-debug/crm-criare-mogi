@@ -5,13 +5,18 @@ antigo disponível no celular, captura as mensagens e a foto de perfil e grava
 o conteúdo no CRM Criare. A atualização pode ser individual ou em lote, sempre
 processando uma conversa por vez.
 
-## Instalação única no Chrome
+## Instalação em cada computador
 
 1. Abra `chrome://extensions`.
 2. Ative **Modo do desenvolvedor**.
 3. Clique em **Carregar sem compactação**.
 4. Escolha esta pasta `whatsapp-crm-extension`.
 5. Atualize as abas do CRM e do WhatsApp Web.
+
+A extensão fica instalada localmente no Chrome. Portanto, repita a instalação
+em cada computador usado para atualizar conversas. Em cada máquina, o WhatsApp
+Web também precisa estar conectado à conta da Criare. Os históricos salvos no
+CRM, por outro lado, ficam disponíveis para todos os usuários autorizados.
 
 Ao clicar no ícone da extensão, será exibido um guia com atalhos para abrir o
 CRM e o WhatsApp Web. A captura é iniciada pelo botão dentro do cliente no CRM,
@@ -36,6 +41,11 @@ Na atualização automática, a extensão reutiliza uma única aba do WhatsApp W
 navega pelo telefone cadastrado, aguarda o histórico correto e devolve o
 resultado ao registro correspondente. O modo em lote só avança depois que o
 cliente atual terminou, evitando a mistura de conversas.
+
+Cada mensagem capturada é comparada com o histórico já salvo. A atualização
+acrescenta somente mensagens novas, preserva as anteriores e pode ser repetida
+sem duplicar o conteúdo. Se um telefone inválido abrir um aviso no WhatsApp, a
+extensão fecha esse aviso antes de avançar para o próximo cliente.
 
 A foto exibida no cabeçalho da conversa é copiada para uma área privada do CRM;
 o endereço temporário do WhatsApp não é gravado no cadastro.
