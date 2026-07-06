@@ -326,3 +326,34 @@ dialog::backdrop{background:rgba(10,10,10,.68);backdrop-filter:blur(3px)}
   header{padding-top:calc(12px + env(safe-area-inset-top))}
   #btnInstall{display:none!important}
 }
+
+/* Parceiros — relacionamento estruturado */
+.partnerExtraFilters{display:contents}
+.partnerExtraFilters>button{align-self:flex-end;min-height:38px;margin-bottom:1px}
+.partnerKpis{display:grid;grid-template-columns:repeat(8,minmax(115px,1fr));gap:8px;margin:10px 0;padding:0 2px}
+.partnerKpis .kpi{min-width:0;padding:10px}.partnerKpis .kpi .n{font-size:21px}.partnerKpis .kpi .t{font-size:9px;line-height:1.25}
+.partnerFormTabs{display:flex;gap:6px;position:sticky;top:-18px;z-index:5;padding:10px;background:#f5f2ed;border-bottom:1px solid var(--line)}
+.partnerFormTabs button{flex:1;min-height:40px}.partnerFormTabs button.active{background:#171717;color:#fff;border-color:#171717}
+.partnerFormSection{border:1px solid #d5cec5;background:#fff;padding:14px}
+.partnerSectionTitle{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #e2ddd6}
+.partnerSectionTitle div{display:flex;flex-direction:column;gap:3px}.partnerSectionTitle b{font-size:14px}.partnerSectionTitle span{font-size:10px;color:var(--muted)}
+.partnerSectionGrid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+.tagPicker{display:flex;gap:7px;flex-wrap:wrap}.tagPicker label{display:flex;align-items:center;gap:5px;padding:7px 9px;border:1px solid #d5cec5;background:#faf9f7;font-size:10px;cursor:pointer}.tagPicker input{width:auto}
+.cadenceActivation{padding:12px;border:1px solid #b9c7b5;background:#f1f5ef}.cadenceActivation label{display:flex;align-items:center;gap:8px;color:#445640}.cadenceActivation input{width:auto}
+.timelineHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:7px 0}.timelineHeader select{width:auto;min-width:160px}
+.partnerTimeline{max-height:360px;overflow:auto;border:1px solid #ddd7cf;background:#faf9f7}
+.timelineItem{display:grid;grid-template-columns:125px 1fr;gap:12px;padding:11px;border-bottom:1px solid #e5e0da}.timelineItem:last-child{border-bottom:0}.timelineItem time{color:var(--muted);font-size:10px}.timelineItem b{font-size:11px}.timelineItem p{margin:4px 0 0;color:#67615b;font-size:10px;line-height:1.4}
+.partnerCard{min-width:0}.partnerCompany{margin-top:3px;color:var(--muted);font-size:10px}.classificationBadge{white-space:nowrap}.classificationBadge.classA{border-color:#a98f72;background:#f4ede5;color:#654b35}.classificationBadge.classB{border-color:#aab3a3;background:#f0f3ee;color:#4d5e48}.classificationBadge.classC{border-color:#bbb6ae;background:#f5f3f0;color:#625d56}
+.partnerStatusRow{display:flex;justify-content:space-between;gap:8px;margin-top:9px;color:#665f58;font-size:10px}.partnerSignals{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}.partnerSignals span{padding:4px 6px;border:1px solid #abb8a7;background:#f1f5ef;color:#4b5d48;font-size:9px}.partnerSignals .signalWarn{border-color:#d2bb97;background:#faf5eb;color:#785f36}
+.s-contato-iniciado,.s-visita-agendada{border-left-color:#ad9277}.s-visitou-a-loja,.s-relacionamento{border-left-color:#77816e}.s-oportunidade-identificada{border-left-color:#9a704e}.s-projeto-recebido,.s-parceiro-ativo{border-left-color:#53665a}.s-adormecido{border-left-color:#89847e}
+.partnerDialog{width:min(920px,94vw)}.contentBankDialog{width:min(1080px,96vw)}.contentBankLayout{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:18px}.contentEditor{display:flex;flex-direction:column;gap:7px;padding:12px;border:1px solid #d8d2ca;background:#faf9f7}.contentEditor textarea{min-height:72px}.contentListTools{display:flex;gap:8px;margin-bottom:10px}.contentList{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:10px;max-height:65vh;overflow:auto}.contentCard{display:flex;flex-direction:column;gap:9px;padding:12px;border:1px solid #d8d2ca;background:#fff}.contentCard>div:first-child{display:flex;flex-direction:column;gap:3px}.contentCard span,.contentCard p{font-size:10px;color:var(--muted);line-height:1.45}.contentCard p{margin:0}.contentCardActions{display:flex;gap:7px;margin-top:auto}.contentCardActions .btn,.contentCardActions button{padding:7px 9px;font-size:10px}
+.smallDecisionDialog{width:min(520px,94vw)}.smallDecisionDialog p{margin:0 0 14px;line-height:1.5}.partnerReports{width:100%;margin-top:14px;padding:14px;border:1px solid var(--line);background:#f7f5f1}.partnerReportColumns{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:10px;margin-top:10px}.partnerReportColumns .sectionCard{min-width:0;width:auto}
+
+@media (max-width:1200px){.partnerKpis{grid-template-columns:repeat(4,1fr)}.partnerReportColumns{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:760px){
+  .partnerExtraFilters{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%}.partnerExtraFilters>button{grid-column:1/-1;min-height:44px}
+  .partnerKpis{grid-template-columns:repeat(2,1fr);padding:0 10px}.partnerKpis .kpi{display:block}
+  .partnerFormTabs{top:-12px;overflow-x:auto;padding:8px 0}.partnerFormTabs button{flex:0 0 155px;font-size:10px}
+  .partnerSectionGrid{grid-template-columns:1fr}.partnerSectionGrid>.col-12,.partnerSectionGrid>.col-6,.partnerSectionGrid>.col-4,.partnerSectionGrid>.col-3{grid-column:1}
+  .timelineItem{grid-template-columns:1fr;gap:4px}.contentBankLayout{grid-template-columns:1fr}.contentList{grid-template-columns:1fr;max-height:none}.partnerReportColumns{grid-template-columns:1fr}
+}
