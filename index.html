@@ -984,6 +984,7 @@ const TBL_WEEKLY_REPORTS = "crm_weekly_reports";
 const TBL_PENDING = "crm_pending_items";
 const TBL_PENDING_ATTACHMENTS = "crm_pending_attachments";
 const TBL_WHATSAPP_MESSAGES = "crm_whatsapp_messages";
+const TBL_PARTNER_CONTENTS = "crm_partner_contents";
 const PENDING_PHOTO_BUCKET = "crm-pending-photos";
 const WHATSAPP_AVATAR_BUCKET = "crm-whatsapp-avatars";
 
@@ -1889,6 +1890,7 @@ let config = { sources: DEFAULT_SOURCES.slice(), lost_reasons: DEFAULT_LOST_REAS
 let profiles = [];   // [{id, display_name}]
 let records = [];    // crm_records rows
 let recordEvents = []; // histórico de movimentações e contatos
+let partnerContents = []; // banco de conteúdos para parceiros
 let eventsSupported = true;
 let weeklyReports = [];
 let weeklyReportsSupported = true;
@@ -2301,7 +2303,7 @@ async function bootAfterLogin(){
     buildFilters();
     const loaded = await fetchRecords({ reason:"carga inicial", notifyNew:false, showError:true });
     if(!loaded) throw new Error("Não foi possível carregar os registros compartilhados.");
-    await Promise.all([fetchRecordEvents(), fetchWeeklyReports(), fetchPendingData(), fetchOutlookStatus()]);
+    await Promise.all([fetchRecordEvents(), fetchWeeklyReports(), fetchPendingData(), fetchOutlookStatus(), typeof partnerFetchContents === "function" ? partnerFetchContents() : Promise.resolve()]);
     bootedUserId = userId;
     setAppDataState("ready", "Dados carregados", `${records.length} registros e ${pendingItems.length} pendências sincronizados.`);
     render();
@@ -4099,7 +4101,7 @@ $("board").addEventListener("click", async (e)=>{
 
 /* Backup local (para emergência) */
 $("btnExportJson").addEventListener("click", ()=>{
-  const payload = { version:"crm_criare_viver_2026", exportedAt: nowISO(), config, profiles, records, pendingItems, pendingAttachments };
+  const payload = { version:"crm_criare_parceiros_2026", exportedAt: nowISO(), config, profiles, records, recordEvents, partnerContents, pendingItems, pendingAttachments };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -4137,6 +4139,7 @@ $("importJson").addEventListener("change", async (e)=>{
 
       for(const r of importedRecords){
         const payload = {
+          ...(r.id ? {id:r.id} : {}),
           first_name: (r.first_name || "").trim() || "Lead",
           last_name: (r.last_name || "").trim() || "Online",
           phone: (r.phone || "").trim() || "Não informado",
@@ -4148,7 +4151,9 @@ $("importJson").addEventListener("change", async (e)=>{
           source: r.source || "Lead Online",
           owner_id: r.owner_id || session.user.id,
           pipeline: r.pipeline || "lead",
-          stage: r.stage || "Novo",
+          stage: (r.record_type === "specifier"
+            ? ({"Primeiro Contato":"Contato iniciado","Parceiro Ativo":"Parceiro ativo","Pausado":"Adormecido"}[r.stage] || r.stage || "Mapeado")
+            : (r.stage || "Novo")),
           next_action: r.next_action || null,
           lost_reason: r.lost_reason || null,
           stage_entered_at: r.stage_entered_at || r.created_at || new Date().toISOString(),
@@ -4180,7 +4185,30 @@ $("importJson").addEventListener("change", async (e)=>{
           has_floor_plan: typeof r.has_floor_plan === "boolean" ? r.has_floor_plan : null,
           preferred_contact: r.preferred_contact || "WhatsApp",
           investment_profile: r.investment_profile || "A definir",
-          decision_due_at: r.decision_due_at || null
+          decision_due_at: r.decision_due_at || null,
+          partner_classification: r.partner_classification || "Não classificado",
+          relationship_level: r.relationship_level || "Novo",
+          first_visit_at: r.first_visit_at || null,
+          region: r.region || null,
+          project_profile: r.project_profile || null,
+          client_profile: r.client_profile || null,
+          preferred_styles: Array.isArray(r.preferred_styles) ? r.preferred_styles : [],
+          preferred_environments: Array.isArray(r.preferred_environments) ? r.preferred_environments : [],
+          current_suppliers: r.current_suppliers || null,
+          valued_differentials: r.valued_differentials || null,
+          objections: r.objections || null,
+          mentioned_projects: r.mentioned_projects || null,
+          interest_tags: Array.isArray(r.interest_tags) ? r.interest_tags : [],
+          partner_origin: r.partner_origin || null,
+          cadence_type: r.cadence_type || "Manual",
+          cadence_active: Boolean(r.cadence_active),
+          cadence_started_at: r.cadence_started_at || null,
+          cadence_cycle: Number(r.cadence_cycle || 0),
+          next_action_owner: r.next_action_owner || null,
+          no_next_action_reason: r.no_next_action_reason || null,
+          interactions: Array.isArray(r.interactions) ? r.interactions : [],
+          sent_contents: Array.isArray(r.sent_contents) ? r.sent_contents : [],
+          cadence_history: Array.isArray(r.cadence_history) ? r.cadence_history : []
         };
 
         const alreadyExists = r.id && records.some(x => x.id === r.id);
@@ -4204,6 +4232,48 @@ $("importJson").addEventListener("change", async (e)=>{
         if(data){
           records.unshift(data);
           inserted++;
+        }
+      }
+
+      if(Array.isArray(obj.partnerContents) && obj.partnerContents.length){
+        for(const content of obj.partnerContents){
+          const contentPayload = {
+            ...(content.id ? {id:content.id} : {}),
+            title:content.title || "Conteúdo sem título",
+            pillar:content.pillar || "Design e inspiração",
+            format:content.format || "Link",
+            description:content.description || null,
+            external_url:content.external_url || null,
+            tags:Array.isArray(content.tags) ? content.tags : [],
+            status:content.status === "Arquivado" ? "Arquivado" : "Ativo",
+            registered_at:content.registered_at || nowISO(),
+            notes:content.notes || null,
+            created_by:content.created_by || session.user.id
+          };
+          const {error:contentError} = await sb.from(TBL_PARTNER_CONTENTS).upsert(contentPayload, {onConflict:"id"});
+          if(contentError){ console.error("Erro ao importar conteúdo:", contentError); errors++; }
+        }
+      }
+
+      if(Array.isArray(obj.recordEvents) && obj.recordEvents.length){
+        const {data:existingEvents,error:eventsReadError} = await sb.from(TBL_EVENTS).select("record_id,event_type,occurred_at");
+        if(eventsReadError){
+          console.warn("Histórico não pôde ser conferido na importação:", eventsReadError);
+        }else{
+          const eventKeys = new Set((existingEvents || []).map(event=>`${event.record_id}|${event.event_type}|${event.occurred_at}`));
+          const restoredEvents = obj.recordEvents.filter(event=>event.record_id && event.event_type && records.some(record=>record.id===event.record_id) && !eventKeys.has(`${event.record_id}|${event.event_type}|${event.occurred_at}`)).map(event=>({
+            record_id:event.record_id,
+            event_type:event.event_type,
+            actor_id:profiles.some(profile=>profile.id===event.actor_id) ? event.actor_id : session.user.id,
+            from_value:event.from_value || null,
+            to_value:event.to_value || null,
+            metadata:event.metadata || {},
+            occurred_at:event.occurred_at || nowISO()
+          }));
+          if(restoredEvents.length){
+            const {error:eventsInsertError} = await sb.from(TBL_EVENTS).insert(restoredEvents);
+            if(eventsInsertError){ console.error("Erro ao restaurar histórico:", eventsInsertError); errors++; }
+          }
         }
       }
 
@@ -4259,5 +4329,6 @@ if("serviceWorker" in navigator){
   await initSupabase();
 })();
 </script>
+<script src="partners.js"></script>
 </body>
 </html>
