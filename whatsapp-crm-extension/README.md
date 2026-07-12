@@ -29,8 +29,10 @@ para que o histórico seja associado à pessoa correta.
    WhatsApp** no topo do CRM para percorrer todos os telefones cadastrados.
 3. Escolha o tipo de análise e use **Analisar automaticamente** ou o GPT da Criare.
 
-Somente as mensagens carregadas na tela são capturadas. Para incluir mensagens
-mais antigas, role a conversa para cima, aguarde o carregamento e capture novamente.
+A versão 2.0.0 percorre progressivamente o histórico virtualizado do WhatsApp,
+carregando janelas anteriores até alcançar o início da conversa ou o limite de
+segurança de 5.000 mensagens/50 segundos. O CRM informa quando o WhatsApp não
+confirmou o início, para que uma nova atualização complete o histórico salvo.
 
 Quando o WhatsApp mostra o aviso **Clique neste aviso para carregar mensagens
 mais antigas do seu celular**, a extensão aciona o carregamento automaticamente
@@ -63,6 +65,11 @@ exibidos no cabeçalho continuam sendo validados pelo telefone completo.
 A deduplicação usa o identificador único de cada mensagem do WhatsApp, e não
 mais apenas o texto. Assim, mensagens repetidas e vários áudios sem transcrição
 são preservados separadamente no histórico.
+
+Para análise, **Atualizar e abrir GPT Criare** captura primeiro a conversa mais
+recente e copia o pedido pronto. Depois de copiar a resposta do GPT, **Salvar
+análise copiada** grava imediatamente o parágrafo Chefe Duro no lead e conserva
+a análise completa para consulta pelo botão correspondente.
 
 O leitor mantém uma espera mínima antes da primeira extração e confere a
 quantidade de mensagens novamente alguns segundos depois. Se mensagens mais

@@ -77,6 +77,8 @@ function outputText(payload: Record<string, unknown>): string {
 }
 
 const RESULT_PROPERTIES = {
+  full_analysis: { type: "string" },
+  hard_boss: { type: "string" },
   summary: { type: "string" },
   lead_quality: {
     type: "string",
@@ -89,7 +91,7 @@ const RESULT_PROPERTIES = {
   next_action_details: { type: "string" },
 };
 
-const RESULT_REQUIRED = ["summary", "lead_quality", "next_action_kind", "next_action_details"];
+const RESULT_REQUIRED = ["full_analysis", "hard_boss", "summary", "lead_quality", "next_action_kind", "next_action_details"];
 
 type ProviderResult = {
   result: Record<string, unknown>;
@@ -173,6 +175,8 @@ async function analyzeWithGemini(prompt: string, analysisMode: string): Promise<
               type: "OBJECT",
               required: RESULT_REQUIRED,
               properties: {
+                full_analysis: { type: "STRING" },
+                hard_boss: { type: "STRING" },
                 summary: { type: "STRING" },
                 lead_quality: { type: "STRING", enum: RESULT_PROPERTIES.lead_quality.enum },
                 next_action_kind: { type: "STRING", enum: RESULT_PROPERTIES.next_action_kind.enum },
@@ -249,7 +253,11 @@ CONVERSA DO WHATSAPP (dados sensíveis detectáveis já foram ocultados):
 ${conversation}
 ---
 
-Produza a análise em português do Brasil. Preserve datas, valores, responsáveis, decisões e evidências importantes. O campo summary deve ser legível, com títulos e listas. Para lead_quality, avalie aderência ao perfil Criare separadamente do potencial comercial. Use “Não avaliado” se faltarem evidências. next_action_details deve ser uma ação concreta para o responsável executar.`;
+Produza a análise em português do Brasil. Preserve datas, valores, responsáveis, decisões e evidências importantes.
+O campo full_analysis deve conter a análise completa, legível, com títulos e listas.
+O campo hard_boss deve conter exatamente um único parágrafo final direto, crítico e acionável, sem título e sem lista.
+O campo summary deve repetir exatamente o conteúdo de hard_boss para compatibilidade com o CRM.
+Para lead_quality, avalie aderência ao perfil Criare separadamente do potencial comercial. Use “Não avaliado” se faltarem evidências. next_action_details deve ser uma ação concreta para o responsável executar.`;
 
     const provider = await analyzeWithOpenAI(prompt, analysisMode) ||
       await analyzeWithGemini(prompt, analysisMode);
@@ -261,8 +269,11 @@ Produza a análise em português do Brasil. Preserve datas, valores, responsáve
     }
 
     const result = provider.result;
+    const hardBoss = clean(result.hard_boss || result.summary, 2500);
     return json(request, {
-      summary: clean(result.summary, 8000),
+      full_analysis: clean(result.full_analysis, 16000),
+      hard_boss: hardBoss,
+      summary: hardBoss,
       lead_quality: clean(result.lead_quality, 40),
       next_action_kind: clean(result.next_action_kind, 40),
       next_action_details: clean(result.next_action_details, 1000),

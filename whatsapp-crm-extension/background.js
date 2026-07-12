@@ -34,7 +34,7 @@ async function ensureCurrentWhatsAppContentScript(tabId){
   throw new Error("A aba do WhatsApp Web não carregou o leitor atualizado. Recarregue a aba e tente novamente.");
 }
 
-async function waitForChat(tabId, request, {previousTitle="", allowSameTitle=false, timeoutMs=30000}={}){
+async function waitForChat(tabId, request, {previousTitle="", allowSameTitle=false, timeoutMs=45000}={}){
   const deadline = Date.now() + timeoutMs;
   let emptyChecks = 0;
   let unavailableChecks = 0;

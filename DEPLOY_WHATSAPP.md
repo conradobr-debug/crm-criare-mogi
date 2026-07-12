@@ -22,30 +22,30 @@ em **Carregar sem compactação** e selecione a pasta `whatsapp-crm-extension`.
 Depois, atualize as abas do CRM e do WhatsApp Web.
 
 A captura depende da estrutura visual do WhatsApp Web e pode precisar de ajuste
-se o WhatsApp alterar a página. Para conversas antigas, role para cima antes de
-capturar para que as mensagens desejadas estejam carregadas.
+se o WhatsApp alterar a página. A versão 2.0.0 percorre o histórico virtualizado
+automaticamente, com limite de segurança de 5.000 mensagens/50 segundos, e
+registra no lead se conseguiu alcançar o início da conversa.
 
 O botão de WhatsApp usa o link oficial `wa.me` e não precisa de segredo ou
 serviço adicional.
 
 ## Uso manual do GPT personalizado
 
-O botão `Copiar e abrir meu GPT` prepara a conversa com o contexto do cliente,
-o modo de análise e o formato de retorno esperado. O texto é copiado para a
-área de transferência e o GPT personalizado da Criare é aberto em uma nova aba.
+O botão `Atualizar e abrir GPT Criare` atualiza primeiro a conversa, prepara o
+contexto do cliente e abre o GPT personalizado da Criare em uma nova aba. O
+pedido fica copiado para ser colado e enviado na sessão do ChatGPT do usuário.
 O usuário cola e envia a mensagem usando sua própria sessão do ChatGPT, sem
 consumir a API do CRM.
 
-Ao copiar a resposta do ChatGPT, o botão `Importar resposta copiada` preenche o
-resumo, a qualidade do lead e o próximo passo quando encontra o bloco JSON
-solicitado. Se o GPT devolver somente texto, a resposta completa é colocada no
-campo de resumo para revisão. O navegador pode exigir autorização para ler a
-área de transferência; nesse caso, o usuário pode colar a resposta diretamente
-no campo de resumo.
+Ao copiar a resposta do ChatGPT, o botão `Salvar análise copiada` grava sem outro
+clique o parágrafo final **Chefe Duro**, a análise completa, a qualidade do lead
+e o próximo passo quando encontra o bloco JSON solicitado. O Chefe Duro fica
+fixado no cadastro e a resposta integral abre em `Ver análise completa`. Se o
+navegador bloquear a área de transferência, o CRM abre um campo de colagem.
 
-O texto bruto colado pelo usuário é enviado apenas para processamento e não é
-gravado. O CRM persiste somente o resumo revisável nos campos adicionados pela
-migração `20260701161000_add_whatsapp_summary.sql`.
+O CRM persiste separadamente o Chefe Duro e a análise integral nos campos da
+migração `20260712190000_add_whatsapp_analysis_detail.sql`. A conversa capturada
+permanece protegida pelo acesso do CRM.
 
 ## Análise especializada com ChatGPT e Gemini
 

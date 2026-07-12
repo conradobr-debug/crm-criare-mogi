@@ -771,6 +771,18 @@
           <textarea id="notes"></textarea>
         </div>
 
+        <div class="col-12 hardBossPinned" id="hardBossPinned" hidden>
+          <div class="hardBossPinnedHd">
+            <div>
+              <span class="hardBossEyebrow">Análise fixada no lead</span>
+              <strong>Chefe Duro</strong>
+            </div>
+            <button class="ghost" id="btnViewFullAnalysisPinned" type="button">Ver análise completa</button>
+          </div>
+          <p id="hardBossPinnedText"></p>
+          <div class="whatsappSummaryMeta" id="hardBossPinnedMeta"></div>
+        </div>
+
         <div class="col-12 whatsappWorkspace">
           <div class="whatsappWorkspaceHd">
             <div>
@@ -799,18 +811,19 @@
           <div class="whatsappActions">
             <button class="primary" id="btnCaptureWhatsAppWeb" type="button">Atualizar esta conversa</button>
             <button class="ghost" id="btnRefreshWhatsApp" type="button" hidden>Atualizar mensagens</button>
-            <button class="manualGptAction" id="btnOpenCustomGpt" type="button">Copiar e abrir meu GPT</button>
-            <button class="ghost" id="btnImportCustomGpt" type="button">Importar resposta copiada</button>
+            <button class="manualGptAction" id="btnOpenCustomGpt" type="button">Atualizar e abrir GPT Criare</button>
+            <button class="ghost" id="btnImportCustomGpt" type="button">Salvar análise copiada</button>
             <button class="primary" id="btnSummarizeWhatsApp" type="button">Analisar automaticamente</button>
             <button class="ghost" id="btnClearWhatsAppConversation" type="button">Limpar conversa colada</button>
           </div>
           <div class="manualGptSteps" aria-label="Como usar o seu GPT">
-            <span><b>1.</b> Copie e abra</span>
-            <span><b>2.</b> Cole e envie no ChatGPT</span>
-            <span><b>3.</b> Copie a resposta e importe</span>
+            <span><b>1.</b> Atualize e abra o GPT</span>
+            <span><b>2.</b> Cole, envie e copie a resposta</span>
+            <span><b>3.</b> Salve a análise copiada</span>
           </div>
-          <label for="whatsappSummary">Resumo da conversa</label>
-          <textarea id="whatsappSummary" class="whatsappSummary" placeholder="O resumo mostrará necessidades, interesses, objeções, compromissos e o próximo passo recomendado."></textarea>
+          <label for="whatsappSummary">Chefe Duro — salvo no lead</label>
+          <textarea id="whatsappSummary" class="whatsappSummary" placeholder="Aqui fica somente o parágrafo final Chefe Duro."></textarea>
+          <button class="ghost viewFullAnalysis" id="btnViewFullAnalysis" type="button" hidden>Ver análise completa</button>
           <div class="whatsappSummaryMeta" id="whatsappSummaryMeta">Nenhum resumo gerado.</div>
         </div>
 
@@ -944,6 +957,26 @@
       <div class="note">Você pode continuar usando outras janelas, mas não feche o WhatsApp Web.</div>
       <button class="danger" id="btnCancelWhatsAppBulk" type="button">Interromper</button>
       <button class="primary" id="btnCloseWhatsAppBulk" type="button" hidden>Concluir</button>
+    </div>
+  </dialog>
+
+  <dialog id="whatsappAnalysisModal" class="whatsappAnalysisModal">
+    <div class="modalHd">
+      <div>
+        <div class="modalTitle">Análise completa da conversa</div>
+        <div class="modalSub" id="whatsappAnalysisModalMeta">Análise do GPT Criare</div>
+      </div>
+      <button class="ghost" id="btnCloseFullAnalysisTop" type="button">Fechar</button>
+    </div>
+    <div class="modalBd">
+      <div class="fullAnalysisText" id="whatsappFullAnalysisText"></div>
+    </div>
+    <div class="modalFt">
+      <div class="note">O lead exibe apenas o Chefe Duro; o conteúdo completo permanece disponível aqui.</div>
+      <div class="modalQuick">
+        <button class="ghost" id="btnCopyFullAnalysis" type="button">Copiar análise</button>
+        <button class="primary" id="btnCloseFullAnalysis" type="button">Fechar</button>
+      </div>
     </div>
   </dialog>
 </div>
@@ -1153,7 +1186,7 @@ document.addEventListener("criare-whatsapp-open-result", ()=>{
   delete document.documentElement.dataset.criareWhatsAppOpenResult;
   if(!result.ok) toast(result.error || "Não foi possível abrir o WhatsApp Web. Atualize a extensão Criare.");
 });
-const WHATSAPP_EXTENSION_VERSION = "1.9.5";
+const WHATSAPP_EXTENSION_VERSION = "2.0.0";
 const whatsappAutoSyncWaiters = new Map();
 const whatsappExtensionPingWaiters = new Map();
 let whatsappCaptureTimer = null;
@@ -1229,7 +1262,7 @@ function requestWhatsAppAutomaticSync(record){
     const timer = setTimeout(()=>{
       whatsappAutoSyncWaiters.delete(requestId);
       resolve({ok:false, requestId, error:"A atualização demorou além do esperado."});
-    }, 90000);
+    }, 150000);
     whatsappAutoSyncWaiters.set(requestId, {resolve, timer});
     document.documentElement.dataset.criareWhatsAppAutoSyncRequest = JSON.stringify(request);
     document.dispatchEvent(new CustomEvent("criare-whatsapp-auto-sync"));
@@ -1312,6 +1345,10 @@ async function saveWhatsAppCapture(targetRecords, result){
       whatsapp_sync_message_count:merged.totalCount,
       whatsapp_sync_new_message_count:merged.addedCount,
       whatsapp_sync_error:null,
+      whatsapp_capture_complete:Boolean(result.reachedStart && !result.limited),
+      whatsapp_capture_note:result.limited
+        ? "Captura interrompida no limite de segurança; o histórico salvo pode ser parcial."
+        : (result.reachedStart ? "Início da conversa alcançado nesta captura." : "O WhatsApp não confirmou o início da conversa nesta captura."),
       whatsapp_channel_status:result.noConversation ? "not_available" : (result.empty ? "no_messages" : "conversation"),
       whatsapp_profile_photo_path:photoPath,
       whatsapp_profile_photo_updated_at:photoUpdatedAt
@@ -1358,6 +1395,9 @@ function whatsappCaptureStatus(result, savedResult={}){
   const older = result.olderHistoryRequested
     ? (result.olderHistoryLoaded ? " O histórico antigo do celular também foi carregado." : " O WhatsApp não concluiu o carregamento do histórico antigo.")
     : "";
+  const completeness = result.limited
+    ? " Atenção: a captura atingiu o limite de segurança e pode estar parcial."
+    : (result.reachedStart ? " Início da conversa alcançado." : " O WhatsApp não confirmou o início da conversa; uma nova atualização tentará completar o histórico.");
   if(result.noConversation) return "Este contato não possui conversa no WhatsApp; o cadastro foi mantido normalmente.";
   if(result.empty) return "Contato localizado no WhatsApp, mas ainda não há mensagens no histórico.";
   const added = Number(savedResult.addedCount || 0);
@@ -1365,19 +1405,20 @@ function whatsappCaptureStatus(result, savedResult={}){
   const history = added
     ? `${added} nova(s) mensagem(ns) adicionada(s); ${total} no histórico salvo.`
     : `Nenhuma mensagem nova; o histórico já estava atualizado com ${total} mensagem(ns).`;
-  return `${history}${audioDone}${audioWarning}${older}`;
+  return `${history}${audioDone}${audioWarning}${older}${completeness}`;
 }
 
 async function captureWhatsAppWebConversation(){
   const button = $("btnCaptureWhatsAppWeb");
   const status = $("whatsappSyncStatus");
   const record = records.find(item=>item.id===$("id").value);
-  if(!record) return toast("Salve o cliente antes de atualizar a conversa.");
+  if(!record){ toast("Salve o cliente antes de atualizar a conversa."); return null; }
   try{
     await requireCurrentWhatsAppExtension();
   }catch(error){
     status.textContent = error.message;
-    return toast(error.message);
+    toast(error.message);
+    return null;
   }
   button.disabled = true;
   button.textContent = "Atualizando…";
@@ -1397,9 +1438,11 @@ async function captureWhatsAppWebConversation(){
     render();
     status.textContent = whatsappCaptureStatus(result, savedResult);
     toast(result.empty ? "Cliente verificado; não há conversa para importar." : "Conversa e foto atualizadas no CRM.");
+    return {record:saved, result, savedResult};
   }catch(error){
     status.textContent = error.message || "Não foi possível atualizar a conversa.";
     toast(status.textContent);
+    return null;
   }finally{
     button.disabled = false;
     button.textContent = "Atualizar esta conversa";
@@ -1591,6 +1634,7 @@ async function fetchWhatsAppConversation(record=null, {notify=false}={}){
   return true;
 }
 const CRIARE_CUSTOM_GPT_URL = "https://chatgpt.com/g/g-6a456f7734cc81919d0d2a98941be765-analista-de-conversas-criare";
+let currentWhatsAppAnalysis = {full:"", hardBoss:"", updatedAt:null, model:""};
 function redactManualGptSensitive(value){
   return String(value || "")
     .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, "[CPF ocultado]")
@@ -1620,9 +1664,12 @@ CONVERSA
 ${conversation}
 ---
 
-Entregue primeiro a análise normal, clara e útil para o vendedor. Ao final, inclua também um único bloco de código JSON válido, sem comentários, neste formato exato:
+Entregue primeiro a análise normal, clara e útil para o vendedor. Depois finalize com o título CHEFE DURO e exatamente um único parágrafo direto, crítico e acionável, sem lista.
+
+Ao final de tudo, inclua também um único bloco de código JSON válido, sem comentários, neste formato exato:
 {
-  "summary": "resumo completo para salvar no CRM",
+  "hard_boss": "o mesmo parágrafo final da seção CHEFE DURO",
+  "summary": "o mesmo parágrafo final da seção CHEFE DURO",
   "lead_quality": "Não avaliado | Perfil Criare | Potencial | Baixo potencial | Fora do perfil",
   "next_action_kind": "Follow-up | Reach-out | Ligação | WhatsApp | Reunião | Visita | Apresentação",
   "next_action_details": "ação concreta que o responsável deve executar"
@@ -1645,18 +1692,26 @@ async function copyTextToClipboard(text){
   if(!copied) throw new Error("Não foi possível copiar automaticamente.");
 }
 function parseCustomGptResponse(text){
+  const original = String(text || "").trim();
   const candidates = [];
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const fenced = original.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if(fenced?.[1]) candidates.push(fenced[1].trim());
-  const firstBrace = text.indexOf("{");
-  const lastBrace = text.lastIndexOf("}");
-  if(firstBrace >= 0 && lastBrace > firstBrace) candidates.push(text.slice(firstBrace, lastBrace + 1));
+  const firstBrace = original.indexOf("{");
+  const lastBrace = original.lastIndexOf("}");
+  if(firstBrace >= 0 && lastBrace > firstBrace) candidates.push(original.slice(firstBrace, lastBrace + 1));
+  const fullAnalysis = original.replace(/```(?:json)?\s*[\s\S]*?```/ig, "").trim() || original;
+  const hardBossSection = fullAnalysis.match(/(?:^|\n)\s*(?:#{1,6}\s*)?CHEFE DURO\s*:?[ \t]*\n+([\s\S]*?)(?=\n\s*(?:#{1,6}\s*)?[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ ]{3,}\s*:?(?:\n|$)|$)/i);
+  const sectionParagraph = hardBossSection?.[1]?.split(/\n\s*\n/)[0]?.replace(/^[-•]\s*/, "").trim() || "";
+  const fallbackParagraph = fullAnalysis.split(/\n\s*\n/).map(value=>value.replace(/^#+\s*/, "").trim()).filter(value=>value && !/^[A-ZÁÉÍÓÚÂÊÔÃÕÇ ]+:?$/.test(value)).at(-1) || "";
   for(const candidate of candidates){
     try{
       const result = JSON.parse(candidate);
-      if(result && typeof result.summary === "string"){
+      const hardBoss = String(result?.hard_boss || result?.summary || sectionParagraph || fallbackParagraph).trim();
+      if(result && hardBoss){
         return {
-          summary:result.summary,
+          summary:hardBoss,
+          hard_boss:hardBoss,
+          full_analysis:String(result.full_analysis || fullAnalysis).trim(),
           lead_quality:result.lead_quality,
           next_action_kind:result.next_action_kind,
           next_action_details:result.next_action_details,
@@ -1668,7 +1723,9 @@ function parseCustomGptResponse(text){
     }
   }
   return {
-    summary:text.trim(),
+    summary:sectionParagraph || fallbackParagraph || original,
+    hard_boss:sectionParagraph || fallbackParagraph || original,
+    full_analysis:fullAnalysis,
     lead_quality:"Não avaliado",
     next_action_kind:"WhatsApp",
     next_action_details:"Revisar a análise importada e definir o próximo acompanhamento.",
@@ -1717,8 +1774,7 @@ function localWhatsAppSummary(conversation){
     ? "Potencial"
     : (/só.*preço|mais barato|menor preço/i.test(lower) ? "Baixo potencial" : "Não avaliado");
   const section = (items, empty="Não identificado no trecho.") => items.length ? items.map(item=>`• ${item}`).join("\n") : empty;
-  return {
-    summary:[
+  const fullAnalysis = [
       "Contexto", section(useful.slice(-4), "Trecho insuficiente para identificar o contexto."), "",
       "Necessidades e interesses", section(needs), "",
       "Objeções ou riscos", section(objections), "",
@@ -1726,20 +1782,76 @@ function localWhatsAppSummary(conversation){
       money.length ? `\nValores mencionados: ${[...new Set(money)].join(", ")}.` : "",
       dateMentions.length ? `Datas mencionadas: ${[...new Set(dateMentions)].join(", ")}.` : "", "",
       "Próximo passo recomendado", "• Confirmar com o cliente o próximo avanço e registrar uma data de acompanhamento no calendário."
-    ].filter(Boolean).join("\n"),
+    ].filter(Boolean).join("\n");
+  const hardBoss = "O histórico disponível não permite uma avaliação especializada confiável; confirme as pendências diretamente com o cliente, defina um próximo avanço com data e atualize a conversa antes de tomar uma decisão comercial.";
+  return {
+    summary:hardBoss,
+    hard_boss:hardBoss,
+    full_analysis:fullAnalysis,
     lead_quality:quality,
     next_action_kind:"WhatsApp",
     next_action_details:"Retomar os pontos combinados na conversa, confirmar pendências e definir o próximo avanço com data.",
     model:"análise local"
   };
 }
+function renderWhatsAppAnalysis(){
+  const hardBoss = currentWhatsAppAnalysis.hardBoss || "";
+  const hasFull = Boolean(currentWhatsAppAnalysis.full);
+  $("hardBossPinned").hidden = !hardBoss;
+  $("hardBossPinnedText").textContent = hardBoss;
+  $("hardBossPinnedMeta").textContent = currentWhatsAppAnalysis.updatedAt
+    ? `${fmtBRDateTime(currentWhatsAppAnalysis.updatedAt)}${currentWhatsAppAnalysis.model ? ` • ${currentWhatsAppAnalysis.model}` : ""}`
+    : "";
+  $("btnViewFullAnalysis").hidden = !hasFull;
+  $("btnViewFullAnalysisPinned").hidden = !hasFull;
+}
 function applyWhatsAppSummary(result){
-  $("whatsappSummary").value = result.summary || "";
+  const hardBoss = result.hard_boss || result.summary || "";
+  $("whatsappSummary").value = hardBoss;
   $("whatsappSummary").dataset.model = result.model || "IA";
+  currentWhatsAppAnalysis = {
+    full:result.full_analysis || result.summary || hardBoss,
+    hardBoss,
+    updatedAt:result.updated_at || nowISO(),
+    model:result.model || "IA"
+  };
   if(LEAD_QUALITIES.includes(result.lead_quality) && result.lead_quality !== "Não avaliado") $("leadQuality").value = result.lead_quality;
   if([...$("nextActionKind").options].some(option=>option.value===result.next_action_kind)) $("nextActionKind").value = result.next_action_kind;
   if(result.next_action_details) $("nextActionDetails").value = result.next_action_details;
-  $("whatsappSummaryMeta").textContent = `Resumo gerado por ${result.model || "IA"}. Revise antes de salvar.`;
+  $("whatsappSummaryMeta").textContent = `Chefe Duro gerado por ${result.model || "IA"}.`;
+  renderWhatsAppAnalysis();
+}
+function openFullWhatsAppAnalysis(){
+  if(!currentWhatsAppAnalysis.full) return toast("Ainda não há análise completa salva neste lead.");
+  $("whatsappFullAnalysisText").textContent = currentWhatsAppAnalysis.full;
+  $("whatsappAnalysisModalMeta").textContent = currentWhatsAppAnalysis.updatedAt
+    ? `${fmtBRDateTime(currentWhatsAppAnalysis.updatedAt)}${currentWhatsAppAnalysis.model ? ` • ${currentWhatsAppAnalysis.model}` : ""}`
+    : "Análise do GPT Criare";
+  $("whatsappAnalysisModal").showModal();
+}
+async function saveWhatsAppAnalysisResult(result){
+  const record = records.find(item=>item.id===$("id").value);
+  if(!record) throw new Error("Salve o cliente antes de gravar a análise.");
+  applyWhatsAppSummary(result);
+  const updatedAt = nowISO();
+  const patch = {
+    whatsapp_summary:currentWhatsAppAnalysis.hardBoss || null,
+    whatsapp_summary_updated_at:updatedAt,
+    whatsapp_summary_model:currentWhatsAppAnalysis.model || "IA",
+    whatsapp_analysis_hard_boss:currentWhatsAppAnalysis.hardBoss || null,
+    whatsapp_analysis_full:currentWhatsAppAnalysis.full || null,
+    whatsapp_analysis_updated_at:updatedAt,
+    whatsapp_analysis_model:currentWhatsAppAnalysis.model || "IA"
+  };
+  if(LEAD_QUALITIES.includes(result.lead_quality)) patch.lead_quality = result.lead_quality;
+  const {data, error} = await sb.from(TBL_RECORDS).update(patch).eq("id", record.id).select("*").single();
+  if(error) throw new Error(error.message || "Não foi possível salvar a análise no lead.");
+  const index = records.findIndex(item=>item.id===data.id);
+  if(index>=0) records[index]=data;
+  currentWhatsAppAnalysis.updatedAt = updatedAt;
+  renderWhatsAppAnalysis();
+  render();
+  return data;
 }
 function handleOutlookReturn(){
   const url = new URL(window.location.href);
@@ -3480,14 +3592,22 @@ function openModal(record=null, options={}){
     : (record?.whatsapp_channel_status === "no_messages"
       ? `Contato localizado no WhatsApp, mas sem mensagens • verificado em ${fmtBRDateTime(record.whatsapp_transcript_updated_at)}.`
       : (record?.whatsapp_transcript_updated_at
-        ? `Histórico atualizado em ${fmtBRDateTime(record.whatsapp_transcript_updated_at)} • ${Number(record.whatsapp_sync_message_count || 0)} mensagem(ns) salvas${Number(record.whatsapp_sync_new_message_count || 0) ? ` • ${Number(record.whatsapp_sync_new_message_count || 0)} nova(s) na última atualização` : ""}.${record.whatsapp_sync_error ? ` Última tentativa: ${record.whatsapp_sync_error}` : ""}`
+        ? `Histórico atualizado em ${fmtBRDateTime(record.whatsapp_transcript_updated_at)} • ${Number(record.whatsapp_sync_message_count || 0)} mensagem(ns) salvas${Number(record.whatsapp_sync_new_message_count || 0) ? ` • ${Number(record.whatsapp_sync_new_message_count || 0)} nova(s) na última atualização` : ""}.${record.whatsapp_capture_note ? ` ${record.whatsapp_capture_note}` : ""}${record.whatsapp_sync_error ? ` Última tentativa: ${record.whatsapp_sync_error}` : ""}`
         : (isNew ? "Salve o cliente antes de atualizar a conversa." : "Conversa ainda não atualizada automaticamente.")));
   $("whatsappAnalysisMode").value = "Resumo gerencial";
-  $("whatsappSummary").value = record?.whatsapp_summary || "";
-  $("whatsappSummary").dataset.model = record?.whatsapp_summary_model || "";
-  $("whatsappSummaryMeta").textContent = record?.whatsapp_summary_updated_at
-    ? `Último resumo: ${fmtBRDateTime(record.whatsapp_summary_updated_at)}${record.whatsapp_summary_model ? ` • ${record.whatsapp_summary_model}` : ""}.`
-    : "Nenhum resumo gerado.";
+  const savedHardBoss = record?.whatsapp_analysis_hard_boss || record?.whatsapp_summary || "";
+  currentWhatsAppAnalysis = {
+    full:record?.whatsapp_analysis_full || "",
+    hardBoss:savedHardBoss,
+    updatedAt:record?.whatsapp_analysis_updated_at || record?.whatsapp_summary_updated_at || null,
+    model:record?.whatsapp_analysis_model || record?.whatsapp_summary_model || ""
+  };
+  $("whatsappSummary").value = savedHardBoss;
+  $("whatsappSummary").dataset.model = currentWhatsAppAnalysis.model;
+  $("whatsappSummaryMeta").textContent = currentWhatsAppAnalysis.updatedAt
+    ? `Última análise: ${fmtBRDateTime(currentWhatsAppAnalysis.updatedAt)}${currentWhatsAppAnalysis.model ? ` • ${currentWhatsAppAnalysis.model}` : ""}.`
+    : "Nenhuma análise gerada.";
+  renderWhatsAppAnalysis();
   appointmentDrafts = normalizeAppointments(record);
   clearAppointmentComposer();
   renderAppointmentList();
@@ -3567,6 +3687,7 @@ async function upsertFromForm(){
   const existingRecord = records.find(record=>record.id===id);
   const whatsappSummary = $("whatsappSummary").value.trim();
   const summaryChanged = (existingRecord?.whatsapp_summary || "") !== whatsappSummary;
+  if(summaryChanged) currentWhatsAppAnalysis.hardBoss = whatsappSummary;
   const payload = {
     record_type: kind,
     first_name: firstName,
@@ -3600,6 +3721,10 @@ async function upsertFromForm(){
     whatsapp_summary: whatsappSummary || null,
     whatsapp_summary_updated_at: whatsappSummary ? (summaryChanged ? nowISO() : existingRecord?.whatsapp_summary_updated_at || nowISO()) : null,
     whatsapp_summary_model: whatsappSummary ? ($("whatsappSummary").dataset.model || "edição manual") : null,
+    whatsapp_analysis_hard_boss: whatsappSummary || null,
+    whatsapp_analysis_full: currentWhatsAppAnalysis.full || null,
+    whatsapp_analysis_updated_at: whatsappSummary ? (summaryChanged ? nowISO() : currentWhatsAppAnalysis.updatedAt || nowISO()) : null,
+    whatsapp_analysis_model: whatsappSummary ? ($("whatsappSummary").dataset.model || currentWhatsAppAnalysis.model || "edição manual") : null,
     lost_reason: (kind !== "specifier" && pipeline==="lead" && stage==="Perdido") ? ($("lostReason").value || null) : null
   };
 
@@ -3797,30 +3922,35 @@ $("btnRefreshWhatsApp").addEventListener("click", ()=>{
   fetchWhatsAppConversation(record, {notify:true});
 });
 $("btnOpenCustomGpt").addEventListener("click", async ()=>{
-  const conversation = $("whatsappConversation").value.trim();
-  if(conversation.length < 40) return toast("Cole um trecho maior da conversa.");
-  const prompt = buildCustomGptPrompt(conversation);
-  const copyPromise = copyTextToClipboard(prompt);
-  window.open(CRIARE_CUSTOM_GPT_URL, "_blank", "noopener,noreferrer");
+  const gptWindow = window.open("about:blank", "_blank");
+  if(!gptWindow) return toast("Permita pop-ups deste CRM para abrir o GPT Criare.");
+  gptWindow.document.title = "Preparando análise Criare…";
   try{
-    await copyPromise;
-    toast("Pedido copiado. Cole no seu GPT e envie.");
+    const captured = await captureWhatsAppWebConversation();
+    const conversation = (captured?.record?.whatsapp_transcript || $("whatsappConversation").value).trim();
+    if(conversation.length < 40) throw new Error("Não há conversa suficiente para analisar.");
+    await copyTextToClipboard(buildCustomGptPrompt(conversation));
+    gptWindow.opener = null;
+    gptWindow.location.replace(CRIARE_CUSTOM_GPT_URL);
+    toast("Conversa atualizada e pedido copiado. Cole no GPT e envie.");
   }catch(error){
     console.error("[CRM ChatGPT] Falha ao copiar.", error);
-    toast("Não foi possível copiar. Selecione e copie a conversa manualmente.");
+    gptWindow.close();
+    toast(error.message || "Não foi possível preparar a análise.");
   }
 });
 $("btnImportCustomGpt").addEventListener("click", async ()=>{
   try{
-    if(!navigator.clipboard?.readText) return toast("Cole a resposta diretamente no campo Resumo da conversa.");
-    const response = (await navigator.clipboard.readText()).trim();
+    let response = "";
+    try{ response = navigator.clipboard?.readText ? (await navigator.clipboard.readText()).trim() : ""; }
+    catch(error){ console.warn("[CRM ChatGPT] Área de transferência bloqueada; solicitando colagem manual.", error); }
+    if(!response) response = String(window.prompt("Cole aqui a resposta completa do GPT Criare:") || "").trim();
     if(response.length < 20) return toast("Copie primeiro a resposta completa do seu GPT.");
-    applyWhatsAppSummary(parseCustomGptResponse(response));
-    $("whatsappConversation").value = "";
-    toast("Resposta importada. Revise e salve o cliente.");
+    await saveWhatsAppAnalysisResult(parseCustomGptResponse(response));
+    toast("Chefe Duro e análise completa salvos no lead.");
   }catch(error){
     console.warn("[CRM ChatGPT] Leitura da área de transferência indisponível.", error);
-    toast("O navegador não liberou a leitura. Cole a resposta no campo Resumo da conversa.");
+    toast(error.message || "Não foi possível salvar a análise copiada.");
   }
 });
 $("btnClearWhatsAppConversation").addEventListener("click", ()=>{
@@ -3842,13 +3972,24 @@ $("btnSummarizeWhatsApp").addEventListener("click", async ()=>{
       result = localWhatsAppSummary(conversation);
       toast("IA indisponível; resumo local criado para você revisar.");
     }
-    applyWhatsAppSummary(result);
-    $("whatsappConversation").value = "";
-    if(result.model !== "análise local") toast("Resumo criado. Revise e salve o cliente.");
+    await saveWhatsAppAnalysisResult(result);
+    if(result.model !== "análise local") toast("Análise completa e Chefe Duro salvos no lead.");
+  }catch(error){
+    console.error("[CRM WhatsApp] Falha ao analisar ou salvar.", error);
+    toast(error.message || "Não foi possível analisar e salvar a conversa.");
   }finally{
     button.disabled = false;
     button.textContent = "Analisar automaticamente";
   }
+});
+
+$("btnViewFullAnalysis").addEventListener("click", openFullWhatsAppAnalysis);
+$("btnViewFullAnalysisPinned").addEventListener("click", openFullWhatsAppAnalysis);
+$("btnCloseFullAnalysisTop").addEventListener("click", ()=>$("whatsappAnalysisModal").close());
+$("btnCloseFullAnalysis").addEventListener("click", ()=>$("whatsappAnalysisModal").close());
+$("btnCopyFullAnalysis").addEventListener("click", async ()=>{
+  try{ await copyTextToClipboard(currentWhatsAppAnalysis.full); toast("Análise completa copiada."); }
+  catch(error){ toast("Não foi possível copiar a análise."); }
 });
 
 $("btnSave").addEventListener("click", async (e)=>{
