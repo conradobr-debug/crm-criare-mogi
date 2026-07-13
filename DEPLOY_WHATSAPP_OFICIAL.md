@@ -11,10 +11,10 @@ Callback do webhook:
 ## Ações externas na Meta
 
 1. No Meta App correto, habilitar o produto WhatsApp e vincular a WABA da Criare.
-2. Confirmar que o número da loja é elegível para **WhatsApp Business App Coexistence** e concluir o onboarding oficial. Situação atual: `PENDENTE DE CONFIRMAÇÃO`.
+2. Confirmar que o número da loja é elegível para **WhatsApp Business App Coexistence** e concluir o onboarding oficial. Número adicionado: `+55 19 99164-7787`; verificação do número e ativação do Coexistence: `PENDENTE DE CONFIRMAÇÃO`.
 3. Configurar o callback acima e usar o valor já cadastrado no secret `WHATSAPP_VERIFY_TOKEN`.
 4. Assinar pelo menos o campo `messages`. Para Coexistence, habilitar também os campos de eco/histórico que o painel disponibilizar para a conta. Os nomes exibidos e a disponibilidade na WABA são `PENDENTE DE CONFIRMAÇÃO` até o onboarding.
-5. Confirmar no painel: WABA ID, Phone Number ID, nome verificado e número de exibição. Esses valores são aprendidos pelo primeiro webhook e aparecem em `crm_whatsapp_accounts`; antes disso são `PENDENTE DE CONFIRMAÇÃO`.
+5. Identificadores confirmados no WhatsApp Manager em 13/07/2026: WABA ID `2069190594483653`, Phone Number ID `1181271645073826` e número `+55 19 99164-7787`. Nome de exibição `Criare Mogi Guaçu`: em análise.
 6. Garantir um token de System User de longa duração com as permissões exigidas pela conta, incluindo `whatsapp_business_management` e `whatsapp_business_messaging`. O secret `WHATSAPP_ACCESS_TOKEN` já existe, mas validade, escopos e vínculo com a WABA são `PENDENTE DE CONFIRMAÇÃO`.
 7. Confirmar no Meta App que o App Secret usado no secret `META_APP_SECRET` pertence ao mesmo aplicativo do webhook.
 8. Templates só são necessários para conversas iniciadas pela empresa fora da janela permitida. O CRM desta entrega não envia mensagens nem cria templates.
@@ -23,7 +23,7 @@ Callback do webhook:
 
 Obrigatórios: `META_APP_SECRET`, `META_GRAPH_API_VERSION`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_PROCESSOR_SECRET`, `OPENAI_API_KEY`, `OPENAI_MODEL`. O frontend não recebe nenhum deles.
 
-`META_GRAPH_API_VERSION` deve ser revisado conforme o ciclo oficial de versões da Meta. Valor configurado no exemplo: `v23.0`; versão escolhida para produção: `PENDENTE DE CONFIRMAÇÃO`.
+`META_GRAPH_API_VERSION` deve ser revisado conforme o ciclo oficial de versões da Meta. Versão exibida e escolhida para produção em 13/07/2026: `v25.0`.
 
 ## Rotinas
 
