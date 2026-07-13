@@ -449,7 +449,7 @@
   <div class="actions">
     <button class="primary" id="btnNew">+ Novo lead</button>
     <button class="ghost" id="btnSync">Sincronizar</button>
-    <button class="ghost desktopUtility" id="btnSyncWhatsAppAll" type="button">Atualizar WhatsApp</button>
+    <button class="ghost desktopUtility" id="btnSyncWhatsAppAll" type="button">Status WhatsApp</button>
     <button class="ghost mobileUtility" id="btnInstall" hidden>Instalar aplicativo</button>
     <button class="ghost desktopUtility" id="btnSound">Som: OFF</button>
     <button class="ghost desktopUtility" id="btnExportJson">Exportar backup</button>
@@ -787,11 +787,27 @@
           <div class="whatsappWorkspaceHd">
             <div>
               <div class="whatsappWorkspaceTitle">WhatsApp do cliente</div>
-              <div class="fieldHelp">Atualize diretamente pelo CRM. A extensão abre o cliente correto, carrega o histórico antigo disponível, captura as mensagens e salva também a foto do perfil.</div>
+              <div class="fieldHelp">Conversa recebida pela integração oficial da WhatsApp Business Platform.</div>
             </div>
             <button class="whatsappAction" id="btnWhatsApp" type="button">Abrir conversa</button>
           </div>
-          <label for="whatsappAnalysisMode">Tipo de análise</label>
+          <div class="whatsappOfficialIndicators">
+            <span id="whatsappOfficialSync">Aguardando sincronização oficial</span>
+            <span id="whatsappOfficialNew">0 novas desde a análise</span>
+            <span id="whatsappOfficialAnalysis">Análise ainda não executada</span>
+          </div>
+          <div class="whatsappOfficialTimeline" id="whatsappOfficialTimeline">
+            <div class="timelineEmpty">Ainda não há mensagens oficiais associadas a este lead.</div>
+          </div>
+          <div class="whatsappActions whatsappOfficialActions">
+            <button class="ghost" id="btnLoadOlderWhatsApp" type="button" hidden>Carregar anteriores</button>
+            <button class="ghost" id="btnRefreshOfficialTimeline" type="button">Atualizar conversa</button>
+            <button class="primary" id="btnUpdateOfficialAnalysis" type="button">Atualizar análise</button>
+            <button class="ghost" id="btnViewFullAnalysis" type="button" hidden>Ver análise completa</button>
+          </div>
+          <div class="whatsappSummaryMeta" id="whatsappSyncStatus">A integração oficial ainda não recebeu mensagens para este telefone.</div>
+          <div class="whatsappPrivacy">Mensagens e mídias são armazenadas em ambiente privado do CRM. A análise usa apenas o serviço de IA configurado pela Criare.</div>
+          <div hidden aria-hidden="true">
           <select id="whatsappAnalysisMode">
             <option>Resumo gerencial</option>
             <option>Análise completa</option>
@@ -806,11 +822,8 @@
           </select>
           <label for="whatsappConversation" style="margin-top:12px">Conversa para analisar</label>
           <textarea id="whatsappConversation" class="whatsappConversation" placeholder="A conversa atualizada aparecerá aqui. Você também pode colar um trecho manualmente."></textarea>
-          <div class="whatsappSummaryMeta" id="whatsappSyncStatus">Salve o cliente para sincronizar a conversa pelo telefone.</div>
           <div class="whatsappPrivacy">Mensagens sincronizadas ficam protegidas pelo acesso do CRM. Ao usar a análise automática, o trecho poderá ser enviado ao serviço de IA configurado. Evite documentos, senhas e dados bancários.</div>
           <div class="whatsappActions">
-            <button class="primary" id="btnCaptureWhatsAppWeb" type="button">Atualizar esta conversa</button>
-            <button class="ghost" id="btnRefreshWhatsApp" type="button" hidden>Atualizar mensagens</button>
             <button class="manualGptAction" id="btnOpenCustomGpt" type="button">Atualizar e abrir GPT Criare</button>
             <button class="ghost" id="btnImportCustomGpt" type="button">Salvar análise copiada</button>
             <button class="primary" id="btnSummarizeWhatsApp" type="button">Analisar automaticamente</button>
@@ -823,8 +836,8 @@
           </div>
           <label for="whatsappSummary">Chefe Duro — salvo no lead</label>
           <textarea id="whatsappSummary" class="whatsappSummary" placeholder="Aqui fica somente o parágrafo final Chefe Duro."></textarea>
-          <button class="ghost viewFullAnalysis" id="btnViewFullAnalysis" type="button" hidden>Ver análise completa</button>
           <div class="whatsappSummaryMeta" id="whatsappSummaryMeta">Nenhum resumo gerado.</div>
+          </div>
         </div>
 
         <div class="col-12" id="scheduleNotice">
@@ -935,31 +948,6 @@
     </div>
   </dialog>
 
-  <dialog id="whatsappBulkModal" class="whatsappBulkModal">
-    <div class="modalHd">
-      <div>
-        <div class="modalTitle">Atualizando conversas</div>
-        <div class="modalSub" id="whatsappBulkSubtitle">O CRM trabalhará em uma conversa por vez.</div>
-      </div>
-    </div>
-    <div class="modalBd whatsappBulkBody">
-      <div class="whatsappBulkProgress" aria-hidden="true"><span id="whatsappBulkProgressBar"></span></div>
-      <div class="whatsappBulkCount" id="whatsappBulkCount">Preparando…</div>
-      <div class="whatsappBulkCurrent" id="whatsappBulkCurrent">Mantenha o Chrome e o WhatsApp Web abertos durante a atualização.</div>
-      <div class="whatsappBulkStats">
-        <div><strong id="whatsappBulkSuccess">0</strong><span>atualizadas</span></div>
-        <div><strong id="whatsappBulkEmpty">0</strong><span>sem conversa</span></div>
-        <div><strong id="whatsappBulkFailed">0</strong><span>com falha</span></div>
-      </div>
-      <div class="whatsappBulkFailures" id="whatsappBulkFailures" hidden></div>
-    </div>
-    <div class="modalFt whatsappBulkFooter">
-      <div class="note">Você pode continuar usando outras janelas, mas não feche o WhatsApp Web.</div>
-      <button class="danger" id="btnCancelWhatsAppBulk" type="button">Interromper</button>
-      <button class="primary" id="btnCloseWhatsAppBulk" type="button" hidden>Concluir</button>
-    </div>
-  </dialog>
-
   <dialog id="whatsappAnalysisModal" class="whatsappAnalysisModal">
     <div class="modalHd">
       <div>
@@ -983,6 +971,7 @@
 
 <!-- Supabase via CDN -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="whatsapp-data-service.js"></script>
 
 <script>
 /*
@@ -1017,6 +1006,8 @@ const TBL_WEEKLY_REPORTS = "crm_weekly_reports";
 const TBL_PENDING = "crm_pending_items";
 const TBL_PENDING_ATTACHMENTS = "crm_pending_attachments";
 const TBL_WHATSAPP_MESSAGES = "crm_whatsapp_messages";
+const TBL_WHATSAPP_CONVERSATIONS = "crm_whatsapp_conversations";
+const TBL_WHATSAPP_ANALYSES = "crm_whatsapp_analysis_history";
 const TBL_PARTNER_CONTENTS = "crm_partner_contents";
 const PENDING_PHOTO_BUCKET = "crm-pending-photos";
 const WHATSAPP_AVATAR_BUCKET = "crm-whatsapp-avatars";
@@ -1164,474 +1155,33 @@ function whatsappNumber(value){
 function openWhatsAppFor(record=null){
   const number = whatsappNumber(record?.phone || $("phone").value);
   if(!number) return toast("Informe um telefone válido com DDD para abrir o WhatsApp.");
-  const mobileDevice = /android|iphone|ipad|ipod/i.test(navigator.userAgent);
-  if(mobileDevice){
-    window.open(`https://wa.me/${number}`, "_blank", "noopener,noreferrer");
-    return;
-  }
-  document.documentElement.dataset.criareWhatsAppOpenRequest = JSON.stringify({
-    phone:number,
-    customerName:`${record?.first_name || $("firstName").value} ${record?.last_name || $("lastName").value}`.trim()
-  });
-  document.dispatchEvent(new CustomEvent("criare-whatsapp-open"));
-  toast("Abrindo a conversa correta no WhatsApp Web…");
+  window.open(`https://wa.me/${number}`, "_blank", "noopener,noreferrer");
 }
-document.addEventListener("criare-whatsapp-open-result", ()=>{
-  let result;
-  try{
-    result = JSON.parse(document.documentElement.dataset.criareWhatsAppOpenResult || "{}");
-  }catch(error){
-    result = {ok:false};
-  }
-  delete document.documentElement.dataset.criareWhatsAppOpenResult;
-  if(!result.ok) toast(result.error || "Não foi possível abrir o WhatsApp Web. Atualize a extensão Criare.");
-});
-const WHATSAPP_EXTENSION_VERSION = "2.0.0";
-const whatsappAutoSyncWaiters = new Map();
-const whatsappExtensionPingWaiters = new Map();
-let whatsappCaptureTimer = null;
-let whatsappBulkCancelled = false;
-let whatsappBulkRunning = false;
-
-document.addEventListener("criare-whatsapp-auto-sync-result", ()=>{
-  let result;
-  try{
-    result = JSON.parse(document.documentElement.dataset.criareWhatsAppAutoSyncResult || "{}");
-  }catch(error){
-    result = {ok:false, error:"A extensão devolveu uma resposta inválida."};
-  }
-  delete document.documentElement.dataset.criareWhatsAppAutoSyncResult;
-  const waiter = whatsappAutoSyncWaiters.get(result.requestId);
-  if(!waiter) return;
-  clearTimeout(waiter.timer);
-  whatsappAutoSyncWaiters.delete(result.requestId);
-  waiter.resolve(result);
-});
-
-document.addEventListener("criare-whatsapp-extension-ping-result", ()=>{
-  let result;
-  try{
-    result = JSON.parse(document.documentElement.dataset.criareWhatsAppExtensionPingResult || "{}");
-  }catch(error){
-    result = {ok:false, error:"A extensão devolveu uma resposta inválida."};
-  }
-  delete document.documentElement.dataset.criareWhatsAppExtensionPingResult;
-  const waiter = whatsappExtensionPingWaiters.get(result.requestId);
-  if(!waiter) return;
-  clearTimeout(waiter.timer);
-  whatsappExtensionPingWaiters.delete(result.requestId);
-  waiter.resolve(result);
-});
-
-function checkWhatsAppExtension(){
-  return new Promise(resolve=>{
-    const requestId = crypto.randomUUID();
-    const timer = setTimeout(()=>{
-      whatsappExtensionPingWaiters.delete(requestId);
-      resolve({
-        ok:false,
-        error:`A extensão Criare ${WHATSAPP_EXTENSION_VERSION} não está instalada ou ativa neste computador. Instale-a e atualize esta página.`
-      });
-    }, 2200);
-    whatsappExtensionPingWaiters.set(requestId, {resolve, timer});
-    document.documentElement.dataset.criareWhatsAppExtensionPingRequest = JSON.stringify({requestId});
-    document.dispatchEvent(new CustomEvent("criare-whatsapp-extension-ping"));
-  });
+function renderOfficialWhatsAppTimeline(){
+  const timeline=$("whatsappOfficialTimeline");officialMediaById=new Map();
+  if(!currentOfficialMessages.length){timeline.innerHTML='<div class="timelineEmpty">Ainda não há mensagens oficiais associadas a este lead.</div>';$("btnLoadOlderWhatsApp").hidden=true;return;}
+  timeline.innerHTML=currentOfficialMessages.map(message=>{const medias=Array.isArray(message.crm_whatsapp_media)?message.crm_whatsapp_media:[];medias.forEach(media=>officialMediaById.set(media.id,media));const mediaButtons=medias.map(media=>`<button class="ghost waMediaButton" type="button" data-official-media="${escapeHtml(media.id)}" ${media.download_status==='stored'?'':'disabled'}>${media.download_status==='stored'?'Abrir anexo':media.download_status==='failed'?'Anexo com falha':'Processando anexo'}</button>`).join('');return `<article class="waMessage ${message.direction==='outbound'?'outbound':'inbound'}"><div class="waMessageHd"><b>${message.direction==='outbound'?'Criare':'Cliente'}</b><time>${escapeHtml(fmtBRDateTime(message.message_timestamp))}</time></div><div class="waMessageBody">${escapeHtml(message.body||`[${message.message_type||'mensagem'} sem conteúdo textual]`)}</div>${mediaButtons}<div class="waMessageMeta">${escapeHtml(message.message_type||'text')}${message.status?` • ${escapeHtml(message.status)}`:''}</div></article>`;}).join('');
+  $("btnLoadOlderWhatsApp").hidden=!officialHasOlder;timeline.scrollTop=timeline.scrollHeight;
 }
-
-async function requireCurrentWhatsAppExtension(){
-  const result = await checkWhatsAppExtension();
-  if(!result.ok) throw new Error(result.error || `Instale a extensão Criare ${WHATSAPP_EXTENSION_VERSION} neste computador.`);
-  if(result.extensionVersion !== WHATSAPP_EXTENSION_VERSION){
-    throw new Error(`A extensão deste computador é a versão ${result.extensionVersion || "desconhecida"}. Instale a versão ${WHATSAPP_EXTENSION_VERSION} e atualize as abas do CRM e do WhatsApp Web.`);
-  }
-  return result;
+function updateOfficialWhatsAppIndicators(record,conversation){
+  const synced=conversation?.last_sync_at||record?.whatsapp_official_last_sync_at;$("whatsappOfficialSync").textContent=synced?`WhatsApp sincronizado em ${fmtBRDateTime(synced)}`:'Aguardando sincronização oficial';
+  $("whatsappOfficialNew").textContent=`${Number(conversation?.new_messages_since_analysis||0)} nova(s) desde a análise`;
+  const state=conversation?.analysis_status||record?.whatsapp_analysis_status||'never';const labels={current:'Análise atualizada',stale:'Análise desatualizada',processing:'Análise em processamento',failed:'Falha na última análise',never:'Análise ainda não executada'};$("whatsappOfficialAnalysis").textContent=labels[state]||labels.never;$("whatsappOfficialAnalysis").classList.toggle('stale',['stale','failed'].includes(state));
+  $("whatsappSyncStatus").textContent=conversation?`${conversation.crm_whatsapp_accounts?.verified_name||'Conta WhatsApp Criare'}${conversation.crm_whatsapp_accounts?.coexistence_enabled?' • Coexistence ativo':''}.${conversation.analysis_error?` Última análise: ${conversation.analysis_error}`:''}`:'A integração oficial ainda não recebeu mensagens para este telefone.';
 }
-
-function requestWhatsAppAutomaticSync(record){
-  return new Promise(resolve=>{
-    const phone = whatsappNumber(record?.phone);
-    if(!phone) return resolve({ok:false, error:"Telefone inválido ou sem DDD."});
-    const requestId = crypto.randomUUID();
-    const request = {
-      requestId,
-      requestedAt:nowISO(),
-      phone,
-      customerName:`${record?.first_name || ""} ${record?.last_name || ""}`.trim()
-    };
-    const timer = setTimeout(()=>{
-      whatsappAutoSyncWaiters.delete(requestId);
-      resolve({ok:false, requestId, error:"A atualização demorou além do esperado."});
-    }, 150000);
-    whatsappAutoSyncWaiters.set(requestId, {resolve, timer});
-    document.documentElement.dataset.criareWhatsAppAutoSyncRequest = JSON.stringify(request);
-    document.dispatchEvent(new CustomEvent("criare-whatsapp-auto-sync"));
-  });
+async function loadOfficialWhatsApp(record,{older=false,notify=false}={}){
+  if(!record?.id||!whatsappDataService){currentOfficialConversation=null;currentOfficialMessages=[];officialHasOlder=false;renderOfficialWhatsAppTimeline();updateOfficialWhatsAppIndicators(record,null);return;}
+  try{if(!older){currentOfficialConversation=await whatsappDataService.conversationForRecord(record.id);currentOfficialMessages=[];officialHasOlder=false;}if(!currentOfficialConversation){renderOfficialWhatsAppTimeline();updateOfficialWhatsAppIndicators(record,null);return;}const page=await whatsappDataService.messages(currentOfficialConversation.id,{offset:older?currentOfficialMessages.length:0,limit:60});officialHasOlder=page.length===60;currentOfficialMessages=older?[...page,...currentOfficialMessages]:page;renderOfficialWhatsAppTimeline();updateOfficialWhatsAppIndicators(record,currentOfficialConversation);if(notify)toast('Conversa oficial atualizada.');}catch(error){console.error('[CRM WhatsApp oficial] Falha ao carregar.',error);$("whatsappSyncStatus").textContent=error.message||'Falha ao carregar a conversa oficial.';if(notify)toast($("whatsappSyncStatus").textContent);}
 }
-
-function mergeWhatsAppMessages(record, result){
-  const normalizeEntry = entry=>{
-    if(entry && typeof entry === "object"){
-      const text = String(entry.text || "").trim();
-      const id = String(entry.id || "").trim();
-      return text ? {id:id || null, text} : null;
-    }
-    const text = String(entry || "").trim();
-    return text ? {id:null, text} : null;
-  };
-  let storedEntries = Array.isArray(record?.whatsapp_message_entries)
-    ? record.whatsapp_message_entries.map(normalizeEntry).filter(Boolean)
-    : [];
-  if(!storedEntries.length){
-    storedEntries = String(record?.whatsapp_transcript || "").split("\n").map(normalizeEntry).filter(Boolean);
-  }
-  const incomingEntries = Array.isArray(result?.entries)
-    ? result.entries.map(normalizeEntry).filter(Boolean)
-    : String(result?.transcript || "").split("\n").map(normalizeEntry).filter(Boolean);
-  const merged = storedEntries.map(entry=>({...entry}));
-  const seenIds = new Set(merged.map(entry=>entry.id).filter(Boolean));
-  const legacyByText = new Map();
-  for(let index=0; index<merged.length; index+=1){
-    if(merged[index].id) continue;
-    if(!legacyByText.has(merged[index].text)) legacyByText.set(merged[index].text, []);
-    legacyByText.get(merged[index].text).push(index);
-  }
-  let addedCount = 0;
-  for(const entry of incomingEntries){
-    if(entry.id && seenIds.has(entry.id)) continue;
-    const legacyMatches = legacyByText.get(entry.text);
-    if(legacyMatches?.length){
-      const legacyIndex = legacyMatches.shift();
-      merged[legacyIndex] = {...entry};
-      if(entry.id) seenIds.add(entry.id);
-      continue;
-    }
-    if(!entry.id && merged.some(saved=>saved.text===entry.text)) continue;
-    merged.push({...entry});
-    if(entry.id) seenIds.add(entry.id);
-    addedCount += 1;
-  }
-  const entries = merged.slice(-5000);
-  return {
-    entries,
-    transcript:entries.map(entry=>entry.text).join("\n"),
-    addedCount,
-    totalCount:entries.length
-  };
+async function showOfficialWhatsAppOverview(){
+  if(!whatsappDataService)return toast("Entre no CRM para consultar o WhatsApp.");
+  const button=$("btnSyncWhatsAppAll");button.disabled=true;button.textContent="Consultando…";
+  try{const overview=await whatsappDataService.overview();const attention=[];if(overview.unmatched)attention.push(`${overview.unmatched} contato(s) sem lead correspondente`);if(overview.ambiguous)attention.push(`${overview.ambiguous} telefone(s) ambíguo(s)`);if(overview.stale)attention.push(`${overview.stale} conversa(s) aguardando análise`);toast(overview.total?`WhatsApp oficial: ${overview.total} conversa(s). ${attention.length?attention.join("; "):"Tudo atualizado."}`:"A integração oficial ainda não recebeu conversas.");}
+  catch(error){toast(error.message||"Não foi possível consultar o status do WhatsApp.");}
+  finally{button.disabled=false;button.textContent="Status WhatsApp";}
 }
-
-async function saveWhatsAppCapture(targetRecords, result){
-  const saved = [];
-  let addedCount = 0;
-  let totalCount = 0;
-  for(const record of targetRecords){
-    const merged = mergeWhatsAppMessages(record, result);
-    addedCount = Math.max(addedCount, merged.addedCount);
-    totalCount = Math.max(totalCount, merged.totalCount);
-    let photoPath = record.whatsapp_profile_photo_path || null;
-    let photoUpdatedAt = record.whatsapp_profile_photo_updated_at || null;
-    if(result.profilePhotoDataUrl){
-      try{
-        photoPath = await uploadWhatsAppProfilePhoto(record.id, result.profilePhotoDataUrl);
-        photoUpdatedAt = nowISO();
-      }catch(error){
-        console.warn("[CRM WhatsApp] A conversa foi salva, mas a foto não pôde ser atualizada.", error);
-      }
-    }
-    const patch = {
-      whatsapp_message_entries:merged.entries,
-      whatsapp_transcript:merged.transcript || record.whatsapp_transcript || null,
-      whatsapp_transcript_updated_at:nowISO(),
-      whatsapp_sync_message_count:merged.totalCount,
-      whatsapp_sync_new_message_count:merged.addedCount,
-      whatsapp_sync_error:null,
-      whatsapp_capture_complete:Boolean(result.reachedStart && !result.limited),
-      whatsapp_capture_note:result.limited
-        ? "Captura interrompida no limite de segurança; o histórico salvo pode ser parcial."
-        : (result.reachedStart ? "Início da conversa alcançado nesta captura." : "O WhatsApp não confirmou o início da conversa nesta captura."),
-      whatsapp_channel_status:result.noConversation ? "not_available" : (result.empty ? "no_messages" : "conversation"),
-      whatsapp_profile_photo_path:photoPath,
-      whatsapp_profile_photo_updated_at:photoUpdatedAt
-    };
-    const {data, error} = await sb.from(TBL_RECORDS).update(patch).eq("id", record.id).select("*").single();
-    if(error) throw new Error(error.message || "Não foi possível gravar a conversa no CRM.");
-    const index = records.findIndex(item=>item.id===data.id);
-    if(index>=0) records[index]=data;
-    if(photoPath){
-      const {data:signed} = await sb.storage.from(WHATSAPP_AVATAR_BUCKET).createSignedUrl(photoPath, 3600);
-      if(signed?.signedUrl) whatsappAvatarUrls.set(photoPath, signed.signedUrl);
-    }
-    saved.push(data);
-  }
-  return {records:saved, addedCount, totalCount};
-}
-
-function dataUrlToBlob(dataUrl){
-  const match = String(dataUrl || "").match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/i);
-  if(!match) throw new Error("Formato de foto inválido.");
-  const binary = atob(match[2]);
-  const bytes = new Uint8Array(binary.length);
-  for(let index=0; index<binary.length; index+=1) bytes[index] = binary.charCodeAt(index);
-  return new Blob([bytes], {type:match[1].toLowerCase()});
-}
-
-async function uploadWhatsAppProfilePhoto(recordId, dataUrl){
-  const blob = dataUrlToBlob(dataUrl);
-  if(blob.size > 1572864) throw new Error("A foto de perfil ultrapassa 1,5 MB.");
-  const path = `${recordId}/profile`;
-  const {error} = await sb.storage.from(WHATSAPP_AVATAR_BUCKET).upload(path, blob, {
-    upsert:true,
-    contentType:blob.type,
-    cacheControl:"3600"
-  });
-  if(error) throw error;
-  return path;
-}
-
-function whatsappCaptureStatus(result, savedResult={}){
-  const audioPending = Math.max(0, Number(result.audioCount || 0) - Number(result.audioTranscribed || 0));
-  const audioDone = result.audioTranscribed ? ` ${result.audioTranscribed} áudio(s) transcrito(s).` : "";
-  const audioWarning = audioPending ? ` ${audioPending} áudio(s) ainda sem transcrição.` : "";
-  const older = result.olderHistoryRequested
-    ? (result.olderHistoryLoaded ? " O histórico antigo do celular também foi carregado." : " O WhatsApp não concluiu o carregamento do histórico antigo.")
-    : "";
-  const completeness = result.limited
-    ? " Atenção: a captura atingiu o limite de segurança e pode estar parcial."
-    : (result.reachedStart ? " Início da conversa alcançado." : " O WhatsApp não confirmou o início da conversa; uma nova atualização tentará completar o histórico.");
-  if(result.noConversation) return "Este contato não possui conversa no WhatsApp; o cadastro foi mantido normalmente.";
-  if(result.empty) return "Contato localizado no WhatsApp, mas ainda não há mensagens no histórico.";
-  const added = Number(savedResult.addedCount || 0);
-  const total = Number(savedResult.totalCount || 0);
-  const history = added
-    ? `${added} nova(s) mensagem(ns) adicionada(s); ${total} no histórico salvo.`
-    : `Nenhuma mensagem nova; o histórico já estava atualizado com ${total} mensagem(ns).`;
-  return `${history}${audioDone}${audioWarning}${older}${completeness}`;
-}
-
-async function captureWhatsAppWebConversation(){
-  const button = $("btnCaptureWhatsAppWeb");
-  const status = $("whatsappSyncStatus");
-  const record = records.find(item=>item.id===$("id").value);
-  if(!record){ toast("Salve o cliente antes de atualizar a conversa."); return null; }
-  try{
-    await requireCurrentWhatsAppExtension();
-  }catch(error){
-    status.textContent = error.message;
-    toast(error.message);
-    return null;
-  }
-  button.disabled = true;
-  button.textContent = "Atualizando…";
-  status.textContent = "Abrindo o cliente correto, lendo as mensagens e gravando no CRM…";
-  try{
-    const result = await requestWhatsAppAutomaticSync(record);
-    if(result.ok && result.extensionVersion !== WHATSAPP_EXTENSION_VERSION){
-      throw new Error(`A extensão Criare está desatualizada. Instale a versão ${WHATSAPP_EXTENSION_VERSION} e atualize as abas do CRM e do WhatsApp Web.`);
-    }
-    if(!result.ok) throw new Error(result.error || "Não foi possível atualizar a conversa.");
-    const savedResult = await saveWhatsAppCapture([record], result);
-    const saved = savedResult.records[0];
-    $("whatsappConversation").value = saved.whatsapp_transcript || "";
-    const modalAvatarUrl = whatsappAvatarUrls.get(saved.whatsapp_profile_photo_path) || "";
-    $("modalCustomerAvatar").hidden = !modalAvatarUrl;
-    $("modalCustomerAvatar").src = modalAvatarUrl;
-    render();
-    status.textContent = whatsappCaptureStatus(result, savedResult);
-    toast(result.empty ? "Cliente verificado; não há conversa para importar." : "Conversa e foto atualizadas no CRM.");
-    return {record:saved, result, savedResult};
-  }catch(error){
-    status.textContent = error.message || "Não foi possível atualizar a conversa.";
-    toast(status.textContent);
-    return null;
-  }finally{
-    button.disabled = false;
-    button.textContent = "Atualizar esta conversa";
-  }
-}
-document.addEventListener("criare-whatsapp-result", ()=>{
-  clearTimeout(whatsappCaptureTimer);
-  const button = $("btnCaptureWhatsAppWeb");
-  button.disabled = false;
-  button.textContent = "Atualizar esta conversa";
-  let result;
-  try{
-    result = JSON.parse(document.documentElement.dataset.criareWhatsAppResult || "{}");
-  }catch(error){
-    result = {ok:false, error:"A extensão devolveu uma resposta inválida."};
-  }
-  delete document.documentElement.dataset.criareWhatsAppResult;
-  if(result.ok && result.extensionVersion !== WHATSAPP_EXTENSION_VERSION){
-    result = {
-      ok:false,
-      error:`A extensão Criare está desatualizada. Instale a versão ${WHATSAPP_EXTENSION_VERSION} e atualize as abas do CRM e do WhatsApp Web.`
-    };
-  }
-  if(!result.ok){
-    $("whatsappSyncStatus").textContent = result.error || "Não foi possível capturar a conversa.";
-    return toast(result.error || "Não foi possível capturar a conversa.");
-  }
-  $("whatsappConversation").value = String(result.transcript || "").trim();
-  const title = result.title ? ` de ${result.title}` : "";
-  const limited = result.limited ? " Role a conversa para cima e capture novamente para incluir mensagens anteriores." : "";
-  const audioPending = Math.max(0, Number(result.audioCount || 0) - Number(result.audioTranscribed || 0));
-  const audioDone = result.audioTranscribed ? ` ${result.audioTranscribed} áudio(s) transcrito(s).` : "";
-  const audioWarning = audioPending
-    ? ` ${audioPending} áudio(s) ficaram sem transcrição${result.audioExtensionDetected ? "; a transcrição continua no WhatsApp e pode ser incorporada capturando novamente" : "; instale uma extensão compatível"}.`
-    : "";
-  $("whatsappSyncStatus").textContent = `${result.count || 0} mensagem(ns) capturada(s)${title}.${audioDone}${audioWarning}${limited}`;
-  toast("Conversa capturada. Agora escolha o tipo de análise.");
-});
-
-function whatsappRecordGroups(){
-  const grouped = new Map();
-  for(const record of records){
-    const phone = whatsappNumber(record.phone);
-    if(!phone) continue;
-    if(!grouped.has(phone)) grouped.set(phone, []);
-    grouped.get(phone).push(record);
-  }
-  return [...grouped.values()];
-}
-
-function updateWhatsAppBulkUi({done, total, success, empty, failed, current="", failures=[]}){
-  const percentage = total ? Math.round((done / total) * 100) : 0;
-  $("whatsappBulkProgressBar").style.width = `${percentage}%`;
-  $("whatsappBulkCount").textContent = `${done} de ${total} conversa(s)`;
-  $("whatsappBulkCurrent").textContent = current;
-  $("whatsappBulkSuccess").textContent = success;
-  $("whatsappBulkEmpty").textContent = empty;
-  $("whatsappBulkFailed").textContent = failed;
-  const failureBox = $("whatsappBulkFailures");
-  failureBox.hidden = !failures.length;
-  failureBox.textContent = failures.join("\n");
-}
-
-async function saveWhatsAppSyncError(targetRecords, message){
-  const ids = targetRecords.map(record=>record.id);
-  if(!ids.length) return;
-  const {error} = await sb.from(TBL_RECORDS).update({
-    whatsapp_sync_error:String(message || "Falha na atualização").slice(0,500),
-    whatsapp_channel_status:"error"
-  }).in("id", ids);
-  if(error) console.warn("[CRM WhatsApp] Não foi possível registrar a falha.", error);
-}
-
-async function syncAllWhatsAppConversations(){
-  if(whatsappBulkRunning) return toast("A atualização das conversas já está em andamento.");
-  if(!sb || !session?.user) return toast("Entre no CRM antes de atualizar as conversas.");
-  const groups = whatsappRecordGroups();
-  if(!groups.length) return toast("Não há clientes com telefone válido para atualizar.");
-  try{
-    await requireCurrentWhatsAppExtension();
-  }catch(error){
-    return toast(error.message);
-  }
-
-  whatsappBulkRunning = true;
-  whatsappBulkCancelled = false;
-  const modal = $("whatsappBulkModal");
-  $("btnCancelWhatsAppBulk").disabled = false;
-  $("btnCancelWhatsAppBulk").hidden = false;
-  $("btnCloseWhatsAppBulk").hidden = true;
-  $("whatsappBulkSubtitle").textContent = "O CRM trabalhará em uma conversa por vez.";
-  modal.showModal();
-
-  let success = 0;
-  let empty = 0;
-  let failed = 0;
-  let newMessages = 0;
-  const failures = [];
-  updateWhatsAppBulkUi({done:0,total:groups.length,success,empty,failed,current:"Preparando a primeira conversa…",failures});
-
-  for(let index=0; index<groups.length; index+=1){
-    if(whatsappBulkCancelled) break;
-    const targetRecords = groups[index];
-    const representative = targetRecords[0];
-    const displayName = `${representative.first_name || ""} ${representative.last_name || ""}`.trim() || "Cliente";
-    updateWhatsAppBulkUi({
-      done:index,total:groups.length,success,empty,failed,
-      current:`Atualizando ${displayName}… Mantenha o WhatsApp Web aberto.`,failures
-    });
-    try{
-      const result = await requestWhatsAppAutomaticSync(representative);
-      if(result.ok && result.extensionVersion !== WHATSAPP_EXTENSION_VERSION){
-        throw new Error(`Instale a extensão Criare ${WHATSAPP_EXTENSION_VERSION} antes de continuar.`);
-      }
-      if(!result.ok) throw new Error(result.error || "Falha ao carregar a conversa.");
-      const savedResult = await saveWhatsAppCapture(targetRecords, result);
-      newMessages += savedResult.addedCount;
-      if(result.empty) empty += 1;
-      else success += 1;
-    }catch(error){
-      failed += 1;
-      const message = error.message || "Falha na atualização";
-      failures.push(`${displayName}: ${message}`);
-      await saveWhatsAppSyncError(targetRecords, message);
-    }
-    updateWhatsAppBulkUi({
-      done:index+1,total:groups.length,success,empty,failed,
-      current:index+1===groups.length ? "Finalizando a atualização…" : "Conversa concluída. Preparando a próxima…",failures
-    });
-  }
-
-  whatsappBulkRunning = false;
-  const processed = success + empty + failed;
-  $("btnCancelWhatsAppBulk").hidden = true;
-  $("btnCloseWhatsAppBulk").hidden = false;
-  $("whatsappBulkSubtitle").textContent = whatsappBulkCancelled ? "Atualização interrompida com segurança." : "Atualização concluída.";
-  $("whatsappBulkCurrent").textContent = whatsappBulkCancelled
-    ? `${processed} conversa(s) processada(s). As demais ficaram para a próxima atualização.`
-    : `${processed} conversa(s) processada(s). ${newMessages} nova(s) mensagem(ns) adicionada(s); os históricos anteriores foram preservados.`;
-  await fetchRecords({reason:"atualização de conversas", notifyNew:false});
-}
-
-function formatWhatsAppTranscript(messages, customerName){
-  return messages.map(message=>{
-    const when = new Date(message.message_timestamp).toLocaleString("pt-BR", {
-      day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit"
-    });
-    const author = message.direction === "outbound" ? "Criare" : (message.contact_name || customerName || "Cliente");
-    return `[${when}] ${author}: ${message.body || `[${message.message_type || "mensagem"}]`}`;
-  }).join("\n");
-}
-async function fetchWhatsAppConversation(record=null, {notify=false}={}){
-  const status = $("whatsappSyncStatus");
-  if(!sb || !session?.user){
-    status.textContent = "Entre no CRM para carregar as mensagens.";
-    return false;
-  }
-  const recordId = record?.id || $("id").value;
-  const number = whatsappNumber(record?.phone || $("phone").value);
-  if(!recordId && !number){
-    status.textContent = "Salve o cliente com um telefone válido para sincronizar a conversa.";
-    return false;
-  }
-  status.textContent = "Buscando mensagens sincronizadas…";
-  let query = sb.from(TBL_WHATSAPP_MESSAGES).select("*").order("message_timestamp", {ascending:false}).limit(500);
-  query = recordId && number
-    ? query.or(`record_id.eq.${recordId},contact_wa_id.eq.${number}`)
-    : (recordId ? query.eq("record_id", recordId) : query.eq("contact_wa_id", number));
-  const {data, error} = await query;
-  if(error){
-    console.warn("[CRM WhatsApp] Sincronização indisponível.", error);
-    status.textContent = ["42P01","PGRST205"].includes(error.code)
-      ? "A sincronização automática ainda está sendo ativada."
-      : "Não foi possível atualizar as mensagens agora.";
-    if(notify) toast("Não foi possível atualizar as mensagens.");
-    return false;
-  }
-  const messages = (data || []).reverse();
-  if(!messages.length){
-    status.textContent = "Nenhuma mensagem sincronizada ainda. Novas conversas aparecerão automaticamente.";
-    if(notify) toast("Ainda não há mensagens sincronizadas para este telefone.");
-    return true;
-  }
-  const customerName = `${record?.first_name || $("firstName").value} ${record?.last_name || $("lastName").value}`.trim();
-  $("whatsappConversation").value = formatWhatsAppTranscript(messages, customerName);
-  const latest = messages[messages.length - 1];
-  status.textContent = `${messages.length} mensagem(ns) sincronizada(s) • última em ${fmtBRDateTime(latest.message_timestamp)}.`;
-  if(notify) toast("Conversa atualizada.");
-  return true;
+function applyOfficialAnalysisResult(payload){
+  const result=payload.analysis||{};const record=records.find(item=>item.id===$('id').value);if(!record)return;Object.assign(record,{whatsapp_analysis_hard_boss:result.hard_boss||record.whatsapp_analysis_hard_boss,whatsapp_analysis_full:result.full_analysis||record.whatsapp_analysis_full,whatsapp_analysis_updated_at:payload.updated_at||nowISO(),whatsapp_analysis_model:result.model||record.whatsapp_analysis_model,whatsapp_analysis_status:'current',whatsapp_analysis_message_count:payload.message_count||record.whatsapp_analysis_message_count});if(LEAD_QUALITIES.includes(result.lead_quality))record.lead_quality=result.lead_quality;currentWhatsAppAnalysis={full:record.whatsapp_analysis_full||'',hardBoss:record.whatsapp_analysis_hard_boss||'',updatedAt:record.whatsapp_analysis_updated_at,model:record.whatsapp_analysis_model||''};$("whatsappSummary").value=currentWhatsAppAnalysis.hardBoss;$("whatsappSummary").dataset.model=currentWhatsAppAnalysis.model;renderWhatsAppAnalysis();if(currentOfficialConversation)Object.assign(currentOfficialConversation,{analysis_status:'current',new_messages_since_analysis:0,analysis_error:null});updateOfficialWhatsAppIndicators(record,currentOfficialConversation);render();
 }
 const CRIARE_CUSTOM_GPT_URL = "https://chatgpt.com/g/g-6a456f7734cc81919d0d2a98941be765-analista-de-conversas-criare";
 let currentWhatsAppAnalysis = {full:"", hardBoss:"", updatedAt:null, model:""};
@@ -2010,6 +1560,11 @@ let pendingItems = [];
 let pendingAttachments = [];
 let pendingPhotosBuffer = [];
 let whatsappAvatarUrls = new Map();
+let whatsappDataService = null;
+let currentOfficialConversation = null;
+let currentOfficialMessages = [];
+let officialHasOlder = false;
+let officialMediaById = new Map();
 let pendingSupported = true;
 let showCompletedPending = false;
 let outlookStatus = { configured:false, connected:false, account_email:null, provider:null };
@@ -2095,6 +1650,12 @@ async function initSupabase(){
   if(!isConfigured()) return;
   setAppDataState("loading", "Carregando seus dados", "Conectando à base compartilhada da Criare…");
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  whatsappDataService = CriareWhatsAppDataService.create({
+    supabaseClient:sb,
+    supabaseUrl:SUPABASE_URL,
+    anonKey:SUPABASE_ANON_KEY,
+    getAccessToken:async()=>session?.access_token || (await sb.auth.getSession()).data.session?.access_token || ""
+  });
   const { data, error } = await sb.auth.getSession();
   if(error){
     console.error("[CRM Auth] Falha ao recuperar sessão.", error);
@@ -3646,6 +3207,7 @@ function openModal(record=null, options={}){
   $("fCity").value = prevCity;
 
   $("modal").showModal();
+  setTimeout(()=>loadOfficialWhatsApp(record),0);
   if(options.focusSchedule){
     setTimeout(()=>$("nextAction").focus(), 50);
   }
@@ -3908,7 +3470,24 @@ $("pipeline").addEventListener("change", ()=>{
 $("stage").addEventListener("change", updateLostReasonVisibility);
 $("btnWhatsApp").addEventListener("click", ()=>openWhatsAppFor());
 $("btnWhatsAppFooter").addEventListener("click", ()=>openWhatsAppFor());
-$("btnCaptureWhatsAppWeb").addEventListener("click", captureWhatsAppWebConversation);
+$("btnRefreshOfficialTimeline").addEventListener("click",()=>{
+  const record=records.find(item=>item.id===$("id").value)||null;loadOfficialWhatsApp(record,{notify:true});
+});
+$("btnLoadOlderWhatsApp").addEventListener("click",()=>{
+  const record=records.find(item=>item.id===$("id").value)||null;loadOfficialWhatsApp(record,{older:true});
+});
+$("btnUpdateOfficialAnalysis").addEventListener("click",async()=>{
+  const recordId=$("id").value;const button=$("btnUpdateOfficialAnalysis");if(!recordId)return toast("Salve o cliente antes de atualizar a análise.");
+  if(!currentOfficialConversation)return toast("Ainda não há conversa oficial associada a este lead.");
+  button.disabled=true;button.textContent="Atualizando análise…";$("whatsappOfficialAnalysis").textContent="Análise em processamento";
+  try{const result=await whatsappDataService.refreshAnalysis(recordId);applyOfficialAnalysisResult(result);toast("Chefe Duro e análise completa atualizados.");}
+  catch(error){$("whatsappOfficialAnalysis").textContent="Falha na última análise";$("whatsappOfficialAnalysis").classList.add("stale");toast(error.message||"Não foi possível atualizar a análise.");}
+  finally{button.disabled=false;button.textContent="Atualizar análise";}
+});
+$("whatsappOfficialTimeline").addEventListener("click",async event=>{
+  const button=event.target.closest("[data-official-media]");if(!button)return;const media=officialMediaById.get(button.dataset.officialMedia);if(!media)return;
+  button.disabled=true;try{const url=await whatsappDataService.mediaUrl(media);if(!url)throw new Error("Anexo ainda não disponível.");window.open(url,"_blank","noopener,noreferrer");}catch(error){toast(error.message||"Não foi possível abrir o anexo.");}finally{button.disabled=false;}
+});
 $("btnAddAppointment").addEventListener("click", ()=>addAppointmentFromComposer());
 $("appointmentList").addEventListener("click", event=>{
   const button = event.target.closest("[data-remove-appointment]");
@@ -3917,27 +3496,8 @@ $("appointmentList").addEventListener("click", event=>{
   renderAppointmentList();
   toast("Compromisso removido da lista.");
 });
-$("btnRefreshWhatsApp").addEventListener("click", ()=>{
-  const record = records.find(item=>item.id===$("id").value) || null;
-  fetchWhatsAppConversation(record, {notify:true});
-});
 $("btnOpenCustomGpt").addEventListener("click", async ()=>{
-  const gptWindow = window.open("about:blank", "_blank");
-  if(!gptWindow) return toast("Permita pop-ups deste CRM para abrir o GPT Criare.");
-  gptWindow.document.title = "Preparando análise Criare…";
-  try{
-    const captured = await captureWhatsAppWebConversation();
-    const conversation = (captured?.record?.whatsapp_transcript || $("whatsappConversation").value).trim();
-    if(conversation.length < 40) throw new Error("Não há conversa suficiente para analisar.");
-    await copyTextToClipboard(buildCustomGptPrompt(conversation));
-    gptWindow.opener = null;
-    gptWindow.location.replace(CRIARE_CUSTOM_GPT_URL);
-    toast("Conversa atualizada e pedido copiado. Cole no GPT e envie.");
-  }catch(error){
-    console.error("[CRM ChatGPT] Falha ao copiar.", error);
-    gptWindow.close();
-    toast(error.message || "Não foi possível preparar a análise.");
-  }
+  $("btnUpdateOfficialAnalysis").click();
 });
 $("btnImportCustomGpt").addEventListener("click", async ()=>{
   try{
@@ -4108,24 +3668,7 @@ $("btnSync").addEventListener("click", async ()=>{
   syncController.resume("sincronização manual");
 });
 
-$("btnSyncWhatsAppAll").addEventListener("click", syncAllWhatsAppConversations);
-$("btnCancelWhatsAppBulk").addEventListener("click", ()=>{
-  whatsappBulkCancelled = true;
-  $("btnCancelWhatsAppBulk").disabled = true;
-  $("whatsappBulkCurrent").textContent = "Interrompendo após concluir a conversa atual…";
-});
-$("btnCloseWhatsAppBulk").addEventListener("click", ()=>{
-  $("btnCancelWhatsAppBulk").disabled = false;
-  $("whatsappBulkModal").close();
-});
-$("whatsappBulkModal").addEventListener("cancel", event=>{
-  if(!whatsappBulkRunning) return;
-  event.preventDefault();
-  whatsappBulkCancelled = true;
-  $("btnCancelWhatsAppBulk").disabled = true;
-  $("whatsappBulkCurrent").textContent = "Interrompendo após concluir a conversa atual…";
-});
-
+$("btnSyncWhatsAppAll").addEventListener("click", showOfficialWhatsAppOverview);
 $("btnRetryLoad").addEventListener("click", async ()=>{
   if(!sb || !session?.user) return openLogin();
   bootedUserId = null;
