@@ -42,11 +42,13 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/if\(atTop && stableTopPasses >= 2\)/);
   assert.doesNotMatch(content,/limited:history\.limited \|\| olderHistory\.pending/);
   assert.match(crm,/result\?\.reachedStart\|\|result\?\.loadedHistoryComplete/);
-  assert.match(crm,/if\(!captured\.analysisReady\)throw new Error/);
+  assert.match(crm,/function analyzeSavedWhatsAppConversation/);
   assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.1"/);
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.2"/);
+  assert.match(content,/matches:sameCustomer\(title, request\)/);
+  assert.doesNotMatch(content,/trustedTarget\) \|\| sameCustomer/);
 });
 
 test("a análise não trunca silenciosamente conversas longas",async()=>{

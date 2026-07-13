@@ -1,6 +1,6 @@
 "use strict";
 
-const CRIARE_CONTENT_SCRIPT_VERSION = "2.1.1";
+const CRIARE_CONTENT_SCRIPT_VERSION = "2.1.2";
 const CaptureCore = globalThis.CriareWhatsAppCaptureCore;
 const {cleanText, normalizedUiText, messageHash, continuationPrefix} = CaptureCore;
 
@@ -30,7 +30,7 @@ function sameCustomer(title, request){
   const tokens = expectedName.split(" ").filter(token=>token.length >= 3);
   if(!tokens.length) return false;
   const activeTokens = active.split(" ").filter(Boolean);
-  if(activeTokens.length === 1 && activeTokens[0] === tokens[0]) return true;
+  if(activeTokens[0] === tokens[0] && activeTokens.length <= 3) return true;
   return tokens.filter(token=>active.includes(token)).length >= Math.min(2, tokens.length);
 }
 
@@ -151,7 +151,7 @@ function chatLoadState(request={}){
   const count = messageNodes(main).length;
   return {
     ready:Boolean(title && count), empty:Boolean(title && !count), title, count,
-    matches:Boolean(request.trustedTarget) || sameCustomer(title, request), profilePhotoUrl:profilePhotoUrl(main),
+    matches:sameCustomer(title, request), profilePhotoUrl:profilePhotoUrl(main),
     olderMessagesAvailable:Boolean(olderMessagesButton(main)), unavailable:conversationUnavailable()
   };
 }
@@ -372,7 +372,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   (async()=>{
     try{
       const title = activeChatTitle();
-      if(!message.request?.trustedTarget && !sameCustomer(title,message.request || {})){
+      if(!sameCustomer(title,message.request || {})){
         throw new Error(`A conversa aberta é “${title || "não identificada"}”, mas o cliente solicitado é “${cleanText(message.request?.customerName) || "o lead do CRM"}”.`);
       }
       sendResponse({ok:true,title,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...await extractLoadedMessages()});

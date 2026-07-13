@@ -59,6 +59,8 @@ async function waitForChat(tabId,request,{timeoutMs=65000}={}){
   let stableChecks = 0;
   let previousCount = -1;
   let lastState = null;
+  let mismatchState = null;
+  let mismatchChecks = 0;
   await sleep(1600);
   while(Date.now() < deadline){
     try{
@@ -66,6 +68,16 @@ async function waitForChat(tabId,request,{timeoutMs=65000}={}){
       lastState = state;
       unavailableChecks = state?.unavailable ? unavailableChecks + 1 : 0;
       if(unavailableChecks >= 3) return {ready:true,empty:true,unavailable:true,state};
+      if(state?.title && state.matches === false){
+        mismatchState = state;
+        mismatchChecks += 1;
+        if(mismatchChecks >= 3) return {ready:false,empty:false,mismatch:true,state};
+        stableChecks = 0;
+        previousCount = -1;
+        await sleep(900);
+        continue;
+      }
+      mismatchChecks = 0;
       if(state?.matches && state?.ready){
         const count = Number(state.count || 0);
         stableChecks = count === previousCount ? stableChecks + 1 : 0;
@@ -85,7 +97,7 @@ async function waitForChat(tabId,request,{timeoutMs=65000}={}){
     }
     await sleep(900);
   }
-  return {ready:false,empty:false,state:lastState};
+  return {ready:false,empty:false,mismatch:Boolean(mismatchState),state:mismatchState||lastState};
 }
 
 function bytesToBase64(bytes){
@@ -135,9 +147,11 @@ async function syncCustomerChat(request){
   await saveTarget(phone,tab.id);
   await waitForTabComplete(tab.id);
   await ensureCurrentContentScript(tab.id);
-  const loaded = await waitForChat(tab.id,{...request,trustedTarget:true});
+  const loaded = await waitForChat(tab.id,request);
   if(!loaded.ready){
-    return {ok:false,extensionVersion:chrome.runtime.getManifest().version,error:"O WhatsApp não confirmou que a conversa correta terminou de carregar."};
+    return {ok:false,extensionVersion:chrome.runtime.getManifest().version,error:loaded.mismatch
+      ? `A conversa aberta é “${loaded.state?.title || "não identificada"}”, mas o lead solicitado é “${request.customerName || "não identificado"}”. Abra o cliente correto no WhatsApp Web.`
+      : "O WhatsApp não confirmou que a conversa correta terminou de carregar."};
   }
   if(loaded.empty){
     return withProfilePhoto({
@@ -149,7 +163,7 @@ async function syncCustomerChat(request){
 
   const extraction = chrome.tabs.sendMessage(tab.id,{
     type:"criare-extract-active-chat",
-    request:{...request,trustedTarget:true}
+    request
   });
   const timeout = new Promise(resolve=>setTimeout(()=>resolve({ok:false,error:"A leitura completa ultrapassou o tempo de segurança. O histórico anterior foi preservado."}),CAPTURE_TIMEOUT_MS));
   const result = await Promise.race([extraction,timeout]);
@@ -164,7 +178,7 @@ async function captureCustomerChat(request){
   if(!target?.tabId) return {ok:false,error:"Abra primeiro a conversa deste cliente pelo CRM."};
   try{
     await chrome.tabs.get(target.tabId);
-    return await chrome.tabs.sendMessage(target.tabId,{type:"criare-extract-active-chat",request:{...request,trustedTarget:true}});
+    return await chrome.tabs.sendMessage(target.tabId,{type:"criare-extract-active-chat",request});
   }catch(error){
     delete targets[phone];
     await chrome.storage.session.set({[TARGETS_KEY]:targets});
