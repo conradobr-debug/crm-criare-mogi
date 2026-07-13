@@ -1263,8 +1263,8 @@ function checkWhatsAppExtension(){
 }
 async function requireCurrentWhatsAppExtension(){
   const result=await checkWhatsAppExtension();
-  if(!result.ok)throw new Error(result.error||`Instale a extensão Criare ${WHATSAPP_EXTENSION_VERSION}.`);
-  if(result.extensionVersion!==WHATSAPP_EXTENSION_VERSION)throw new Error(`A extensão instalada é a versão ${result.extensionVersion||"desconhecida"}. Instale a versão ${WHATSAPP_EXTENSION_VERSION} e recarregue CRM e WhatsApp Web.`);
+  if(!result.ok){const error=new Error(result.error||`Instale a extensão Criare ${WHATSAPP_EXTENSION_VERSION}.`);error.extensionVersion=result.extensionVersion||"não respondida";throw error;}
+  if(result.extensionVersion!==WHATSAPP_EXTENSION_VERSION){const error=new Error(`A extensão instalada é a versão ${result.extensionVersion||"desconhecida"}. Instale a versão ${WHATSAPP_EXTENSION_VERSION} e recarregue CRM e WhatsApp Web.`);error.extensionVersion=result.extensionVersion||"desconhecida";throw error;}
   return result;
 }
 function requestWhatsAppAutomaticSync(record){
@@ -1445,7 +1445,7 @@ function captureFailureMessage(record,error){
 function captureFailureDetails(record,error,override={}){
   const context=error?.captureContext||{};const result=context.result||{};
   const phone=whatsappNumber(record?.phone||$("phone")?.value)||"inválido";
-  return {cause:error?.message||"erro não identificado",stage:override.stage||context.stage||"desconhecida",requiredVersion:WHATSAPP_EXTENSION_VERSION,installedVersion:result.extensionVersion||"não respondida",phone,contact:result.detectedTitle||result.title||"não identificada",url:result.tabUrl||"não disponível",domCount:Number(result.domCount||0),interpretedCount:Number(result.count||0),savedCount:Number(context.savedCount||record?.whatsapp_sync_message_count||0)};
+  return {cause:error?.message||"erro não identificado",stage:override.stage||context.stage||"desconhecida",requiredVersion:WHATSAPP_EXTENSION_VERSION,installedVersion:result.extensionVersion||error?.extensionVersion||"não respondida",phone,contact:result.detectedTitle||result.title||"não identificada",url:result.tabUrl||"não disponível",domCount:Number(result.domCount||0),interpretedCount:Number(result.count||0),savedCount:Number(context.savedCount||record?.whatsapp_sync_message_count||0)};
 }
 function showCaptureFailure(record,error,override={}){
   const details=captureFailureDetails(record,error,override);const panel=$("whatsappCaptureError");
