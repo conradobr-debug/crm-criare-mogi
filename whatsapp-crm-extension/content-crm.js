@@ -29,6 +29,15 @@ document.addEventListener("criare-whatsapp-auto-sync",()=>{
   });
 });
 
+document.addEventListener("criare-whatsapp-open-capture",()=>{
+  const request = readRequest("criareWhatsAppOpenCaptureRequest");
+  chrome.runtime.sendMessage({type:"criare-capture-open-whatsapp",request},result=>{
+    returnResult("criareWhatsAppOpenCaptureResult","criare-whatsapp-open-capture-result",chrome.runtime.lastError
+      ? {ok:false,requestId:request.requestId,error:"A extensão Criare precisa ser recarregada no Chrome."}
+      : {...(result || {ok:false}),requestId:request.requestId});
+  });
+});
+
 document.addEventListener("criare-whatsapp-extension-ping",()=>{
   const request = readRequest("criareWhatsAppExtensionPingRequest");
   chrome.runtime.sendMessage({type:"criare-extension-status"},result=>{

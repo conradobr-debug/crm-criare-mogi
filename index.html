@@ -810,6 +810,7 @@
             <div class="leadSectionActions">
               <button class="whatsappAction" id="btnWhatsApp" type="button">Abrir WhatsApp Web</button>
               <button class="primary analyzeConversationAction" id="btnUpdateOfficialAnalysis" type="button">Capturar conversa</button>
+              <button class="ghost analyzeConversationAction" id="btnCaptureOpenWhatsApp" type="button">Capturar conversa aberta</button>
             </div>
           </div>
           <div class="leadSectionBody" id="whatsappFields" data-section-body hidden>
@@ -1191,6 +1192,7 @@ function openWhatsAppFor(record=null){
 }
 const WHATSAPP_EXTENSION_VERSION = "2.1.3";
 const whatsappAutoSyncWaiters = new Map();
+const whatsappOpenCaptureWaiters = new Map();
 const whatsappExtensionPingWaiters = new Map();
 
 document.addEventListener("criare-whatsapp-auto-sync-result",()=>{
@@ -1200,6 +1202,14 @@ document.addEventListener("criare-whatsapp-auto-sync-result",()=>{
   delete document.documentElement.dataset.criareWhatsAppAutoSyncResult;
   const waiter=whatsappAutoSyncWaiters.get(result.requestId);if(!waiter)return;
   clearTimeout(waiter.timer);whatsappAutoSyncWaiters.delete(result.requestId);waiter.resolve(result);
+});
+document.addEventListener("criare-whatsapp-open-capture-result",()=>{
+  let result;
+  try{ result=JSON.parse(document.documentElement.dataset.criareWhatsAppOpenCaptureResult||"{}"); }
+  catch(error){ result={ok:false,error:"A extensão devolveu uma resposta inválida."}; }
+  delete document.documentElement.dataset.criareWhatsAppOpenCaptureResult;
+  const waiter=whatsappOpenCaptureWaiters.get(result.requestId);if(!waiter)return;
+  clearTimeout(waiter.timer);whatsappOpenCaptureWaiters.delete(result.requestId);waiter.resolve(result);
 });
 document.addEventListener("criare-whatsapp-extension-ping-result",()=>{
   let result;
@@ -1233,6 +1243,17 @@ function requestWhatsAppAutomaticSync(record){
     whatsappAutoSyncWaiters.set(requestId,{resolve,timer});
     document.documentElement.dataset.criareWhatsAppAutoSyncRequest=JSON.stringify(request);
     document.dispatchEvent(new CustomEvent("criare-whatsapp-auto-sync"));
+  });
+}
+function requestWhatsAppOpenCapture(record){
+  return new Promise(resolve=>{
+    const phone=whatsappNumber(record?.phone);if(!phone)return resolve({ok:false,error:"Telefone inválido ou sem DDD."});
+    const requestId=crypto.randomUUID();
+    const request={requestId,requestedAt:nowISO(),phone,customerName:`${record?.first_name||""} ${record?.last_name||""}`.trim()};
+    const timer=setTimeout(()=>{whatsappOpenCaptureWaiters.delete(requestId);resolve({ok:false,requestId,error:"A captura da conversa aberta ultrapassou o tempo de segurança."});},225000);
+    whatsappOpenCaptureWaiters.set(requestId,{resolve,timer});
+    document.documentElement.dataset.criareWhatsAppOpenCaptureRequest=JSON.stringify(request);
+    document.dispatchEvent(new CustomEvent("criare-whatsapp-open-capture"));
   });
 }
 function normalizeCapturedEntry(entry){
@@ -1361,7 +1382,7 @@ function updateCapturedWhatsAppIndicators(record){
   $("whatsappSyncStatus").textContent=record?.whatsapp_sync_error||record?.whatsapp_capture_note||(record?.id?"Pronto para capturar e analisar.":"Salve o cliente antes de analisar.");
   renderWhatsAppSectionSummary(record);
 }
-async function captureFreeWhatsAppConversation(record){
+async function captureFreeWhatsAppConversation(record,{openOnly=false}={}){
   const context={stage:"iniciando",result:null};
   const setStage=stage=>{
     context.stage=stage;
@@ -1371,8 +1392,8 @@ async function captureFreeWhatsAppConversation(record){
   try{
     setStage("Localizando WhatsApp Web");
     await requireCurrentWhatsAppExtension();
-    setStage("Abrindo conversa no WhatsApp Web");
-    const result=await requestWhatsAppAutomaticSync(record);context.result=result;
+    setStage(openOnly?"Lendo conversa aberta no WhatsApp Web":"Abrindo conversa no WhatsApp Web");
+    const result=openOnly?await requestWhatsAppOpenCapture(record):await requestWhatsAppAutomaticSync(record);context.result=result;
     if(result.ok&&result.extensionVersion!==WHATSAPP_EXTENSION_VERSION)throw new Error(`Atualize a extensão para a versão ${WHATSAPP_EXTENSION_VERSION}.`);
     if(!result.ok)throw new Error(result.error||"Não foi possível capturar a conversa.");
     if(result.empty)throw new Error(result.noConversation?"Nenhuma conversa foi encontrada para este telefone no WhatsApp Web.":"Nenhuma mensagem foi encontrada na conversa.");
@@ -3777,9 +3798,25 @@ $("btnUpdateOfficialAnalysis").addEventListener("click",async()=>{
     toast("Conversa salva no lead.");
   }catch(error){
     $("whatsappOfficialAnalysis").textContent="Captura não concluída";$("whatsappOfficialAnalysis").classList.add("stale");
-    $("whatsappSyncStatus").textContent=captureFailureMessage(record,error);toast($("whatsappSyncStatus").textContent);
+    $("whatsappSyncStatus").textContent=`${captureFailureMessage(record,error)} Abra a conversa correta no WhatsApp Web e clique em “Capturar conversa aberta”.`;toast($("whatsappSyncStatus").textContent);
   }finally{
     $("whatsappOfficialAnalysis").classList.remove("whatsappCaptureProgress");button.disabled=false;button.textContent="Capturar conversa";
+  }
+});
+$("btnCaptureOpenWhatsApp").addEventListener("click",async()=>{
+  const recordId=$("id").value;const button=$("btnCaptureOpenWhatsApp");if(!recordId)return toast("Salve o cliente antes de capturar a conversa aberta.");
+  const record=records.find(item=>item.id===recordId);if(!record)return toast("Lead não localizado.");
+  button.disabled=true;button.textContent="Capturando conversa aberta…";
+  $("whatsappOfficialAnalysis").textContent="Lendo conversa aberta no WhatsApp Web";
+  $("whatsappOfficialAnalysis").classList.add("whatsappCaptureProgress");
+  try{
+    await captureFreeWhatsAppConversation(record,{openOnly:true});
+    toast("Conversa aberta salva no lead.");
+  }catch(error){
+    $("whatsappOfficialAnalysis").textContent="Captura não concluída";$("whatsappOfficialAnalysis").classList.add("stale");
+    $("whatsappSyncStatus").textContent=captureFailureMessage(record,error);toast($("whatsappSyncStatus").textContent);
+  }finally{
+    $("whatsappOfficialAnalysis").classList.remove("whatsappCaptureProgress");button.disabled=false;button.textContent="Capturar conversa aberta";
   }
 });
 $("btnAnalyzeAutomatic").addEventListener("click",async()=>{

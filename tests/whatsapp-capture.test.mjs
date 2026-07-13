@@ -35,6 +35,8 @@ test("reconstrói prefixo de mídia que continua a mensagem anterior",()=>{
 
 test("a extensão captura todo o histórico carregado sem esperar indefinidamente pelo celular",async()=>{
   const content = await readFile(new URL("whatsapp-crm-extension/content-whatsapp.js", root),"utf8");
+  const background = await readFile(new URL("whatsapp-crm-extension/background.js", root),"utf8");
+  const contentCrm = await readFile(new URL("whatsapp-crm-extension/content-crm.js", root),"utf8");
   const crm = await readFile(new URL("index.html", root),"utf8");
   assert.match(content,/data-testid=\"msg-container\"/);
   assert.match(content,/conversation-panel-messages/);
@@ -49,6 +51,9 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.3"/);
   assert(crm.includes("https://web.whatsapp.com/send/?phone=${number}"));
   assert(!crm.includes("whatsapp://"));
+  assert.match(crm,/id="btnCaptureOpenWhatsApp"[^>]*>Capturar conversa aberta/);
+  assert.match(background,/criare-capture-open-whatsapp/);
+  assert.match(contentCrm,/criare-whatsapp-open-capture/);
   assert.match(content,/matches:sameCustomer\(title, request\)/);
   assert.doesNotMatch(content,/trustedTarget\) \|\| sameCustomer/);
 });

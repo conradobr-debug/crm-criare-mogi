@@ -23,6 +23,10 @@ mensagens pelo identificador do WhatsApp e informa a quantidade salva no lead.
 Depois da captura, use separadamente a análise pela API ou o fluxo manual do
 CRM, conforme necessário.
 
+Se a abertura automática falhar, abra a conversa correta no WhatsApp Web e use
+**Capturar conversa aberta** como fallback técnico. O uso normal continua sendo
+apenas **Capturar conversa**.
+
 Mensagens repetidas são preservadas. Alterações de texto são atualizadas pelo
 mesmo identificador. Imagem, vídeo, documento, localização, contato e figurinha
 entram no histórico com marcador explícito. Áudio entra somente como

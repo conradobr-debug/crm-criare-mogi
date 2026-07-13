@@ -188,6 +188,25 @@ async function captureCustomerChat(request){
   }
 }
 
+async function captureOpenWhatsAppChat(request){
+  const extensionVersion = chrome.runtime.getManifest().version;
+  const activeTabs = await chrome.tabs.query({url:"https://web.whatsapp.com/*",active:true,currentWindow:true});
+  const allTabs = activeTabs.length ? activeTabs : await chrome.tabs.query({url:"https://web.whatsapp.com/*"});
+  const tab = allTabs.sort((a,b)=>(b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
+  if(!tab?.id) return {ok:false,extensionVersion,error:"Nenhuma aba do WhatsApp Web está aberta. Abra a conversa correta e tente novamente."};
+  try{
+    await ensureCurrentContentScript(tab.id);
+    const extraction = chrome.tabs.sendMessage(tab.id,{type:"criare-extract-active-chat",request});
+    const timeout = new Promise(resolve=>setTimeout(()=>resolve({ok:false,error:"A leitura da conversa aberta ultrapassou o tempo de segurança."}),CAPTURE_TIMEOUT_MS));
+    const result = await Promise.race([extraction,timeout]);
+    const currentTab=await chrome.tabs.get(tab.id).catch(()=>tab);
+    if(!result?.ok) return {...(result || {}),ok:false,extensionVersion,tabUrl:currentTab.url||tab.url||"",detectedTitle:result?.title||"",domCount:Number(result?.count||0),error:result?.error || "A conversa aberta não devolveu mensagens."};
+    return withProfilePhoto({...result,extensionVersion,tabUrl:currentTab.url||tab.url||"",detectedTitle:result.title||"",domCount:Number(result.count||0)},result.profilePhotoUrl);
+  }catch(error){
+    return {ok:false,extensionVersion,tabUrl:tab.url||"",detectedTitle:"",domCount:0,error:error.message || "Não foi possível capturar a conversa aberta."};
+  }
+}
+
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   if(message?.type === "criare-extension-status"){
     sendResponse({ok:true,extensionVersion:chrome.runtime.getManifest().version});
@@ -196,6 +215,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   const handlers = {
     "criare-open-whatsapp-chat":openCustomerChat,
     "criare-capture-active-whatsapp":captureCustomerChat,
+    "criare-capture-open-whatsapp":captureOpenWhatsAppChat,
     "criare-sync-whatsapp-record":syncCustomerChat
   };
   const handler = handlers[message?.type];
