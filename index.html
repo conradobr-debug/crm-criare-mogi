@@ -3839,6 +3839,7 @@ async function importManualGptResult(){
     let response = "";
     try{ response = navigator.clipboard?.readText ? (await navigator.clipboard.readText()).trim() : ""; }
     catch(error){ console.warn("[CRM ChatGPT] Área de transferência bloqueada; solicitando colagem manual.", error); }
+    if(/^Analise a conversa abaixo/i.test(response) || /CONTEXTO DO CRM[\s\S]*CONVERSA\s*---/i.test(response)) response="";
     if(!response) response = String(window.prompt("Cole aqui a resposta completa do GPT Criare:") || "").trim();
     if(response.length < 20) return toast("Cole a resposta completa do seu GPT.");
     await saveWhatsAppAnalysisResult(parseCustomGptResponse(response));
