@@ -1,8 +1,9 @@
-# Extensão Criare CRM — Analisar WhatsApp
+# Extensão Criare CRM — Capturar WhatsApp
 
 Extensão gratuita e de leitura para capturar a conversa escolhida no WhatsApp
-Web, preservar o histórico incremental no CRM e executar a análise comercial da
-Criare em um único botão.
+Web e salvar o histórico incremental no CRM. Ela apenas captura e salva a
+conversa; a análise ocorre separadamente pela API configurada ou pelo fluxo
+manual do CRM.
 
 ## Instalação
 
@@ -18,6 +19,9 @@ Abra um lead salvo e clique em **Capturar conversa**. O CRM abre o telefone
 correto no WhatsApp Web, espera a conversa estabilizar, solicita o histórico
 mais antigo disponível no celular, percorre as janelas virtualizadas, mescla as
 mensagens pelo identificador do WhatsApp e informa a quantidade salva no lead.
+
+Depois da captura, use separadamente a análise pela API ou o fluxo manual do
+CRM, conforme necessário.
 
 Mensagens repetidas são preservadas. Alterações de texto são atualizadas pelo
 mesmo identificador. Imagem, vídeo, documento, localização, contato e figurinha
