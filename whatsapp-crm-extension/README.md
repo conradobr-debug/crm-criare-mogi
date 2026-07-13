@@ -1,0 +1,37 @@
+# Extensão Criare CRM — Analisar WhatsApp
+
+Extensão gratuita e de leitura para capturar a conversa escolhida no WhatsApp
+Web, preservar o histórico incremental no CRM e executar a análise comercial da
+Criare em um único botão.
+
+## Instalação
+
+1. Extraia o arquivo `criare-whatsapp-extension-2.1.0.zip`.
+2. Abra `chrome://extensions`.
+3. Ative **Modo do desenvolvedor**.
+4. Clique em **Carregar sem compactação** e selecione a pasta extraída.
+5. Recarregue as abas do CRM e do WhatsApp Web.
+
+## Uso
+
+Abra um lead salvo e clique em **Analisar conversa**. O CRM abre o telefone
+correto no WhatsApp Web, espera a conversa estabilizar, solicita o histórico
+mais antigo disponível no celular, percorre as janelas virtualizadas, mescla as
+mensagens pelo identificador do WhatsApp e só envia à análise quando consegue
+confirmar a integridade mínima do histórico.
+
+Mensagens repetidas são preservadas. Alterações de texto são atualizadas pelo
+mesmo identificador. Imagem, vídeo, documento, localização, contato, figurinha e
+áudio entram no histórico com marcador explícito. Áudios sem uma extensão de
+transcrição compatível permanecem identificados, nunca desaparecem em silêncio.
+
+## Limites e segurança
+
+- A extensão não envia, apaga ou edita mensagens.
+- Ela acessa somente o CRM da Criare e o WhatsApp Web.
+- A conversa é gravada no workspace autenticado do CRM.
+- O WhatsApp Web só disponibiliza o histórico sincronizado com o navegador.
+- Se o início não for confirmado, o CRM salva o progresso, mas bloqueia a
+  análise parcial e orienta uma nova tentativa.
+- Mudanças futuras na interface do WhatsApp podem exigir atualização dos
+  seletores; a versão do leitor é verificada antes de cada captura.

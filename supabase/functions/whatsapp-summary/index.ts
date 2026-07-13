@@ -219,7 +219,14 @@ Deno.serve(async (request: Request) => {
     }
 
     const body = await request.json().catch(() => ({}));
-    const conversation = redactSensitive(clean(body.conversation, 50000));
+    const rawConversation = typeof body.conversation === "string" ? body.conversation.trim() : "";
+    if (rawConversation.length > 300000) {
+      return json(request, {
+        error: "A conversa ultrapassa o limite seguro de 300 mil caracteres. A análise foi bloqueada para não usar um histórico truncado.",
+        code: "CONVERSATION_TOO_LONG",
+      }, 413);
+    }
+    const conversation = redactSensitive(clean(rawConversation, 300000));
     if (conversation.length < 40) {
       return json(request, { error: "Cole um trecho maior da conversa para gerar o resumo." }, 400);
     }

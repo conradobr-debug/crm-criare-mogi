@@ -159,6 +159,9 @@ label{color:#625d57;font-weight:600}
 .waMessageBody{font-size:11px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
 .waMessageMeta{margin-top:5px;color:#807970;font-size:8px}.waMediaButton{margin-top:6px;padding:5px 7px;font-size:9px}
 .whatsappOfficialActions{margin:10px 0 0}.whatsappOfficialActions button[disabled]{opacity:.6;cursor:wait}
+.whatsappOfficialActions .analyzeConversationAction{min-width:190px}
+.whatsappCaptureProgress{display:inline-flex;align-items:center;gap:7px}.whatsappCaptureProgress:before{content:"";width:9px;height:9px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:waCaptureSpin .8s linear infinite}
+@keyframes waCaptureSpin{to{transform:rotate(360deg)}}
 .hardBossPinned{padding:14px;border:1px solid #baa58e;background:#f8f2ea}
 .hardBossPinnedHd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:9px}
 .hardBossPinnedHd>div{display:flex;flex-direction:column;gap:2px}.hardBossPinnedHd strong{font-size:15px;color:#352b24}
