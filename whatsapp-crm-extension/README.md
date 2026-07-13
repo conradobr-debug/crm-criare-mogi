@@ -6,7 +6,7 @@ Criare em um único botão.
 
 ## Instalação
 
-1. Extraia o arquivo `criare-whatsapp-extension-2.1.2.zip`.
+1. Extraia o arquivo `criare-whatsapp-extension-2.1.3.zip`.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação** e selecione a pasta extraída.
@@ -17,16 +17,12 @@ Criare em um único botão.
 Abra um lead salvo e clique em **Capturar conversa**. O CRM abre o telefone
 correto no WhatsApp Web, espera a conversa estabilizar, solicita o histórico
 mais antigo disponível no celular, percorre as janelas virtualizadas, mescla as
-mensagens pelo identificador do WhatsApp e só envia à análise quando consegue
-confirmar a integridade mínima do histórico.
+mensagens pelo identificador do WhatsApp e informa a quantidade salva no lead.
 
 Mensagens repetidas são preservadas. Alterações de texto são atualizadas pelo
 mesmo identificador. Imagem, vídeo, documento, localização, contato e figurinha
-entram no histórico com marcador explícito. Para áudio, a extensão tenta obter o
-arquivo/blob real e enviá-lo somente ao transcritor local em `127.0.0.1:32123`.
-Se o arquivo não estiver disponível no WhatsApp Web ou o transcritor não estiver
-iniciado, ele permanece como pendente/indisponível, nunca como transcrição
-inventada.
+entram no histórico com marcador explícito. Áudio entra somente como
+`[Áudio sem transcrição]`.
 
 ## Limites e segurança
 

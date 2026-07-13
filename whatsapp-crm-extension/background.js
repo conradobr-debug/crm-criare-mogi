@@ -149,7 +149,8 @@ async function syncCustomerChat(request){
   await ensureCurrentContentScript(tab.id);
   const loaded = await waitForChat(tab.id,request);
   if(!loaded.ready){
-    return {ok:false,extensionVersion:chrome.runtime.getManifest().version,error:loaded.mismatch
+    const currentTab=await chrome.tabs.get(tab.id).catch(()=>({}));
+    return {ok:false,extensionVersion:chrome.runtime.getManifest().version,tabUrl:currentTab.url||"",detectedTitle:loaded.state?.title||"",domCount:Number(loaded.state?.count||0),error:loaded.mismatch
       ? `A conversa aberta é “${loaded.state?.title || "não identificada"}”, mas o lead solicitado é “${request.customerName || "não identificado"}”. Abra o cliente correto no WhatsApp Web.`
       : "O WhatsApp não confirmou que a conversa correta terminou de carregar."};
   }
@@ -157,7 +158,7 @@ async function syncCustomerChat(request){
     return withProfilePhoto({
       ok:true,empty:true,noConversation:Boolean(loaded.unavailable),transcript:"",entries:[],count:0,
       audioCount:0,audioTranscribed:0,audioExtensionDetected:false,reachedStart:true,limited:false,
-      extensionVersion:chrome.runtime.getManifest().version
+      extensionVersion:chrome.runtime.getManifest().version,tabUrl:(await chrome.tabs.get(tab.id).catch(()=>({}))).url||"",detectedTitle:loaded.state?.title||"",domCount:0
     },loaded.state?.profilePhotoUrl);
   }
 
@@ -167,8 +168,9 @@ async function syncCustomerChat(request){
   });
   const timeout = new Promise(resolve=>setTimeout(()=>resolve({ok:false,error:"A leitura completa ultrapassou o tempo de segurança. O histórico anterior foi preservado."}),CAPTURE_TIMEOUT_MS));
   const result = await Promise.race([extraction,timeout]);
-  if(!result?.ok) return {...(result || {}),ok:false,extensionVersion:chrome.runtime.getManifest().version,error:result?.error || "A conversa não devolveu mensagens."};
-  return withProfilePhoto({...result,extensionVersion:chrome.runtime.getManifest().version},result.profilePhotoUrl || loaded.state?.profilePhotoUrl);
+  const currentTab=await chrome.tabs.get(tab.id).catch(()=>({}));
+  if(!result?.ok) return {...(result || {}),ok:false,extensionVersion:chrome.runtime.getManifest().version,tabUrl:currentTab.url||"",detectedTitle:result?.title||loaded.state?.title||"",domCount:Number(result?.count||loaded.state?.count||0),error:result?.error || "A conversa não devolveu mensagens."};
+  return withProfilePhoto({...result,extensionVersion:chrome.runtime.getManifest().version,tabUrl:currentTab.url||"",detectedTitle:result.title||loaded.state?.title||"",domCount:Number(result.count||0)},result.profilePhotoUrl || loaded.state?.profilePhotoUrl);
 }
 
 async function captureCustomerChat(request){

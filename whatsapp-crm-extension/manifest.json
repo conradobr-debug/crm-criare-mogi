@@ -1,14 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Criare CRM — Analisar WhatsApp",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "Captura a conversa escolhida no WhatsApp Web e a envia com segurança ao CRM Criare para análise.",
   "permissions": ["tabs", "storage"],
   "host_permissions": [
     "https://web.whatsapp.com/*",
     "https://*.whatsapp.net/*",
-    "https://conradobr-debug.github.io/crm-criare-mogi/*",
-    "http://127.0.0.1:32123/*"
+    "https://conradobr-debug.github.io/crm-criare-mogi/*"
   ],
   "background": {"service_worker": "background.js"},
   "action": {"default_title": "Criare CRM — Analisar WhatsApp", "default_popup": "popup.html"},
