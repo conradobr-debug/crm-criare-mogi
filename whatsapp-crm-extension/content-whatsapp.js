@@ -1,6 +1,6 @@
 "use strict";
 
-const CRIARE_CONTENT_SCRIPT_VERSION = "2.1.0";
+const CRIARE_CONTENT_SCRIPT_VERSION = "2.1.1";
 const CaptureCore = globalThis.CriareWhatsAppCaptureCore;
 const {cleanText, normalizedUiText, messageHash, continuationPrefix} = CaptureCore;
 
@@ -83,19 +83,23 @@ function olderMessagesButton(main=activeMain()){
 async function loadOlderMessagesFromPhone(main){
   let attempts = 0;
   let loaded = false;
-  while(attempts < 3){
+  const deadline = Date.now() + 60000;
+  while(attempts < 8 && Date.now() < deadline){
     const button = olderMessagesButton(main);
     if(!button) break;
     attempts += 1;
     const before = windowSignature(main);
     button.click();
-    const deadline = Date.now() + 25000;
-    while(Date.now() < deadline){
-      await sleep(700);
+    const attemptDeadline = Math.min(deadline,Date.now() + 12000);
+    let progressed = false;
+    while(Date.now() < attemptDeadline){
+      await sleep(600);
       const changed = windowSignature(main) !== before;
-      if(changed || !olderMessagesButton(main)){ loaded = true; break; }
+      const finished = !olderMessagesButton(main);
+      if(changed || finished){ loaded = true; progressed = true; break; }
     }
     if(!olderMessagesButton(main)) break;
+    if(!progressed) break;
   }
   return {requested:attempts > 0, loaded, attempts, pending:Boolean(olderMessagesButton(main))};
 }
@@ -192,7 +196,7 @@ function mediaType(node){
   if(node.querySelector('[data-testid*="location" i],a[href*="maps.google"],a[aria-label*="localização" i]')) return "Localização";
   if(node.querySelector('[data-testid*="contact" i],[aria-label*="contato" i]')) return "Contato";
   if(node.querySelector('[data-testid*="sticker" i]')) return "Figurinha";
-  if(node.querySelector('[data-testid*="image" i],[aria-label*="abrir imagem" i],img[src^="data:image"]')) return "Imagem";
+  if(node.querySelector('[data-testid="image-thumb"],[aria-label*="abrir imagem" i]')) return "Imagem";
   return "";
 }
 
@@ -214,10 +218,12 @@ function messageBody(node){
     return {body:transcript ? `[Transcrição de áudio] ${transcript}` : "[Áudio sem transcrição]",type,audioTranscribed:Boolean(transcript)};
   }
   const detail = node.querySelector("[data-pre-plain-text]");
+  const selectableText = [...node.querySelectorAll("span.selectable-text")]
+    .map(item=>cleanText(item.innerText || item.textContent || "")).filter(Boolean).join("\n");
   const clone = (detail || node.querySelector('[data-testid="msg-container"]') || node).cloneNode(true);
   clone.querySelectorAll('button[aria-label="Mensagem citada"],[data-testid*="quoted" i],[data-testid*="reaction" i],.wt-btn-container,.parakeet-wa-transcribe-container').forEach(item=>item.remove());
   clone.querySelectorAll('span[aria-label$=":"]').forEach(item=>item.remove());
-  let text = cleanText(clone.innerText || clone.textContent || "");
+  let text = selectableText || cleanText(clone.innerText || clone.textContent || "");
   text = text.split("\n").filter(line=>{
     const value = cleanText(line);
     return value && !/^(?:editada\s*)?\d{1,2}:\d{2}(?:\s+(?:lida|entregue|enviada))?$/i.test(value);
@@ -286,10 +292,11 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
   let scrollPasses = 0;
   let stableTopPasses = 0;
   let reachedStart = false;
+  let loadedStartReached = false;
 
   while(Date.now() < deadline && entries.length < maximum && scrollPasses < 220){
     const scroller = messageScrollContainer(main);
-    if(!scroller){ reachedStart = !olderMessagesButton(main); break; }
+    if(!scroller){ loadedStartReached = true; reachedStart = !olderMessagesButton(main); break; }
     const beforeSignature = windowSignature(main);
     const beforeTop = scroller.scrollTop;
     scroller.scrollTop = Math.max(0, beforeTop - Math.max(scroller.clientHeight * 0.85, 700));
@@ -302,17 +309,18 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
     const atTop = scroller.scrollTop <= 2;
     const unchanged = beforeSignature === windowSignature(main) && merged.added === 0;
     stableTopPasses = atTop && unchanged ? stableTopPasses + 1 : 0;
-    if(atTop && stableTopPasses >= 2 && !olderMessagesButton(main)){
-      reachedStart = true;
+    if(atTop && stableTopPasses >= 2){
+      loadedStartReached = true;
+      reachedStart = !olderMessagesButton(main);
       break;
     }
   }
 
-  const limited = entries.length >= maximum || (!reachedStart && Date.now() >= deadline);
+  const limited = entries.length >= maximum || (!loadedStartReached && Date.now() >= deadline);
   if(entries.length > maximum) entries = entries.slice(-maximum);
   const scroller = messageScrollContainer(main);
   if(scroller){ scroller.scrollTop = scroller.scrollHeight; scroller.dispatchEvent(new Event("scroll",{bubbles:true})); }
-  return {entries,reachedStart,scrollPasses,limited};
+  return {entries,reachedStart,loadedStartReached,scrollPasses,limited};
 }
 
 async function extractLoadedMessages(){
@@ -321,6 +329,12 @@ async function extractLoadedMessages(){
   await waitForMessagesToSettle(main);
   const olderHistory = await loadOlderMessagesFromPhone(main);
   if(olderHistory.requested) await waitForMessagesToSettle(main,{timeoutMs:18000,minWaitMs:2500});
+  const loadedScroller = messageScrollContainer(main);
+  if(loadedScroller){
+    loadedScroller.scrollTop = loadedScroller.scrollHeight;
+    loadedScroller.dispatchEvent(new Event("scroll",{bubbles:true}));
+    await waitForMessagesToSettle(main,{timeoutMs:8000,minWaitMs:900});
+  }
   const transcription = await transcribeCompatibleAudios(main);
   const history = await collectAvailableHistory(main);
   if(!history.entries.length) throw new Error("Não encontrei mensagens carregadas nesta conversa.");
@@ -335,8 +349,9 @@ async function extractLoadedMessages(){
     olderHistoryLoaded:olderHistory.loaded,
     olderHistoryPending:olderHistory.pending,
     reachedStart:history.reachedStart && !olderHistory.pending,
+    loadedHistoryComplete:history.loadedStartReached && !history.limited,
     scrollPasses:history.scrollPasses,
-    profilePhotoUrl:profilePhotoUrl(main),limited:history.limited || olderHistory.pending
+    profilePhotoUrl:profilePhotoUrl(main),limited:history.limited
   };
 }
 

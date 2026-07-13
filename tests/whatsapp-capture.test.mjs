@@ -33,15 +33,20 @@ test("reconstrói prefixo de mídia que continua a mensagem anterior",()=>{
   assert.equal(prefix,"[15:17, 06/07/2026] Leticia Bougo: ");
 });
 
-test("a extensão usa seletores atuais e bloqueio de captura incompleta",async()=>{
+test("a extensão captura todo o histórico carregado sem esperar indefinidamente pelo celular",async()=>{
   const content = await readFile(new URL("whatsapp-crm-extension/content-whatsapp.js", root),"utf8");
   const crm = await readFile(new URL("index.html", root),"utf8");
   assert.match(content,/data-testid=\"msg-container\"/);
   assert.match(content,/conversation-panel-messages/);
   assert.match(content,/olderHistoryPending/);
-  assert.match(crm,/if\(!captured\.complete\)throw new Error/);
-  assert.match(crm,/if\(result\?\.reachedStart&&incoming\.length\)/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.0"/);
+  assert.match(content,/if\(atTop && stableTopPasses >= 2\)/);
+  assert.doesNotMatch(content,/limited:history\.limited \|\| olderHistory\.pending/);
+  assert.match(crm,/result\?\.reachedStart\|\|result\?\.loadedHistoryComplete/);
+  assert.match(crm,/if\(!captured\.analysisReady\)throw new Error/);
+  assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
+  assert.match(content,/span\.selectable-text/);
+  assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.1"/);
 });
 
 test("a análise não trunca silenciosamente conversas longas",async()=>{

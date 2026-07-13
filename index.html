@@ -1167,7 +1167,7 @@ function openWhatsAppFor(record=null){
   try{window.location.href=`whatsapp://send?phone=${number}`;}
   catch(error){window.clearTimeout(fallbackTimer);cleanup();window.location.assign(webUrl);}
 }
-const WHATSAPP_EXTENSION_VERSION = "2.1.0";
+const WHATSAPP_EXTENSION_VERSION = "2.1.1";
 const whatsappAutoSyncWaiters = new Map();
 const whatsappExtensionPingWaiters = new Map();
 
@@ -1223,7 +1223,7 @@ function mergeWhatsAppMessages(record,result){
   let stored=Array.isArray(record?.whatsapp_message_entries)?record.whatsapp_message_entries.map(normalizeCapturedEntry).filter(Boolean):[];
   if(!stored.length)stored=String(record?.whatsapp_transcript||"").split("\n").map(normalizeCapturedEntry).filter(Boolean);
   const incoming=Array.isArray(result?.entries)?result.entries.map(normalizeCapturedEntry).filter(Boolean):String(result?.transcript||"").split("\n").map(normalizeCapturedEntry).filter(Boolean);
-  if(result?.reachedStart&&incoming.length){
+  if((result?.reachedStart||result?.loadedHistoryComplete)&&incoming.length){
     const storedById=new Map(stored.filter(entry=>entry.id).map(entry=>[entry.id,entry]));const storedTexts=new Set(stored.map(entry=>entry.text));
     let addedCount=0,updatedCount=0,overlapCount=0;
     for(const entry of incoming){
@@ -1262,11 +1262,14 @@ async function saveWhatsAppCapture(record,result){
   const merged=mergeWhatsAppMessages(record,result);
   const continuity=Boolean(result.reachedStart||(record.whatsapp_capture_complete&&merged.overlapCount>0));
   const complete=Boolean(continuity&&!result.limited&&!merged.storageLimited);
+  const loadedHistoryReady=Boolean(result.loadedHistoryComplete&&merged.totalCount>1&&!result.limited&&!merged.storageLimited);
   let photoPath=record.whatsapp_profile_photo_path||null,photoUpdatedAt=record.whatsapp_profile_photo_updated_at||null;
   if(result.profilePhotoDataUrl){try{photoPath=await uploadWhatsAppProfilePhoto(record.id,result.profilePhotoDataUrl);photoUpdatedAt=nowISO();}catch(error){console.warn("[CRM WhatsApp] Foto não atualizada.",error);}}
   const note=complete
     ? (result.reachedStart?"Histórico validado desde o início disponibilizado pelo WhatsApp Web.":"Histórico incremental validado pela continuidade com a captura completa anterior.")
-    : (merged.storageLimited?"A conversa ultrapassou 10.000 mensagens e exige tratamento manual antes da análise.":"O WhatsApp Web não confirmou o início ou a continuidade completa; a análise foi bloqueada para evitar conclusão parcial.");
+    : loadedHistoryReady
+      ? "Todas as mensagens atualmente carregadas no WhatsApp Web foram capturadas; mensagens mais antigas do celular ainda podem estar disponíveis."
+      : (merged.storageLimited?"A conversa ultrapassou 10.000 mensagens e exige tratamento manual antes da análise.":"O WhatsApp Web não confirmou o início ou a continuidade completa; a análise foi bloqueada para evitar conclusão parcial.");
   const patch={
     whatsapp_message_entries:merged.entries,whatsapp_transcript:merged.transcript||record.whatsapp_transcript||null,
     whatsapp_transcript_updated_at:nowISO(),whatsapp_sync_message_count:merged.totalCount,
@@ -1279,7 +1282,7 @@ async function saveWhatsAppCapture(record,result){
   const {data,error}=await sb.from(TBL_RECORDS).update(patch).eq("id",record.id).select("*").single();
   if(error)throw new Error(error.message||"Não foi possível gravar a conversa no CRM.");
   const index=records.findIndex(item=>item.id===data.id);if(index>=0)records[index]=data;
-  return {record:data,...merged,complete,note};
+  return {record:data,...merged,complete,analysisReady:complete||loadedHistoryReady,note};
 }
 function capturedEntryParts(text){
   const match=String(text||"").match(/^\[([^,\]]+),\s*([^\]]+)\]\s*([^:]+):\s*([\s\S]*)$/);
@@ -1312,7 +1315,7 @@ async function captureFreeWhatsAppConversation(record){
 async function analyzeFreeWhatsAppConversation(record){
   const captured=await captureFreeWhatsAppConversation(record);
   if(captured.result.empty)throw new Error(captured.result.noConversation?"Este telefone não possui conversa no WhatsApp.":"O contato foi localizado, mas ainda não há mensagens para analisar.");
-  if(!captured.complete)throw new Error(`${captured.note} Clique novamente depois que o WhatsApp terminar de carregar as mensagens antigas.`);
+  if(!captured.analysisReady)throw new Error(`${captured.note} Clique novamente depois que o WhatsApp terminar de carregar as mensagens antigas.`);
   const conversation=String(captured.record.whatsapp_transcript||"").trim();if(conversation.length<40)throw new Error("A conversa é curta demais para uma análise confiável.");
   $("whatsappOfficialAnalysis").textContent="GPT analisando o histórico validado";$("whatsappOfficialAnalysis").classList.add("whatsappCaptureProgress");
   const result=await callWhatsAppSummary(conversation);await saveWhatsAppAnalysisResult(result);
