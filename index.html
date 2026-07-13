@@ -518,7 +518,7 @@
 
   <div class="boardWrap">
     <div class="boardHint" id="boardHint"></div>
-    <div class="board" id="board" aria-busy="true"></div>
+    <div class="board" id="board" data-horizontal-drag aria-busy="true"></div>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -771,18 +771,6 @@
           <textarea id="notes"></textarea>
         </div>
 
-        <div class="col-12 hardBossPinned" id="hardBossPinned" hidden>
-          <div class="hardBossPinnedHd">
-            <div>
-              <span class="hardBossEyebrow">Análise fixada no lead</span>
-              <strong>Chefe Duro</strong>
-            </div>
-            <button class="ghost" id="btnViewFullAnalysisPinned" type="button">Ver análise completa</button>
-          </div>
-          <p id="hardBossPinnedText"></p>
-          <div class="whatsappSummaryMeta" id="hardBossPinnedMeta"></div>
-        </div>
-
         <div class="col-12 whatsappWorkspace">
           <div class="whatsappWorkspaceHd">
             <div>
@@ -791,14 +779,28 @@
             </div>
             <button class="whatsappAction" id="btnWhatsApp" type="button">Abrir conversa</button>
           </div>
+          <div class="hardBossPinned" id="hardBossPinned" hidden>
+            <div class="hardBossPinnedHd">
+              <div>
+                <span class="hardBossEyebrow">Análise fixada no lead</span>
+                <strong>Chefe Duro</strong>
+              </div>
+              <button class="ghost" id="btnViewFullAnalysisPinned" type="button">Ver análise completa</button>
+            </div>
+            <p id="hardBossPinnedText"></p>
+            <div class="whatsappSummaryMeta" id="hardBossPinnedMeta"></div>
+          </div>
           <div class="whatsappOfficialIndicators">
             <span id="whatsappOfficialSync">Conversa ainda não capturada</span>
             <span id="whatsappOfficialNew">0 novas desde a análise</span>
             <span id="whatsappOfficialAnalysis">Análise ainda não executada</span>
           </div>
-          <div class="whatsappOfficialTimeline" id="whatsappOfficialTimeline">
-            <div class="timelineEmpty">Clique em “Analisar conversa” para capturar o histórico deste lead.</div>
-          </div>
+          <details class="whatsappCapturedConversation" id="whatsappCapturedConversation">
+            <summary>Ver conversa capturada</summary>
+            <div class="whatsappOfficialTimeline" id="whatsappOfficialTimeline">
+              <div class="timelineEmpty">Clique em “Analisar conversa” para capturar o histórico deste lead.</div>
+            </div>
+          </details>
           <div class="whatsappActions whatsappOfficialActions">
             <button class="ghost" id="btnLoadOlderWhatsApp" type="button" hidden>Carregar anteriores</button>
             <button class="ghost" id="btnRefreshOfficialTimeline" type="button" hidden>Atualizar conversa</button>
@@ -1472,41 +1474,10 @@ async function callWhatsAppSummary(conversation){
     error.code = result.code || "SUMMARY_ERROR";
     throw error;
   }
+  if(!String(result.full_analysis||"").trim() || !String(result.hard_boss||result.summary||"").trim()){
+    throw new Error("A IA respondeu sem uma análise completa. A conversa continua salva e pronta para nova tentativa.");
+  }
   return result;
-}
-function localWhatsAppSummary(conversation){
-  const normalized = conversation.replace(/\r/g, "").trim();
-  const lines = normalized.split("\n").map(line=>line.trim()).filter(Boolean);
-  const useful = lines.filter(line=>line.length >= 12).slice(-18);
-  const lower = normalized.toLowerCase();
-  const money = [...normalized.matchAll(/R\$\s?[\d.]+(?:,\d{2})?/gi)].map(match=>match[0]);
-  const dateMentions = [...normalized.matchAll(/\b\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?\b/g)].map(match=>match[0]);
-  const objections = useful.filter(line=>/preç|caro|orçamento|prazo|demora|concorr|pensar|marido|esposa|decidir|financ/i.test(line)).slice(-4);
-  const needs = useful.filter(line=>/cozinha|quarto|sala|banheiro|closet|lavanderia|apartamento|casa|móvel|projeto|planta|medida|acabamento|cor\b|mdf|mdp/i.test(line)).slice(-5);
-  const commitments = useful.filter(line=>/vou |vamos |envio|mandar|retorno|confirm|agend|combina|ficou para|até |amanhã|semana/i.test(line)).slice(-4);
-  const quality = /projeto|personaliz|design|qualidade|arquit|planta|acabamento/i.test(lower)
-    ? "Potencial"
-    : (/só.*preço|mais barato|menor preço/i.test(lower) ? "Baixo potencial" : "Não avaliado");
-  const section = (items, empty="Não identificado no trecho.") => items.length ? items.map(item=>`• ${item}`).join("\n") : empty;
-  const fullAnalysis = [
-      "Contexto", section(useful.slice(-4), "Trecho insuficiente para identificar o contexto."), "",
-      "Necessidades e interesses", section(needs), "",
-      "Objeções ou riscos", section(objections), "",
-      "Compromissos assumidos", section(commitments),
-      money.length ? `\nValores mencionados: ${[...new Set(money)].join(", ")}.` : "",
-      dateMentions.length ? `Datas mencionadas: ${[...new Set(dateMentions)].join(", ")}.` : "", "",
-      "Próximo passo recomendado", "• Confirmar com o cliente o próximo avanço e registrar uma data de acompanhamento no calendário."
-    ].filter(Boolean).join("\n");
-  const hardBoss = "O histórico disponível não permite uma avaliação especializada confiável; confirme as pendências diretamente com o cliente, defina um próximo avanço com data e atualize a conversa antes de tomar uma decisão comercial.";
-  return {
-    summary:hardBoss,
-    hard_boss:hardBoss,
-    full_analysis:fullAnalysis,
-    lead_quality:quality,
-    next_action_kind:"WhatsApp",
-    next_action_details:"Retomar os pontos combinados na conversa, confirmar pendências e definir o próximo avanço com data.",
-    model:"análise local"
-  };
 }
 function renderWhatsAppAnalysis(){
   const hardBoss = currentWhatsAppAnalysis.hardBoss || "";
@@ -3717,16 +3688,9 @@ $("btnSummarizeWhatsApp").addEventListener("click", async ()=>{
   button.disabled = true;
     button.textContent = "Analisando conversa...";
   try{
-    let result;
-    try{
-      result = await callWhatsAppSummary(conversation);
-    }catch(error){
-      console.warn("[CRM WhatsApp] IA externa indisponível; usando análise local.", error);
-      result = localWhatsAppSummary(conversation);
-      toast("IA indisponível; resumo local criado para você revisar.");
-    }
+    const result = await callWhatsAppSummary(conversation);
     await saveWhatsAppAnalysisResult(result);
-    if(result.model !== "análise local") toast("Análise completa e Chefe Duro salvos no lead.");
+    toast("Análise completa e Chefe Duro salvos no lead.");
   }catch(error){
     console.error("[CRM WhatsApp] Falha ao analisar ou salvar.", error);
     toast(error.message || "Não foi possível analisar e salvar a conversa.");
@@ -3738,6 +3702,45 @@ $("btnSummarizeWhatsApp").addEventListener("click", async ()=>{
 
 $("btnViewFullAnalysis").addEventListener("click", openFullWhatsAppAnalysis);
 $("btnViewFullAnalysisPinned").addEventListener("click", openFullWhatsAppAnalysis);
+function enableHorizontalDragScroll(container){
+  if(!window.matchMedia("(hover:hover) and (pointer:fine)").matches) return;
+  let drag=null;
+  let suppressClick=false;
+  const interactiveSelector=".card,button,a,input,select,textarea,label,summary,[role='button'],[contenteditable='true'],[data-act],[data-act-config],[draggable='true']";
+  const finish=event=>{
+    if(!drag || (event.pointerId!=null && event.pointerId!==drag.pointerId)) return;
+    if(drag.moved){
+      suppressClick=true;
+      window.setTimeout(()=>{suppressClick=false;},0);
+    }
+    drag=null;
+    container.classList.remove("isDragging");
+  };
+  container.classList.add("horizontalDragScroll");
+  container.addEventListener("pointerdown",event=>{
+    if(event.button!==0 || !event.isPrimary || event.target.closest(interactiveSelector) || container.scrollWidth<=container.clientWidth) return;
+    drag={pointerId:event.pointerId,startX:event.clientX,startLeft:container.scrollLeft,moved:false};
+    container.setPointerCapture(event.pointerId);
+  });
+  container.addEventListener("pointermove",event=>{
+    if(!drag || event.pointerId!==drag.pointerId) return;
+    const distance=event.clientX-drag.startX;
+    if(Math.abs(distance)>3) drag.moved=true;
+    if(!drag.moved) return;
+    container.classList.add("isDragging");
+    container.scrollLeft=drag.startLeft-distance;
+    event.preventDefault();
+  });
+  container.addEventListener("pointerup",finish);
+  container.addEventListener("pointercancel",finish);
+  container.addEventListener("lostpointercapture",finish);
+  container.addEventListener("click",event=>{
+    if(!suppressClick) return;
+    event.preventDefault();
+    event.stopPropagation();
+  },true);
+}
+document.querySelectorAll(".board[data-horizontal-drag]").forEach(enableHorizontalDragScroll);
 $("btnCloseFullAnalysisTop").addEventListener("click", ()=>$("whatsappAnalysisModal").close());
 $("btnCloseFullAnalysis").addEventListener("click", ()=>$("whatsappAnalysisModal").close());
 $("btnCopyFullAnalysis").addEventListener("click", async ()=>{

@@ -151,7 +151,11 @@ label{color:#625d57;font-weight:600}
 .whatsappOfficialIndicators{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 10px}
 .whatsappOfficialIndicators span{padding:6px 8px;border:1px solid #cbd5c8;background:#fff;color:#536052;font-size:9px}
 .whatsappOfficialIndicators span.stale{border-color:#d6b98b;background:#fff8ec;color:#775d32}
+.whatsappCapturedConversation{margin:0 0 10px;border:1px solid #d5ddd3;background:#fff}
+.whatsappCapturedConversation summary{padding:9px 10px;cursor:pointer;color:#536052;font-size:11px;font-weight:600}
+.whatsappCapturedConversation[open] summary{border-bottom:1px solid #d5ddd3}
 .whatsappOfficialTimeline{max-height:430px;overflow:auto;padding:10px;border:1px solid #d5ddd3;background:#fff;display:flex;flex-direction:column;gap:8px}
+.whatsappCapturedConversation .whatsappOfficialTimeline{border:0}
 .timelineEmpty{padding:22px 10px;text-align:center;color:#7a756f;font-size:11px}
 .waMessage{max-width:82%;padding:9px 10px;border:1px solid #ded9d2;background:#f7f5f2;align-self:flex-start}
 .waMessage.outbound{align-self:flex-end;border-color:#c6d4c3;background:#edf4eb}
@@ -162,13 +166,19 @@ label{color:#625d57;font-weight:600}
 .whatsappOfficialActions .analyzeConversationAction{min-width:190px}
 .whatsappCaptureProgress{display:inline-flex;align-items:center;gap:7px}.whatsappCaptureProgress:before{content:"";width:9px;height:9px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:waCaptureSpin .8s linear infinite}
 @keyframes waCaptureSpin{to{transform:rotate(360deg)}}
-.hardBossPinned{padding:14px;border:1px solid #baa58e;background:#f8f2ea}
+.hardBossPinned{margin:0 0 12px;padding:14px;border:1px solid #baa58e;background:#f8f2ea}
 .hardBossPinnedHd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:9px}
 .hardBossPinnedHd>div{display:flex;flex-direction:column;gap:2px}.hardBossPinnedHd strong{font-size:15px;color:#352b24}
 .hardBossEyebrow{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#806c59}
 .hardBossPinned p{margin:0;color:#3f3730;font-size:12px;line-height:1.55;white-space:pre-wrap}
 .viewFullAnalysis{margin-top:8px}.whatsappAnalysisModal{width:min(820px,94vw)}
 .fullAnalysisText{min-height:240px;padding:18px;border:1px solid #d8d2ca;background:#fff;color:#302c28;font-size:12px;line-height:1.65;white-space:pre-wrap}
+
+@media (hover:hover) and (pointer:fine){
+  .board.horizontalDragScroll{cursor:grab;user-select:none}
+  .board.horizontalDragScroll.isDragging{cursor:grabbing;scroll-snap-type:none}
+  .board.horizontalDragScroll.isDragging *{user-select:none!important}
+}
 
 .card{border-radius:2px;border-color:#d8d2ca;background:#fff;box-shadow:0 5px 18px rgba(40,32,25,.055)}
 .card:hover{border-color:#8d8378;background:#fff}

@@ -55,3 +55,20 @@ test("a análise não trunca silenciosamente conversas longas",async()=>{
   assert.match(summary,/CONVERSATION_TOO_LONG/);
   assert.match(summary,/clean\(rawConversation, 300000\)/);
 });
+
+test("a análise depende do GPT e mantém a conversa para nova tentativa",async()=>{
+  const crm = await readFile(new URL("index.html", root),"utf8");
+  const summary = await readFile(new URL("supabase/functions/whatsapp-summary/index.ts", root),"utf8");
+  assert.match(crm,/const result = await callWhatsAppSummary\(conversation\);\s*await saveWhatsAppAnalysisResult\(result\);/);
+  assert.doesNotMatch(crm,/localWhatsAppSummary/);
+  assert.match(crm,/whatsappCapturedConversation/);
+  assert.match(summary,/conversa permanece salva e pronta para nova tentativa/);
+});
+
+test("o quadro horizontal aceita arraste somente em área não interativa",async()=>{
+  const crm = await readFile(new URL("index.html", root),"utf8");
+  assert.match(crm,/data-horizontal-drag/);
+  assert.match(crm,/function enableHorizontalDragScroll/);
+  assert.match(crm,/\.card,button,a,input,select,textarea/);
+  assert.match(crm,/pointerdown/);
+});

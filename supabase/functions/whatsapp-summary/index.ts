@@ -213,7 +213,7 @@ Deno.serve(async (request: Request) => {
     if (!user) return json(request, { error: "Sessão do CRM inválida." }, 401);
     if (!OPENAI_API_KEY && !GEMINI_API_KEY) {
       return json(request, {
-        error: "A análise especializada ainda não foi ativada. O CRM usará a análise local.",
+        error: "A análise especializada ainda não foi ativada. A conversa permanece salva e pronta para nova tentativa.",
         code: "AI_NOT_CONFIGURED",
       }, 503);
     }
@@ -270,7 +270,7 @@ Para lead_quality, avalie aderência ao perfil Criare separadamente do potencial
       await analyzeWithGemini(prompt, analysisMode);
     if (!provider) {
       return json(request, {
-        error: "A IA está temporariamente indisponível. O CRM usará a análise local.",
+        error: "A IA está temporariamente indisponível. A conversa permanece salva e pronta para nova tentativa.",
         code: "AI_UNAVAILABLE",
       }, 502);
     }
