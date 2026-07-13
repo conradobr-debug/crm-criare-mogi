@@ -11,10 +11,10 @@ Callback do webhook:
 ## Ações externas na Meta
 
 1. No Meta App correto, habilitar o produto WhatsApp e vincular a WABA da Criare.
-2. Confirmar que o número da loja é elegível para **WhatsApp Business App Coexistence** e concluir o onboarding oficial. Número adicionado: `+55 19 99164-7787`; verificação do número e ativação do Coexistence: `PENDENTE DE CONFIRMAÇÃO`.
+2. Confirmar que o número da loja é elegível para **WhatsApp Business App Coexistence** e concluir o onboarding oficial pelo Cadastro Incorporado v4 com `featureType=whatsapp_business_app_onboarding`. Número atual no app: `+55 19 99164-7787`. Não migrar nem desconectar o número do WhatsApp Business App.
 3. Configurar o callback acima e usar o valor já cadastrado no secret `WHATSAPP_VERIFY_TOKEN`.
 4. Assinar pelo menos o campo `messages`. Para Coexistence, habilitar também os campos de eco/histórico que o painel disponibilizar para a conta. Os nomes exibidos e a disponibilidade na WABA são `PENDENTE DE CONFIRMAÇÃO` até o onboarding.
-5. Identificadores confirmados no WhatsApp Manager em 13/07/2026: WABA ID `2069190594483653`, Phone Number ID `1181271645073826` e número `+55 19 99164-7787`. Nome de exibição `Criare Mogi Guaçu`: em análise.
+5. A tentativa pelo cadastro padrão criou provisoriamente WABA ID `2069190594483653` e Phone Number ID `1181271645073826`, mas a verificação foi recusada porque o número já está no WhatsApp Business App. Esses identificadores não devem ser considerados finais. WABA ID e Phone Number ID retornados pelo onboarding de Coexistence: `PENDENTE DE CONFIRMAÇÃO`.
 6. Garantir um token de System User de longa duração com as permissões exigidas pela conta, incluindo `whatsapp_business_management` e `whatsapp_business_messaging`. O secret `WHATSAPP_ACCESS_TOKEN` já existe, mas validade, escopos e vínculo com a WABA são `PENDENTE DE CONFIRMAÇÃO`.
 7. Confirmar no Meta App que o App Secret usado no secret `META_APP_SECRET` pertence ao mesmo aplicativo do webhook.
 8. Templates só são necessários para conversas iniciadas pela empresa fora da janela permitida. O CRM desta entrega não envia mensagens nem cria templates.
