@@ -830,12 +830,14 @@
             <button class="ghost" id="btnRefreshOfficialTimeline" type="button" hidden>Atualizar conversa</button>
             <button class="ghost" id="btnViewFullAnalysis" type="button" hidden>Ver análise completa</button>
             <button class="primary" id="btnAnalyzeAutomatic" type="button">Analisar automaticamente</button>
+            <button class="ghost" id="btnTranscribeAudios" type="button" disabled>Transcrever áudios pendentes</button>
             <button class="ghost" id="btnCopyConversationManual" type="button">Copiar conversa para meu GPT</button>
             <button class="ghost" id="btnOpenCustomGpt" type="button">Abrir meu GPT</button>
             <button class="ghost" id="btnImportCustomGpt" type="button">Importar resultado do GPT</button>
             <button class="ghost" id="btnImportReadyAnalysis" type="button">Importar análise pronta</button>
           </div>
           <div class="whatsappSummaryMeta" id="whatsappSyncStatus">A extensão verificará o telefone, carregará o histórico disponível e impedirá uma análise parcial.</div>
+          <div class="whatsappSummaryMeta" id="whatsappAudioStatus">Áudios: 0 total • 0 transcritos • 0 pendentes • 0 indisponíveis • 0 com erro.</div>
           <div class="whatsappPrivacy">A análise automática usa a API configurada. A alternativa manual copia a conversa para você colar no GPT da Criare, sem chamada automática à API.</div>
           <div class="whatsappPrivacy">A extensão não envia nem altera mensagens. O histórico capturado fica protegido pelo acesso do CRM e a análise usa apenas o serviço de IA configurado pela Criare.</div>
           <div hidden aria-hidden="true">
@@ -1250,6 +1252,38 @@ function normalizeCapturedEntry(entry){
   }
   const text=String(entry||"").trim();return text?{id:null,text}:null;
 }
+function audioEntryState(entry){
+  const text=String(entry?.text||"");
+  const isAudio=Boolean(entry?.hasVoiceMessage||entry?.type==="Áudio"||/\[Áudio(?: sem transcrição| de)/i.test(text));
+  if(!isAudio)return null;
+  const status=String(entry?.audioMeta?.transcriptionStatus||"").toLowerCase();
+  return {status:status|| (entry?.audioTranscribed?"completed":"pending"),meta:entry?.audioMeta||{}};
+}
+function audioStats(record){
+  const stats={total:0,completed:0,pending:0,unavailable:0,error:0};
+  for(const entry of Array.isArray(record?.whatsapp_message_entries)?record.whatsapp_message_entries:legacyTranscriptEntries(record)){
+    const audio=audioEntryState(entry);if(!audio)continue;stats.total+=1;
+    if(audio.status==="completed")stats.completed+=1;
+    else if(audio.status==="unavailable")stats.unavailable+=1;
+    else if(audio.status==="error")stats.error+=1;
+    else stats.pending+=1;
+  }
+  return stats;
+}
+function mergeAudioEntry(previous,next){
+  const priorAudio=previous?.audioMeta;const nextAudio=next?.audioMeta;
+  if(!priorAudio)return next;
+  if(priorAudio.transcriptionStatus==="completed"&&nextAudio?.transcriptionStatus!=="completed"){
+    return {...next,text:previous.text,audioTranscribed:true,audioMeta:priorAudio};
+  }
+  return {...next,audioMeta:nextAudio||priorAudio};
+}
+function renderAudioTranscriptionStatus(record){
+  const stats=audioStats(record);const status=$("whatsappAudioStatus");const button=$("btnTranscribeAudios");
+  if(status)status.textContent=`Áudios: ${stats.total} total • ${stats.completed} transcritos • ${stats.pending} pendentes • ${stats.unavailable} indisponíveis • ${stats.error} com erro.`;
+  if(button){const retry=stats.pending+stats.error;button.disabled=!retry;button.textContent=retry?`Transcrever áudios pendentes (${retry})`:"Transcrever áudios pendentes";}
+  return stats;
+}
 function legacyTranscriptEntries(record){
   return String(record?.whatsapp_transcript||"").split("\n").map(normalizeCapturedEntry).filter(Boolean);
 }
@@ -1298,7 +1332,7 @@ function mergeWhatsAppMessages(record,result){
       else if(!entry.id&&storedTexts.has(entry.text))overlapCount+=1;
       else addedCount+=1;
     }
-    const storageLimited=incoming.length>10000;const entries=storageLimited?incoming.slice(-10000):incoming;
+    const storageLimited=incoming.length>10000;const entries=(storageLimited?incoming.slice(-10000):incoming).map(entry=>entry.id&&storedById.has(entry.id)?mergeAudioEntry(storedById.get(entry.id),entry):entry);
     return {entries,transcript:entries.map(entry=>entry.text).join("\n"),addedCount,updatedCount,overlapCount,totalCount:entries.length,storageLimited};
   }
   const merged=stored.map(entry=>({...entry}));const indexById=new Map();
@@ -1307,7 +1341,7 @@ function mergeWhatsAppMessages(record,result){
   for(const entry of incoming){
     if(entry.id&&indexById.has(entry.id)){
       overlapCount+=1;const index=indexById.get(entry.id);
-      if(merged[index].text!==entry.text){merged[index]={...merged[index],...entry};updatedCount+=1;}
+      if(merged[index].text!==entry.text||entry.audioMeta){const priorText=merged[index].text;merged[index]=mergeAudioEntry(merged[index],entry);if(priorText!==entry.text)updatedCount+=1;}
       continue;
     }
     if(!entry.id&&merged.some(saved=>saved.text===entry.text)){overlapCount+=1;continue;}
@@ -1368,6 +1402,7 @@ function updateCapturedWhatsAppIndicators(record){
   $("whatsappOfficialAnalysis").textContent=record?.whatsapp_analysis_updated_at?`Analisada em ${fmtBRDateTime(record.whatsapp_analysis_updated_at)}`:"Análise ainda não executada";
   $("whatsappOfficialAnalysis").classList.toggle("stale",Boolean(updated&&(!record?.whatsapp_analysis_updated_at||new Date(updated)>new Date(record.whatsapp_analysis_updated_at))));
   $("whatsappSyncStatus").textContent=record?.whatsapp_sync_error||record?.whatsapp_capture_note||(record?.id?"Pronto para capturar e analisar.":"Salve o cliente antes de analisar.");
+  renderAudioTranscriptionStatus(record);
   renderWhatsAppSectionSummary(record);
 }
 async function captureFreeWhatsAppConversation(record){
@@ -1388,7 +1423,10 @@ async function captureFreeWhatsAppConversation(record){
   const saved=await saveWhatsAppCapture(record,result);
   $("whatsappConversation").value=saved.record.whatsapp_transcript||"";renderCapturedWhatsAppTimeline(saved.record);updateCapturedWhatsAppIndicators(saved.record);render();
   $("whatsappOfficialAnalysis").textContent=`${saved.totalCount} mensagens capturadas`;
-  $("whatsappSyncStatus").textContent=`Conversa salva • ${saved.totalCount} mensagens capturadas`;
+  const stats=renderAudioTranscriptionStatus(saved.record);
+  $("whatsappSyncStatus").textContent=stats.pending||stats.error
+    ? `Conversa salva • ${saved.totalCount} mensagens capturadas • ${stats.pending+stats.error} áudio(s) aguardando transcrição local.`
+    : `Conversa salva • ${saved.totalCount} mensagens capturadas`;
   return {...saved,result};
 }
 async function analyzeSavedWhatsAppConversation(record){
@@ -3450,6 +3488,7 @@ function openModal(record=null, options={}){
     ? `Última análise: ${fmtBRDateTime(currentWhatsAppAnalysis.updatedAt)}${currentWhatsAppAnalysis.model ? ` • ${currentWhatsAppAnalysis.model}` : ""}.`
     : "Nenhuma análise gerada.";
   renderWhatsAppAnalysis();
+  renderAudioTranscriptionStatus(record);
   appointmentDrafts = normalizeAppointments(record);
   clearAppointmentComposer();
   renderAppointmentList();
@@ -3793,6 +3832,14 @@ $("btnAnalyzeAutomatic").addEventListener("click",async()=>{
   try{await analyzeSavedWhatsAppConversation(record);toast("Chefe Duro e análise completa atualizados no lead.");}
   catch(error){$("whatsappOfficialAnalysis").textContent="Análise não concluída";$("whatsappOfficialAnalysis").classList.add("stale");$("whatsappSyncStatus").textContent=error.message||"Não foi possível analisar a conversa.";toast($("whatsappSyncStatus").textContent);}
   finally{$("whatsappOfficialAnalysis").classList.remove("whatsappCaptureProgress");button.disabled=false;button.textContent="Analisar automaticamente";}
+});
+$("btnTranscribeAudios").addEventListener("click",async()=>{
+  const recordId=$("id").value;const button=$("btnTranscribeAudios");if(!recordId)return toast("Salve o cliente antes de transcrever os áudios.");
+  const record=records.find(item=>item.id===recordId);if(!record)return toast("Lead não localizado.");
+  button.disabled=true;button.textContent="Capturando áudios…";$("whatsappSyncStatus").textContent="Reabrindo a conversa para obter os arquivos de áudio…";
+  try{await captureFreeWhatsAppConversation(record);const stats=audioStats(records.find(item=>item.id===recordId)||record);toast(stats.pending||stats.error?"Áudios ainda pendentes: inicie o transcritor local e tente novamente.":"Áudios transcritos e salvos no lead.");}
+  catch(error){$("whatsappSyncStatus").textContent=error.message||"Não foi possível processar os áudios.";toast($("whatsappSyncStatus").textContent);}
+  finally{renderAudioTranscriptionStatus(records.find(item=>item.id===recordId)||record);}
 });
 $("whatsappOfficialTimeline").addEventListener("click",async event=>{
   const button=event.target.closest("[data-official-media]");if(!button)return;const media=officialMediaById.get(button.dataset.officialMedia);if(!media)return;

@@ -14,16 +14,19 @@ Criare em um único botão.
 
 ## Uso
 
-Abra um lead salvo e clique em **Analisar conversa**. O CRM abre o telefone
+Abra um lead salvo e clique em **Capturar conversa**. O CRM abre o telefone
 correto no WhatsApp Web, espera a conversa estabilizar, solicita o histórico
 mais antigo disponível no celular, percorre as janelas virtualizadas, mescla as
 mensagens pelo identificador do WhatsApp e só envia à análise quando consegue
 confirmar a integridade mínima do histórico.
 
 Mensagens repetidas são preservadas. Alterações de texto são atualizadas pelo
-mesmo identificador. Imagem, vídeo, documento, localização, contato, figurinha e
-áudio entram no histórico com marcador explícito. Áudios sem uma extensão de
-transcrição compatível permanecem identificados, nunca desaparecem em silêncio.
+mesmo identificador. Imagem, vídeo, documento, localização, contato e figurinha
+entram no histórico com marcador explícito. Para áudio, a extensão tenta obter o
+arquivo/blob real e enviá-lo somente ao transcritor local em `127.0.0.1:32123`.
+Se o arquivo não estiver disponível no WhatsApp Web ou o transcritor não estiver
+iniciado, ele permanece como pendente/indisponível, nunca como transcrição
+inventada.
 
 ## Limites e segurança
 

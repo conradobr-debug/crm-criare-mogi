@@ -4,6 +4,9 @@ const CRIARE_CONTENT_SCRIPT_VERSION = "2.1.2";
 const CaptureCore = globalThis.CriareWhatsAppCaptureCore;
 const {cleanText, normalizedUiText, messageHash, continuationPrefix} = CaptureCore;
 
+const LOCAL_TRANSCRIBER_URL = "http://127.0.0.1:32123/v1/transcribe";
+const AUDIO_MAX_BYTES = 15 * 1024 * 1024;
+
 function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 
 function activeMain(){
@@ -156,37 +159,92 @@ function chatLoadState(request={}){
   };
 }
 
-function transcriptFromNode(node){
-  const whisper = node.querySelector(".wt-transcription-result:not(.error) .wt-result-text");
-  const parakeet = node.querySelector(".parakeet-wa-transcribe-result span");
-  return cleanText(whisper?.textContent || parakeet?.textContent || "");
-}
-
-function transcriptionFailed(node){
-  if(node.querySelector(".wt-transcription-result.error")) return true;
-  return /failed|error|erro|limit/i.test(cleanText(node.querySelector(".parakeet-wa-transcribe-result span")?.textContent || ""));
-}
-
 function voiceMessageNodes(main){
   return messageNodes(main).filter(node=>node.querySelector('[aria-label*="mensagem de voz" i],[aria-label*="voice message" i],[data-testid*="audio" i],audio'));
 }
 
-async function transcribeCompatibleAudios(main){
-  const voices = voiceMessageNodes(main);
-  let started = 0;
-  for(const node of voices){
-    if(transcriptFromNode(node) || transcriptionFailed(node)) continue;
-    const button = node.querySelector(".wt-transcribe-btn:not(.success),.parakeet-wa-transcribe-btn");
-    if(button && !button.disabled){ button.click(); started += 1; }
+function audioElement(node){
+  return node.querySelector("audio") || null;
+}
+
+function audioSource(node){
+  const audio = audioElement(node);
+  const candidates = [audio?.currentSrc,audio?.src,audio?.getAttribute("src"),
+    node.querySelector("a[download],a[href*='blob:'],[data-url],[data-download-url]")?.getAttribute("href"),
+    node.querySelector("[data-url],[data-download-url]")?.getAttribute("data-url") || node.querySelector("[data-download-url]")?.getAttribute("data-download-url")];
+  return candidates.map(value=>String(value||"").trim()).find(value=>/^(blob:|data:|https?:)/i.test(value)) || "";
+}
+
+function audioDuration(node){
+  const audio = audioElement(node);
+  const raw = Number(audio?.duration);
+  if(Number.isFinite(raw) && raw > 0) return Math.round(raw);
+  const text = cleanText(node.innerText || "");
+  const match = text.match(/(?:^|\s)(\d{1,2}):(\d{2})(?:\s|$)/);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+async function sha256Hex(buffer){
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,"0")).join("");
+}
+
+function audioMeta(id,patch={}){
+  return {messageId:id || null,durationSeconds:null,mimeType:null,sizeBytes:null,sha256:null,sourceAvailable:false,extractionStatus:"pending",transcriptionStatus:"pending",transcription:"",error:"",...patch};
+}
+
+function publicAudioMeta(meta){
+  if(!meta)return null;
+  const {buffer,...safe}=meta;
+  return safe;
+}
+
+async function extractAudioFile(node,id){
+  const source = audioSource(node);
+  const base = audioMeta(id,{source:source ? (source.startsWith("blob:") ? "blob" : "url") : "none",durationSeconds:audioDuration(node)});
+  if(!source){ base.extractionStatus="unavailable";base.transcriptionStatus="unavailable";base.error="O WhatsApp não expôs o arquivo de áudio nesta mensagem. Reproduza ou baixe o áudio e capture novamente.";return base; }
+  try{
+    const response = await fetch(source,{credentials:"include",cache:"no-store"});
+    if(!response.ok) throw new Error(`download_http_${response.status}`);
+    const blob = await response.blob();
+    if(!blob.size) throw new Error("arquivo_vazio");
+    if(blob.size > AUDIO_MAX_BYTES) throw new Error("audio_maior_que_15mb");
+    const buffer = await blob.arrayBuffer();
+    const sha256 = await sha256Hex(buffer);
+    return {...base,sourceAvailable:true,extractionStatus:"extracted",transcriptionStatus:"pending",mimeType:blob.type || "application/octet-stream",sizeBytes:blob.size,sha256,buffer};
+  }catch(error){
+    return {...base,extractionStatus:"error",transcriptionStatus:"error",error:error.message || "Não foi possível obter o arquivo de áudio."};
   }
-  if(started){
-    const deadline = Date.now() + 15000;
-    while(Date.now() < deadline){
-      if(voices.every(node=>transcriptFromNode(node) || transcriptionFailed(node))) break;
-      await sleep(750);
-    }
+}
+
+function bytesToBase64(buffer){
+  const bytes = new Uint8Array(buffer);let binary="";
+  for(let offset=0;offset<bytes.length;offset+=0x8000) binary += String.fromCharCode(...bytes.subarray(offset,offset+0x8000));
+  return btoa(binary);
+}
+
+async function transcribeLocally(meta){
+  if(!meta?.buffer) return meta;
+  try{
+    const response = await fetch(LOCAL_TRANSCRIBER_URL,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({message_id:meta.messageId,sha256:meta.sha256,mime_type:meta.mimeType,duration_seconds:meta.durationSeconds,audio_base64:bytesToBase64(meta.buffer)})});
+    const body = await response.json().catch(()=>({}));
+    if(response.status === 503 || body?.code === "TRANSCRIBER_NOT_STARTED") return {...meta,transcriptionStatus:"pending",error:"Transcritor local não está iniciado."};
+    if(!response.ok || !body?.text) return {...meta,transcriptionStatus:"error",error:body?.error || `transcritor_http_${response.status}`};
+    return {...meta,transcriptionStatus:"completed",transcription:cleanText(body.text),error:""};
+  }catch(error){
+    return {...meta,transcriptionStatus:"pending",error:"Transcritor local não está iniciado."};
   }
-  return {voiceCount:voices.length,compatible:voices.some(node=>node.querySelector(".wt-btn-container,.parakeet-wa-transcribe-container"))};
+}
+
+async function prepareAudioEntries(main,audioState){
+  for(const node of voiceMessageNodes(main)){
+    const id = messageId(node) || `fp:${messageHash(cleanText(node.innerText || "audio"))}`;
+    const current = audioState.get(id);
+    if(current?.transcriptionStatus === "completed" || current?.extractionStatus === "extracted" || current?.extractionStatus === "unavailable" || current?.transcriptionStatus === "error") continue;
+    const meta = await extractAudioFile(node,id);
+    audioState.set(id,meta);
+    if(meta.extractionStatus === "extracted") audioState.set(id,await transcribeLocally(meta));
+  }
 }
 
 function mediaType(node){
@@ -211,11 +269,13 @@ function explicitAuthor(node){
   return cleanText(label).replace(/:\s*$/, "");
 }
 
-function messageBody(node){
+function messageBody(node,audioState=new Map()){
   const type = mediaType(node);
   if(type === "Áudio"){
-    const transcript = transcriptFromNode(node);
-    return {body:transcript ? `[Transcrição de áudio] ${transcript}` : "[Áudio sem transcrição]",type,audioTranscribed:Boolean(transcript)};
+    const id = messageId(node) || `fp:${messageHash(cleanText(node.innerText || "audio"))}`;
+    const audio = audioState.get(id) || audioMeta(id);
+    const transcript = cleanText(audio.transcription || "");
+    return {body:transcript ? `[Transcrição de áudio] ${transcript}` : "[Áudio sem transcrição]",type,audioTranscribed:Boolean(transcript),audioMeta:publicAudioMeta(audio)};
   }
   const detail = node.querySelector("[data-pre-plain-text]");
   const selectableText = [...node.querySelectorAll("span.selectable-text")]
@@ -237,7 +297,7 @@ function messageBody(node){
   return {body:text || "[Mensagem sem texto]",type:type || "Texto",audioTranscribed:false};
 }
 
-function readVisibleMessageWindow(main){
+function readVisibleMessageWindow(main,audioState=new Map()){
   const occurrences = new Map();
   const entries = [];
   let previousPrefix = "";
@@ -246,7 +306,7 @@ function readVisibleMessageWindow(main){
     let prefix = cleanText(detail?.getAttribute("data-pre-plain-text"));
     if(!prefix) prefix = continuationPrefix(previousPrefix, visibleTime(node), explicitAuthor(node));
     previousPrefix = prefix || previousPrefix;
-    const message = messageBody(node);
+    const message = messageBody(node,audioState);
     const text = cleanText(`${prefix}${prefix && !prefix.endsWith(" ") ? " " : ""}${message.body}`);
     if(!text) continue;
     const stableId = messageId(node);
@@ -259,6 +319,7 @@ function readVisibleMessageWindow(main){
       type:message.type,
       hasVoiceMessage:message.type === "Áudio",
       audioTranscribed:message.audioTranscribed,
+      audioMeta:message.audioMeta || null,
       capturedAt:new Date().toISOString()
     });
   }
@@ -287,7 +348,9 @@ function messageScrollContainer(main){
 }
 
 async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={}){
-  let entries = readVisibleMessageWindow(main);
+  const audioState = new Map();
+  await prepareAudioEntries(main,audioState);
+  let entries = readVisibleMessageWindow(main,audioState);
   const deadline = Date.now() + timeoutMs;
   let scrollPasses = 0;
   let stableTopPasses = 0;
@@ -303,7 +366,8 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
     scroller.dispatchEvent(new Event("scroll",{bubbles:true}));
     await sleep(550);
     await waitForMessagesToSettle(main,{timeoutMs:3500,minWaitMs:450});
-    const merged = mergeWindow(entries, readVisibleMessageWindow(main));
+    await prepareAudioEntries(main,audioState);
+    const merged = mergeWindow(entries, readVisibleMessageWindow(main,audioState));
     entries = merged.entries;
     scrollPasses += 1;
     const atTop = scroller.scrollTop <= 2;
@@ -320,7 +384,7 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
   if(entries.length > maximum) entries = entries.slice(-maximum);
   const scroller = messageScrollContainer(main);
   if(scroller){ scroller.scrollTop = scroller.scrollHeight; scroller.dispatchEvent(new Event("scroll",{bubbles:true})); }
-  return {entries,reachedStart,loadedStartReached,scrollPasses,limited};
+  return {entries,reachedStart,loadedStartReached,scrollPasses,limited,audioState};
 }
 
 async function extractLoadedMessages(){
@@ -335,16 +399,18 @@ async function extractLoadedMessages(){
     loadedScroller.dispatchEvent(new Event("scroll",{bubbles:true}));
     await waitForMessagesToSettle(main,{timeoutMs:8000,minWaitMs:900});
   }
-  const transcription = await transcribeCompatibleAudios(main);
   const history = await collectAvailableHistory(main);
   if(!history.entries.length) throw new Error("Não encontrei mensagens carregadas nesta conversa.");
   const audioCount = history.entries.filter(entry=>entry.hasVoiceMessage).length;
   const audioTranscribed = history.entries.filter(entry=>entry.audioTranscribed).length;
+  const audioPending = history.entries.filter(entry=>entry.hasVoiceMessage && entry.audioMeta?.transcriptionStatus === "pending").length;
+  const audioUnavailable = history.entries.filter(entry=>entry.hasVoiceMessage && entry.audioMeta?.transcriptionStatus === "unavailable").length;
+  const audioErrors = history.entries.filter(entry=>entry.hasVoiceMessage && entry.audioMeta?.transcriptionStatus === "error").length;
   return {
     transcript:history.entries.map(entry=>entry.text).join("\n"),
-    entries:history.entries.map(({id,text,type,capturedAt})=>({id,text,type,capturedAt})),
-    count:history.entries.length,audioCount,audioTranscribed,
-    audioExtensionDetected:transcription.compatible,
+    entries:history.entries.map(({id,text,type,capturedAt,hasVoiceMessage,audioTranscribed,audioMeta})=>({id,text,type,capturedAt,hasVoiceMessage,audioTranscribed,audioMeta})),
+    count:history.entries.length,audioCount,audioTranscribed,audioPending,audioUnavailable,audioErrors,
+    audioExtensionDetected:false,
     olderHistoryRequested:olderHistory.requested,
     olderHistoryLoaded:olderHistory.loaded,
     olderHistoryPending:olderHistory.pending,

@@ -7,7 +7,8 @@
   "host_permissions": [
     "https://web.whatsapp.com/*",
     "https://*.whatsapp.net/*",
-    "https://conradobr-debug.github.io/crm-criare-mogi/*"
+    "https://conradobr-debug.github.io/crm-criare-mogi/*",
+    "http://127.0.0.1:32123/*"
   ],
   "background": {"service_worker": "background.js"},
   "action": {"default_title": "Criare CRM — Analisar WhatsApp", "default_popup": "popup.html"},
