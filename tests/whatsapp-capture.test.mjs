@@ -72,3 +72,22 @@ test("o quadro horizontal aceita arraste somente em área não interativa",async
   assert.match(crm,/\.card,button,a,input,select,textarea/);
   assert.match(crm,/pointerdown/);
 });
+
+test("normaliza registros antigos sem substituir a análise existente",async()=>{
+  const crm = await readFile(new URL("index.html", root),"utf8");
+  assert.match(crm,/function normalizeLegacyWhatsAppRecord/);
+  assert.match(crm,/legacyTranscriptEntries\(record\)/);
+  assert.match(crm,/record\.whatsapp_analysis_hard_boss\|\|record\.whatsapp_summary/);
+  assert.match(crm,/persistLegacyWhatsAppNormalization/);
+  assert.match(crm,/if\(!original\.whatsapp_analysis_hard_boss&&normalized\.whatsapp_analysis_hard_boss\)/);
+});
+
+test("o painel do lead mantém seções fechadas e o Chefe Duro visível",async()=>{
+  const crm = await readFile(new URL("index.html", root),"utf8");
+  assert.match(crm,/id="appointmentSection"/);
+  assert.match(crm,/id="leadInfoSection"/);
+  assert.match(crm,/id="whatsappSection"/);
+  assert.match(crm,/Chefe Duro — Próxima condução/);
+  assert.match(crm,/setLeadSectionOpen\("appointmentSection",false\)/);
+  assert.match(crm,/Análise ainda não executada\./);
+});

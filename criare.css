@@ -134,6 +134,15 @@ label{color:#625d57;font-weight:600}
 .reportBar{background:#e9e5df}
 .reportBar>span{background:linear-gradient(90deg,#1b1b1b,#9d7b61)}
 .formNotice{border-radius:2px;border-color:#d9c9b7;background:#f7f1e9;color:#624e3e}
+.leadSection{border:1px solid #d6d0c8;background:#fff}
+.leadSectionHd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:#faf9f7}
+.leadSectionToggle{position:relative;display:flex;flex:1;min-width:0;align-items:flex-start;flex-direction:column;gap:3px;padding:0 0 0 13px;border:0;background:transparent;text-align:left;color:#302c28;cursor:pointer}
+.leadSectionToggle:before{content:"›";position:absolute;left:0;top:0;transform:rotate(0deg);color:#756c62;font-size:18px;line-height:13px}
+.leadSection.isOpen .leadSectionToggle:before{transform:rotate(90deg)}
+.leadSectionToggle span{font-size:13px;font-weight:650}.leadSectionToggle small{color:#716b64;font-size:10px;font-weight:400;line-height:1.4}.leadSectionToggle em{max-width:760px;overflow:hidden;color:#695949;font-size:10px;font-style:normal;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}
+.leadSectionActions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:7px}.leadSectionActions button{white-space:nowrap}
+.leadSectionBody{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px;padding:12px}.leadSectionBody[hidden],.appointmentComposer[hidden]{display:none!important}
+.leadSectionBody>.whatsappWorkspace{grid-column:1/-1}.leadSection .appointmentList{margin:0;padding:0 12px 10px}.leadSection .appointmentComposer{margin:0 12px 12px}.whatsappSectionHd{align-items:flex-start}
 .whatsappWorkspace{padding:14px;border:1px solid #cfd8cd;background:#f4f8f3}
 .whatsappWorkspaceHd{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:13px}
 .whatsappWorkspaceTitle{font-size:14px;font-weight:650;color:#263526}
@@ -166,11 +175,13 @@ label{color:#625d57;font-weight:600}
 .whatsappOfficialActions .analyzeConversationAction{min-width:190px}
 .whatsappCaptureProgress{display:inline-flex;align-items:center;gap:7px}.whatsappCaptureProgress:before{content:"";width:9px;height:9px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:waCaptureSpin .8s linear infinite}
 @keyframes waCaptureSpin{to{transform:rotate(360deg)}}
-.hardBossPinned{margin:0 0 12px;padding:14px;border:1px solid #baa58e;background:#f8f2ea}
+.hardBossPinned{margin:0 0 12px;padding:18px;border:1px solid #a58c73;background:#f8f2ea}
+.hardBossPinned.isEmpty{border-color:#d6d0c8;background:#fbfaf8}
 .hardBossPinnedHd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:9px}
 .hardBossPinnedHd>div{display:flex;flex-direction:column;gap:2px}.hardBossPinnedHd strong{font-size:15px;color:#352b24}
 .hardBossEyebrow{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#806c59}
-.hardBossPinned p{margin:0;color:#3f3730;font-size:12px;line-height:1.55;white-space:pre-wrap}
+.hardBossPinned p{margin:0;color:#3f3730;font-size:13px;line-height:1.65;white-space:pre-wrap}
+.hardBossPinned.isEmpty p{color:#716b64;font-style:italic}
 .viewFullAnalysis{margin-top:8px}.whatsappAnalysisModal{width:min(820px,94vw)}
 .fullAnalysisText{min-height:240px;padding:18px;border:1px solid #d8d2ca;background:#fff;color:#302c28;font-size:12px;line-height:1.65;white-space:pre-wrap}
 
@@ -318,6 +329,7 @@ dialog::backdrop{background:rgba(10,10,10,.68);backdrop-filter:blur(3px)}
   .pendingToolbar{display:grid;grid-template-columns:1fr 1fr}.pendingToolbar button{min-height:44px}
   .photoGrid{grid-template-columns:repeat(2,1fr)}
   .whatsappWorkspace{padding:12px}.whatsappWorkspaceHd{align-items:flex-start;flex-direction:column}.whatsappWorkspaceHd button{width:100%;min-height:46px}
+  .leadSectionHd{align-items:stretch;flex-direction:column}.leadSectionActions{display:grid;grid-template-columns:1fr 1fr}.leadSectionActions button{width:100%;min-height:44px}.leadSectionBody{grid-template-columns:1fr;padding:10px}.leadSectionBody>.col-12,.leadSectionBody>.col-6,.leadSectionBody>.col-4,.leadSectionBody>.col-3{grid-column:1}
   .whatsappActions{display:grid;grid-template-columns:1fr 1fr}.whatsappActions button{min-height:46px;width:100%}
   .whatsappActions .manualGptAction{grid-column:1/-1}
   .hardBossPinnedHd{flex-direction:column}.hardBossPinnedHd button{width:100%;min-height:44px}

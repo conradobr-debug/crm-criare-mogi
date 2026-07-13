@@ -616,13 +616,15 @@
           <label>Etapa</label>
           <select id="stage"></select>
         </div>
-        <div class="appointmentComposer" id="appointmentComposer">
-          <div class="appointmentComposerHd">
-            <div>
-              <div class="appointmentComposerTitle">Compromissos do cliente</div>
-              <div class="fieldHelp">Crie quantos acompanhamentos forem necessários. O mais próximo aparecerá no cartão.</div>
-            </div>
+        <section class="col-12 leadSection" id="appointmentSection">
+          <div class="leadSectionHd">
+            <button class="leadSectionToggle" type="button" data-toggle-section="appointmentSection" aria-expanded="false">
+              <span>Compromissos do cliente</span><small id="appointmentSectionSummary">Nenhum compromisso agendado</small>
+            </button>
+            <button class="ghost" id="btnShowAppointmentComposer" type="button">+ Novo compromisso</button>
           </div>
+          <div class="appointmentList" id="appointmentList"></div>
+          <div class="appointmentComposer" id="appointmentComposer" hidden>
 
         <div class="col-4" id="wrapNextActionDate">
           <label>Data do novo compromisso</label>
@@ -679,9 +681,16 @@
           <button class="primary" id="btnAddAppointment" type="button">+ Adicionar compromisso</button>
         </div>
 
-        <div class="appointmentList" id="appointmentList"></div>
         </div>
+        </section>
 
+        <section class="col-12 leadSection" id="leadInfoSection">
+          <div class="leadSectionHd">
+            <button class="leadSectionToggle" type="button" data-toggle-section="leadInfoSection" aria-expanded="false">
+              <span>Qualidade do lead e mais informações</span><small id="leadInfoSectionSummary">Mais informações</small>
+            </button>
+          </div>
+          <div class="leadSectionBody" id="leadInfoFields" data-section-body hidden>
         <div class="col-4" id="wrapLeadQuality">
           <label>Qualidade do lead</label>
           <select id="leadQuality">
@@ -765,31 +774,39 @@
             <option>E-mail</option>
           </select>
         </div>
+          </div>
+        </section>
 
         <div class="col-12">
           <label>Observações</label>
           <textarea id="notes"></textarea>
         </div>
 
-        <div class="col-12 whatsappWorkspace">
-          <div class="whatsappWorkspaceHd">
-            <div>
-              <div class="whatsappWorkspaceTitle">WhatsApp do cliente</div>
-              <div class="fieldHelp">Captura gratuita e somente leitura pelo WhatsApp Web deste computador.</div>
-            </div>
-            <button class="whatsappAction" id="btnWhatsApp" type="button">Abrir conversa</button>
-          </div>
-          <div class="hardBossPinned" id="hardBossPinned" hidden>
+        <div class="col-12 hardBossPinned" id="hardBossPinned">
             <div class="hardBossPinnedHd">
               <div>
                 <span class="hardBossEyebrow">Análise fixada no lead</span>
-                <strong>Chefe Duro</strong>
+                <strong>Chefe Duro — Próxima condução</strong>
               </div>
               <button class="ghost" id="btnViewFullAnalysisPinned" type="button">Ver análise completa</button>
             </div>
             <p id="hardBossPinnedText"></p>
             <div class="whatsappSummaryMeta" id="hardBossPinnedMeta"></div>
+        </div>
+
+        <section class="col-12 leadSection" id="whatsappSection">
+          <div class="leadSectionHd whatsappSectionHd">
+            <button class="leadSectionToggle" type="button" data-toggle-section="whatsappSection" aria-expanded="false">
+              <span>WhatsApp do cliente</span><small id="whatsappSectionSummary">Conversa ainda não capturada</small>
+              <em id="whatsappSectionHardBoss"></em>
+            </button>
+            <div class="leadSectionActions">
+              <button class="whatsappAction" id="btnWhatsApp" type="button">Abrir conversa</button>
+              <button class="primary analyzeConversationAction" id="btnUpdateOfficialAnalysis" type="button">Analisar conversa</button>
+            </div>
           </div>
+          <div class="leadSectionBody" id="whatsappFields" data-section-body hidden>
+          <div class="whatsappWorkspace">
           <div class="whatsappOfficialIndicators">
             <span id="whatsappOfficialSync">Conversa ainda não capturada</span>
             <span id="whatsappOfficialNew">0 novas desde a análise</span>
@@ -804,7 +821,6 @@
           <div class="whatsappActions whatsappOfficialActions">
             <button class="ghost" id="btnLoadOlderWhatsApp" type="button" hidden>Carregar anteriores</button>
             <button class="ghost" id="btnRefreshOfficialTimeline" type="button" hidden>Atualizar conversa</button>
-            <button class="primary analyzeConversationAction" id="btnUpdateOfficialAnalysis" type="button">Analisar conversa</button>
             <button class="ghost" id="btnViewFullAnalysis" type="button" hidden>Ver análise completa</button>
           </div>
           <div class="whatsappSummaryMeta" id="whatsappSyncStatus">A extensão verificará o telefone, carregará o histórico disponível e impedirá uma análise parcial.</div>
@@ -841,6 +857,8 @@
           <div class="whatsappSummaryMeta" id="whatsappSummaryMeta">Nenhum resumo gerado.</div>
           </div>
         </div>
+          </div>
+        </section>
 
         <div class="col-12" id="scheduleNotice">
           <div class="formNotice" id="outlookScheduleNotice">Todo atendimento deve terminar com um próximo passo. Ao agendar, o compromisso será salvo diretamente no calendário central da Criare.</div>
@@ -1221,9 +1239,44 @@ function normalizeCapturedEntry(entry){
   }
   const text=String(entry||"").trim();return text?{id:null,text}:null;
 }
+function legacyTranscriptEntries(record){
+  return String(record?.whatsapp_transcript||"").split("\n").map(normalizeCapturedEntry).filter(Boolean);
+}
+function normalizeLegacyWhatsAppRecord(record){
+  if(!record) return record;
+  const structured=record.whatsapp_analysis_structured&&typeof record.whatsapp_analysis_structured==="object"?record.whatsapp_analysis_structured:{};
+  const entries=Array.isArray(record.whatsapp_message_entries)?record.whatsapp_message_entries.map(normalizeCapturedEntry).filter(Boolean):legacyTranscriptEntries(record);
+  const hardBoss=String(record.whatsapp_analysis_hard_boss||record.whatsapp_summary||structured.hard_boss||structured.summary||"").trim();
+  const full=String(record.whatsapp_analysis_full||structured.full_analysis||"").trim();
+  const count=Number(record.whatsapp_sync_message_count||record.whatsapp_analysis_message_count||entries.length||0);
+  return {...record,
+    whatsapp_message_entries:entries,
+    whatsapp_sync_message_count:count,
+    whatsapp_analysis_hard_boss:hardBoss||null,
+    whatsapp_analysis_full:full||null,
+    whatsapp_analysis_updated_at:record.whatsapp_analysis_updated_at||record.whatsapp_summary_updated_at||null,
+    whatsapp_analysis_model:record.whatsapp_analysis_model||record.whatsapp_summary_model||null,
+    whatsapp_analysis_status:(hardBoss||full)&&(!record.whatsapp_analysis_status||record.whatsapp_analysis_status==="never")?"current":(record.whatsapp_analysis_status||"never")
+  };
+}
+async function persistLegacyWhatsAppNormalization(original,normalized){
+  if(!original?.id||!sb) return normalized;
+  const patch={};
+  if(!Array.isArray(original.whatsapp_message_entries)&&normalized.whatsapp_message_entries.length)patch.whatsapp_message_entries=normalized.whatsapp_message_entries;
+  if(!Number(original.whatsapp_sync_message_count||0)&&normalized.whatsapp_sync_message_count)patch.whatsapp_sync_message_count=normalized.whatsapp_sync_message_count;
+  if(!original.whatsapp_analysis_hard_boss&&normalized.whatsapp_analysis_hard_boss)patch.whatsapp_analysis_hard_boss=normalized.whatsapp_analysis_hard_boss;
+  if(!original.whatsapp_analysis_full&&normalized.whatsapp_analysis_full)patch.whatsapp_analysis_full=normalized.whatsapp_analysis_full;
+  if(!original.whatsapp_analysis_updated_at&&normalized.whatsapp_analysis_updated_at)patch.whatsapp_analysis_updated_at=normalized.whatsapp_analysis_updated_at;
+  if(!original.whatsapp_analysis_model&&normalized.whatsapp_analysis_model)patch.whatsapp_analysis_model=normalized.whatsapp_analysis_model;
+  if((!original.whatsapp_analysis_status||original.whatsapp_analysis_status==="never")&&normalized.whatsapp_analysis_status==="current")patch.whatsapp_analysis_status="current";
+  if(!Object.keys(patch).length) return normalized;
+  const {data,error}=await sb.from(TBL_RECORDS).update(patch).eq("id",original.id).select("*").single();
+  if(error){console.warn("[CRM WhatsApp] Não foi possível consolidar os campos antigos.",error);return normalized;}
+  const index=records.findIndex(item=>item.id===data.id);if(index>=0)records[index]=data;
+  return normalizeLegacyWhatsAppRecord(data);
+}
 function mergeWhatsAppMessages(record,result){
-  let stored=Array.isArray(record?.whatsapp_message_entries)?record.whatsapp_message_entries.map(normalizeCapturedEntry).filter(Boolean):[];
-  if(!stored.length)stored=String(record?.whatsapp_transcript||"").split("\n").map(normalizeCapturedEntry).filter(Boolean);
+  let stored=Array.isArray(record?.whatsapp_message_entries)?record.whatsapp_message_entries.map(normalizeCapturedEntry).filter(Boolean):legacyTranscriptEntries(record);
   const incoming=Array.isArray(result?.entries)?result.entries.map(normalizeCapturedEntry).filter(Boolean):String(result?.transcript||"").split("\n").map(normalizeCapturedEntry).filter(Boolean);
   if((result?.reachedStart||result?.loadedHistoryComplete)&&incoming.length){
     const storedById=new Map(stored.filter(entry=>entry.id).map(entry=>[entry.id,entry]));const storedTexts=new Set(stored.map(entry=>entry.text));
@@ -1291,19 +1344,20 @@ function capturedEntryParts(text){
   return match?{time:match[1],date:match[2],author:match[3],body:match[4]}:{time:"",date:"",author:"Mensagem",body:String(text||"")};
 }
 function renderCapturedWhatsAppTimeline(record){
-  const timeline=$("whatsappOfficialTimeline");const entries=Array.isArray(record?.whatsapp_message_entries)?record.whatsapp_message_entries.map(normalizeCapturedEntry).filter(Boolean):[];
+  const timeline=$("whatsappOfficialTimeline");const entries=Array.isArray(record?.whatsapp_message_entries)?record.whatsapp_message_entries.map(normalizeCapturedEntry).filter(Boolean):legacyTranscriptEntries(record);
   if(!entries.length){timeline.innerHTML='<div class="timelineEmpty">Clique em “Analisar conversa” para capturar o histórico deste lead.</div>';return;}
   timeline.innerHTML=entries.slice(-80).map(entry=>{const item=capturedEntryParts(entry.text);const outbound=/criare|você/i.test(item.author);return `<article class="waMessage ${outbound?'outbound':'inbound'}"><div class="waMessageHd"><b>${escapeHtml(outbound?'Criare':item.author||'Cliente')}</b><time>${escapeHtml([item.date,item.time].filter(Boolean).join(' • '))}</time></div><div class="waMessageBody">${escapeHtml(item.body||`[${entry.type||'mensagem'}]`)}</div></article>`;}).join("");
   timeline.scrollTop=timeline.scrollHeight;
 }
 function updateCapturedWhatsAppIndicators(record){
-  const updated=record?.whatsapp_transcript_updated_at;const count=Number(record?.whatsapp_sync_message_count||0);const complete=Boolean(record?.whatsapp_capture_complete);
+  record=normalizeLegacyWhatsAppRecord(record);const updated=record?.whatsapp_transcript_updated_at;const count=Number(record?.whatsapp_sync_message_count||0);const complete=Boolean(record?.whatsapp_capture_complete);
   $("whatsappOfficialSync").textContent=updated?`${count} mensagem(ns) • ${fmtBRDateTime(updated)}`:"Conversa ainda não capturada";
   $("whatsappOfficialSync").classList.toggle("stale",Boolean(updated&&!complete));
   $("whatsappOfficialNew").textContent=`${Number(record?.whatsapp_sync_new_message_count||0)} nova(s) na captura`;
   $("whatsappOfficialAnalysis").textContent=record?.whatsapp_analysis_updated_at?`Analisada em ${fmtBRDateTime(record.whatsapp_analysis_updated_at)}`:"Análise ainda não executada";
   $("whatsappOfficialAnalysis").classList.toggle("stale",Boolean(updated&&(!record?.whatsapp_analysis_updated_at||new Date(updated)>new Date(record.whatsapp_analysis_updated_at))));
   $("whatsappSyncStatus").textContent=record?.whatsapp_sync_error||record?.whatsapp_capture_note||(record?.id?"Pronto para capturar e analisar.":"Salve o cliente antes de analisar.");
+  renderWhatsAppSectionSummary(record);
 }
 async function captureFreeWhatsAppConversation(record){
   await requireCurrentWhatsAppExtension();
@@ -1482,13 +1536,14 @@ async function callWhatsAppSummary(conversation){
 function renderWhatsAppAnalysis(){
   const hardBoss = currentWhatsAppAnalysis.hardBoss || "";
   const hasFull = Boolean(currentWhatsAppAnalysis.full);
-  $("hardBossPinned").hidden = !hardBoss;
-  $("hardBossPinnedText").textContent = hardBoss;
+  $("hardBossPinned").classList.toggle("isEmpty",!hardBoss);
+  $("hardBossPinnedText").textContent = hardBoss || "Análise ainda não executada.";
   $("hardBossPinnedMeta").textContent = currentWhatsAppAnalysis.updatedAt
     ? `${fmtBRDateTime(currentWhatsAppAnalysis.updatedAt)}${currentWhatsAppAnalysis.model ? ` • ${currentWhatsAppAnalysis.model}` : ""}`
     : "";
   $("btnViewFullAnalysis").hidden = !hasFull;
   $("btnViewFullAnalysisPinned").hidden = !hasFull;
+  renderWhatsAppSectionSummary(records.find(item=>item.id===$("id").value));
 }
 function applyWhatsAppSummary(result){
   const hardBoss = result.hard_boss || result.summary || "";
@@ -3222,10 +3277,40 @@ function appointmentFromComposer(){
     status:"scheduled", event_id:null, web_link:null, synced_at:null
   };
 }
+function setLeadSectionOpen(sectionId,open){
+  const section=$(sectionId);if(!section)return;
+  const body=section.querySelector("[data-section-body]")||section.querySelector("#appointmentComposer");
+  if(body)body.hidden=!open;
+  section.classList.toggle("isOpen",open);
+  const toggle=section.querySelector("[data-toggle-section]");if(toggle)toggle.setAttribute("aria-expanded",String(open));
+}
+function renderLeadInfoSectionSummary(){
+  const values=[
+    $("leadQuality").value&&$("leadQuality").value!=="Não avaliado"?$("leadQuality").value:"",
+    $("email").value.trim(),
+    $("propertyStatus").value&&$("propertyStatus").value!=="Não informado"?$("propertyStatus").value:"",
+    $("professionalName").value.trim(),
+    $("decisionDueAt").value?`decisão ${fmtBRDate($("decisionDueAt").value)}`:""
+  ].filter(Boolean);
+  $("leadInfoSectionSummary").textContent=values.length?values.slice(0,3).join(" • "):"Mais informações";
+}
+function renderAppointmentSectionSummary(sorted){
+  $("appointmentSectionSummary").textContent=sorted.length?`${sorted.length} compromisso(s) • próximo ${fmtBRDateTime(sorted[0].starts_at)}`:"Nenhum compromisso agendado";
+}
+function renderWhatsAppSectionSummary(record){
+  const normalized=normalizeLegacyWhatsAppRecord(record||records.find(item=>item.id===$("id").value));
+  const count=Number(normalized?.whatsapp_sync_message_count||0);
+  const updated=normalized?.whatsapp_transcript_updated_at;
+  const analysis=normalized?.whatsapp_analysis_status||"never";
+  const labels={current:"análise atualizada",stale:"análise desatualizada",processing:"análise em processamento",failed:"falha na análise",never:"análise não executada"};
+  $("whatsappSectionSummary").textContent=updated?`${count} mensagem(ns) • ${fmtBRDateTime(updated)} • ${labels[analysis]||labels.never}`:`Conversa ainda não capturada • ${labels[analysis]||labels.never}`;
+  $("whatsappSectionHardBoss").textContent=normalized?.whatsapp_analysis_hard_boss?String(normalized.whatsapp_analysis_hard_boss):"";
+}
 function renderAppointmentList(){
   const list = $("appointmentList");
   if(!list) return;
   const sorted = appointmentDrafts.slice().sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
+  renderAppointmentSectionSummary(sorted);
   list.innerHTML = sorted.length ? sorted.map(item=>{
     const synced = Boolean(item.event_id || item.synced_at);
     return `<div class="appointmentItem" data-appointment-id="${escapeHtml(item.id)}">
@@ -3238,7 +3323,7 @@ function renderAppointmentList(){
         ? (item.web_link ? `<a class="btn" href="${escapeHtml(item.web_link)}" target="_blank" rel="noopener noreferrer">Abrir</a>` : `<span class="appointmentItemMeta">No calendário</span>`)
         : `<button class="ghost" type="button" data-remove-appointment="${escapeHtml(item.id)}">Remover</button>`}
     </div>`;
-  }).join("") : `<div class="appointmentEmpty">Nenhum compromisso cadastrado. Preencha os campos acima e toque em “+ Adicionar compromisso”.</div>`;
+  }).join("") : `<div class="appointmentEmpty">Nenhum compromisso agendado.</div>`;
 }
 function addAppointmentFromComposer({silent=false}={}){
   const appointment = appointmentFromComposer();
@@ -3249,6 +3334,7 @@ function addAppointmentFromComposer({silent=false}={}){
   appointmentDrafts.push(appointment);
   clearAppointmentComposer();
   renderAppointmentList();
+  setLeadSectionOpen("appointmentSection",false);
   if(!silent) toast("Compromisso adicionado. Você pode incluir outro.");
   return true;
 }
@@ -3279,6 +3365,9 @@ function updateModalMode(kind){
 function openModal(record=null, options={}){
   const prevSearch = $("fSearch").value;
   const prevCity = $("fCity").value;
+
+  const originalRecord=record;
+  record=normalizeLegacyWhatsAppRecord(record);
 
   const isNew = !record;
   const kind = record ? recordType(record) : (currentTab === "specifiers" ? "specifier" : "lead");
@@ -3334,6 +3423,11 @@ function openModal(record=null, options={}){
   $("investmentProfile").value = record?.investment_profile || "A definir";
   $("decisionDueAt").value = record?.decision_due_at || "";
   $("preferredContact").value = record?.preferred_contact || "WhatsApp";
+  renderLeadInfoSectionSummary();
+  renderWhatsAppSectionSummary(record);
+  setLeadSectionOpen("appointmentSection",false);
+  setLeadSectionOpen("leadInfoSection",false);
+  setLeadSectionOpen("whatsappSection",false);
 
   // selects
   fillSelect($("source"), config.sources, record?.source || config.sources[0]);
@@ -3360,8 +3454,12 @@ function openModal(record=null, options={}){
   $("fCity").value = prevCity;
 
   $("modal").showModal();
+  if(originalRecord)persistLegacyWhatsAppNormalization(originalRecord,record).then(normalized=>{
+    if($("id").value===normalized.id)renderWhatsAppSectionSummary(normalized);
+  });
   setTimeout(()=>loadOfficialWhatsApp(record),0);
   if(options.focusSchedule){
+    setLeadSectionOpen("appointmentSection",true);
     setTimeout(()=>$("nextAction").focus(), 50);
   }
 }
@@ -3652,6 +3750,15 @@ $("whatsappOfficialTimeline").addEventListener("click",async event=>{
   const button=event.target.closest("[data-official-media]");if(!button)return;const media=officialMediaById.get(button.dataset.officialMedia);if(!media)return;
   button.disabled=true;try{const url=await whatsappDataService.mediaUrl(media);if(!url)throw new Error("Anexo ainda não disponível.");window.open(url,"_blank","noopener,noreferrer");}catch(error){toast(error.message||"Não foi possível abrir o anexo.");}finally{button.disabled=false;}
 });
+document.querySelectorAll("[data-toggle-section]").forEach(button=>button.addEventListener("click",()=>{
+  const sectionId=button.dataset.toggleSection;
+  const section=sectionId?$(sectionId):null;
+  setLeadSectionOpen(sectionId,!section?.classList.contains("isOpen"));
+}));
+$("btnShowAppointmentComposer").addEventListener("click",()=>{
+  setLeadSectionOpen("appointmentSection",true);
+  setTimeout(()=>$("nextAction").focus(),0);
+});
 $("btnAddAppointment").addEventListener("click", ()=>addAppointmentFromComposer());
 $("appointmentList").addEventListener("click", event=>{
   const button = event.target.closest("[data-remove-appointment]");
@@ -3660,6 +3767,9 @@ $("appointmentList").addEventListener("click", event=>{
   renderAppointmentList();
   toast("Compromisso removido da lista.");
 });
+["leadQuality","email","propertyStatus","professionalName","hasFloorPlan","investmentProfile","decisionDueAt","preferredContact","estimate"].forEach(id=>$(id).addEventListener("change",renderLeadInfoSectionSummary));
+$("email").addEventListener("input",renderLeadInfoSectionSummary);
+$("professionalName").addEventListener("input",renderLeadInfoSectionSummary);
 $("btnOpenCustomGpt").addEventListener("click", async ()=>{
   $("btnUpdateOfficialAnalysis").click();
 });
