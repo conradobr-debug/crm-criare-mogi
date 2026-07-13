@@ -98,6 +98,24 @@ type ProviderResult = {
   model: string;
 };
 
+type ProviderFailure = {
+  provider: string;
+  reason: string;
+};
+
+function providerSucceeded(value: ProviderResult | ProviderFailure): value is ProviderResult {
+  return "result" in value;
+}
+
+function providerFailureReason(status: number, payload: unknown): string {
+  const message = typeof payload === "object" && payload !== null &&
+      "error" in payload && typeof payload.error === "object" && payload.error !== null &&
+      "message" in payload.error && typeof payload.error.message === "string"
+    ? payload.error.message.replace(/\s+/g, " ").trim().slice(0, 240)
+    : "";
+  return message ? `respondeu HTTP ${status}: ${message}` : `respondeu HTTP ${status}`;
+}
+
 function parseResult(text: string): Record<string, unknown> | null {
   if (!text) return null;
   try {
@@ -108,8 +126,8 @@ function parseResult(text: string): Record<string, unknown> | null {
   }
 }
 
-async function analyzeWithOpenAI(prompt: string, analysisMode: string): Promise<ProviderResult | null> {
-  if (!OPENAI_API_KEY) return null;
+async function analyzeWithOpenAI(prompt: string, analysisMode: string): Promise<ProviderResult | ProviderFailure> {
+  if (!OPENAI_API_KEY) return { provider: "OpenAI", reason: "não configurado" };
   try {
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -142,20 +160,20 @@ async function analyzeWithOpenAI(prompt: string, analysisMode: string): Promise<
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       console.error("[WhatsApp Summary] OpenAI unavailable", { status: response.status });
-      return null;
+      return { provider: "OpenAI", reason: providerFailureReason(response.status, payload) };
     }
     const result = parseResult(outputText(payload));
-    return result ? { result, model: `ChatGPT • ${OPENAI_MODEL}` } : null;
+    return result ? { result, model: `ChatGPT • ${OPENAI_MODEL}` } : { provider: "OpenAI", reason: "respondeu sem análise estruturada" };
   } catch (error) {
     console.error("[WhatsApp Summary] OpenAI request failed", {
       name: error instanceof Error ? error.name : "Error",
     });
-    return null;
+    return { provider: "OpenAI", reason: "não respondeu" };
   }
 }
 
-async function analyzeWithGemini(prompt: string, analysisMode: string): Promise<ProviderResult | null> {
-  if (!GEMINI_API_KEY) return null;
+async function analyzeWithGemini(prompt: string, analysisMode: string): Promise<ProviderResult | ProviderFailure> {
+  if (!GEMINI_API_KEY) return { provider: "Gemini", reason: "não configurado" };
   try {
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`,
@@ -191,16 +209,16 @@ async function analyzeWithGemini(prompt: string, analysisMode: string): Promise<
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       console.error("[WhatsApp Summary] Gemini unavailable", { status: response.status });
-      return null;
+      return { provider: "Gemini", reason: providerFailureReason(response.status, payload) };
     }
     const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
     const result = parseResult(typeof text === "string" ? text : "");
-    return result ? { result, model: `Gemini • ${GEMINI_MODEL}` } : null;
+    return result ? { result, model: `Gemini • ${GEMINI_MODEL}` } : { provider: "Gemini", reason: "respondeu sem análise estruturada" };
   } catch (error) {
     console.error("[WhatsApp Summary] Gemini request failed", {
       name: error instanceof Error ? error.name : "Error",
     });
-    return null;
+    return { provider: "Gemini", reason: "não respondeu" };
   }
 }
 
@@ -266,11 +284,16 @@ O campo hard_boss deve conter exatamente um único parágrafo final direto, crí
 O campo summary deve repetir exatamente o conteúdo de hard_boss para compatibilidade com o CRM.
 Para lead_quality, avalie aderência ao perfil Criare separadamente do potencial comercial. Use “Não avaliado” se faltarem evidências. next_action_details deve ser uma ação concreta para o responsável executar.`;
 
-    const provider = await analyzeWithOpenAI(prompt, analysisMode) ||
-      await analyzeWithGemini(prompt, analysisMode);
+    const openai = await analyzeWithOpenAI(prompt, analysisMode);
+    const gemini = providerSucceeded(openai) ? null : await analyzeWithGemini(prompt, analysisMode);
+    const provider = providerSucceeded(openai) ? openai : (gemini && providerSucceeded(gemini) ? gemini : null);
     if (!provider) {
+      const failures: ProviderFailure[] = [];
+      if (!providerSucceeded(openai)) failures.push(openai);
+      if (gemini && !providerSucceeded(gemini)) failures.push(gemini);
+      const reasons = failures.map((failure) => `${failure.provider}: ${failure.reason}`);
       return json(request, {
-        error: "A IA está temporariamente indisponível. A conversa permanece salva e pronta para nova tentativa.",
+        error: `Falha na função de análise: ${reasons.join(" • ")}. A conversa permanece salva e pronta para nova tentativa.`,
         code: "AI_UNAVAILABLE",
       }, 502);
     }

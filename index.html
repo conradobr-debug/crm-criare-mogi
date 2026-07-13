@@ -822,8 +822,11 @@
             <button class="ghost" id="btnLoadOlderWhatsApp" type="button" hidden>Carregar anteriores</button>
             <button class="ghost" id="btnRefreshOfficialTimeline" type="button" hidden>Atualizar conversa</button>
             <button class="ghost" id="btnViewFullAnalysis" type="button" hidden>Ver análise completa</button>
+            <button class="ghost manualGptAction" id="btnOpenCustomGpt" type="button">Analisar no meu GPT</button>
+            <button class="ghost" id="btnImportCustomGpt" type="button">Colar resultado do GPT</button>
           </div>
           <div class="whatsappSummaryMeta" id="whatsappSyncStatus">A extensão verificará o telefone, carregará o histórico disponível e impedirá uma análise parcial.</div>
+          <div class="whatsappPrivacy">Alternativa manual: a conversa capturada é copiada para o GPT da Criare aberto na sua conta ChatGPT. Depois, cole a resposta completa aqui para salvar o Chefe Duro e a análise no lead.</div>
           <div class="whatsappPrivacy">A extensão não envia nem altera mensagens. O histórico capturado fica protegido pelo acesso do CRM e a análise usa apenas o serviço de IA configurado pela Criare.</div>
           <div hidden aria-hidden="true">
           <select id="whatsappAnalysisMode">
@@ -842,8 +845,6 @@
           <textarea id="whatsappConversation" class="whatsappConversation" placeholder="A conversa atualizada aparecerá aqui. Você também pode colar um trecho manualmente."></textarea>
           <div class="whatsappPrivacy">Mensagens sincronizadas ficam protegidas pelo acesso do CRM. Ao usar a análise automática, o trecho poderá ser enviado ao serviço de IA configurado. Evite documentos, senhas e dados bancários.</div>
           <div class="whatsappActions">
-            <button class="manualGptAction" id="btnOpenCustomGpt" type="button">Atualizar e abrir GPT Criare</button>
-            <button class="ghost" id="btnImportCustomGpt" type="button">Salvar análise copiada</button>
             <button class="primary" id="btnSummarizeWhatsApp" type="button">Analisar automaticamente</button>
             <button class="ghost" id="btnClearWhatsAppConversation" type="button">Limpar conversa colada</button>
           </div>
@@ -1364,6 +1365,7 @@ async function captureFreeWhatsAppConversation(record){
   const result=await requestWhatsAppAutomaticSync(record);
   if(result.ok&&result.extensionVersion!==WHATSAPP_EXTENSION_VERSION)throw new Error(`Atualize a extensão para a versão ${WHATSAPP_EXTENSION_VERSION}.`);
   if(!result.ok)throw new Error(result.error||"Não foi possível capturar a conversa.");
+  if(Number(result.count||0)<2)throw new Error("Captura incompleta: somente 1 mensagem encontrada. Confirme se a conversa correta está aberta e carregada no WhatsApp Web.");
   const saved=await saveWhatsAppCapture(record,result);
   $("whatsappConversation").value=saved.record.whatsapp_transcript||"";renderCapturedWhatsAppTimeline(saved.record);updateCapturedWhatsAppIndicators(saved.record);render();
   return {...saved,result};
@@ -1373,7 +1375,7 @@ async function analyzeFreeWhatsAppConversation(record){
   if(captured.result.empty)throw new Error(captured.result.noConversation?"Este telefone não possui conversa no WhatsApp.":"O contato foi localizado, mas ainda não há mensagens para analisar.");
   if(!captured.analysisReady)throw new Error(`${captured.note} Clique novamente depois que o WhatsApp terminar de carregar as mensagens antigas.`);
   const conversation=String(captured.record.whatsapp_transcript||"").trim();if(conversation.length<40)throw new Error("A conversa é curta demais para uma análise confiável.");
-  $("whatsappOfficialAnalysis").textContent="GPT analisando o histórico validado";$("whatsappOfficialAnalysis").classList.add("whatsappCaptureProgress");
+  $("whatsappOfficialAnalysis").textContent=`${Number(captured.record.whatsapp_sync_message_count||0)} mensagens capturadas • enviando para a IA`;$('whatsappOfficialAnalysis').classList.add("whatsappCaptureProgress");
   const result=await callWhatsAppSummary(conversation);await saveWhatsAppAnalysisResult(result);
   const refreshed=records.find(item=>item.id===record.id)||captured.record;updateCapturedWhatsAppIndicators(refreshed);return {captured,result};
 }
@@ -3771,7 +3773,27 @@ $("appointmentList").addEventListener("click", event=>{
 $("email").addEventListener("input",renderLeadInfoSectionSummary);
 $("professionalName").addEventListener("input",renderLeadInfoSectionSummary);
 $("btnOpenCustomGpt").addEventListener("click", async ()=>{
-  $("btnUpdateOfficialAnalysis").click();
+  const record=records.find(item=>item.id===$("id").value)||null;
+  if(!record)return toast("Salve o cliente antes de preparar a análise manual.");
+  const button=$("btnOpenCustomGpt");
+  const gptWindow=window.open(CRIARE_CUSTOM_GPT_URL,"_blank","noopener,noreferrer");
+  button.disabled=true;button.textContent="Copiando conversa…";
+  try{
+    const captured=await captureFreeWhatsAppConversation(record);
+    if(captured.result.empty)throw new Error(captured.result.noConversation?"Este telefone não possui conversa no WhatsApp.":"O contato foi localizado, mas ainda não há mensagens para analisar.");
+    if(!captured.analysisReady)throw new Error(`${captured.note} Clique novamente depois que o WhatsApp terminar de carregar as mensagens antigas.`);
+    const conversation=String(captured.record.whatsapp_transcript||"").trim();
+    if(conversation.length<40)throw new Error("A conversa é curta demais para uma análise confiável.");
+    await copyTextToClipboard(buildCustomGptPrompt(conversation));
+    $("whatsappSyncStatus").textContent="Conversa copiada. No GPT da Criare que foi aberto, cole o conteúdo, envie e depois use “Colar resultado do GPT”.";
+    toast("Conversa copiada para a análise manual.");
+    if(!gptWindow)toast("O navegador bloqueou a abertura do GPT; use o link do GPT da Criare já conhecido.");
+  }catch(error){
+    $("whatsappSyncStatus").textContent=error.message||"Não foi possível preparar a análise manual.";
+    toast($("whatsappSyncStatus").textContent);
+  }finally{
+    button.disabled=false;button.textContent="Analisar no meu GPT";
+  }
 });
 $("btnImportCustomGpt").addEventListener("click", async ()=>{
   try{
