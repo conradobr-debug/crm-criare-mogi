@@ -1155,7 +1155,17 @@ function whatsappNumber(value){
 function openWhatsAppFor(record=null){
   const number = whatsappNumber(record?.phone || $("phone").value);
   if(!number) return toast("Informe um telefone válido com DDD para abrir o WhatsApp.");
-  window.open(`https://wa.me/${number}`, "_blank", "noopener,noreferrer");
+  const webUrl=`https://wa.me/${number}`;
+  const isWindows=/Windows/i.test(navigator.userAgent||"");
+  if(!isWindows)return window.open(webUrl,"_blank","noopener,noreferrer");
+  let fallbackTimer;
+  const cleanup=()=>{window.removeEventListener("blur",appOpened);document.removeEventListener("visibilitychange",visibilityChanged);};
+  const appOpened=()=>{window.clearTimeout(fallbackTimer);cleanup();};
+  const visibilityChanged=()=>{if(document.hidden)appOpened();};
+  window.addEventListener("blur",appOpened,{once:true});document.addEventListener("visibilitychange",visibilityChanged);
+  fallbackTimer=window.setTimeout(()=>{cleanup();window.location.assign(webUrl);},2500);
+  try{window.location.href=`whatsapp://send?phone=${number}`;}
+  catch(error){window.clearTimeout(fallbackTimer);cleanup();window.location.assign(webUrl);}
 }
 const WHATSAPP_EXTENSION_VERSION = "2.1.0";
 const whatsappAutoSyncWaiters = new Map();
