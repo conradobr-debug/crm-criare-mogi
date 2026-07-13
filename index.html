@@ -411,9 +411,9 @@
     .toast{
       position:fixed;
       right:18px; bottom:18px;
-      background: rgba(20,28,60,.96);
+      background: rgba(255,255,255,.98);
       border:1px solid rgba(150,186,255,.40);
-      color:var(--text);
+      color:#17333A;
       padding:12px 14px;
       border-radius: 14px;
       box-shadow: var(--shadow);
@@ -427,6 +427,19 @@
       z-index:999;
     }
     .toast.show{opacity:1; transform: translateY(0)}
+    .toast.error{border-color:#B94A48;box-shadow:0 10px 28px rgba(95,35,35,.22)}
+    .whatsappCaptureError{
+      margin-top:10px;padding:12px 14px;border:2px solid #B94A48;border-radius:12px;
+      background:#FFF4F2;color:#3B2020;box-shadow:0 8px 20px rgba(95,35,35,.12)
+    }
+    .whatsappCaptureError[hidden]{display:none}
+    .whatsappCaptureErrorHd{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+    .whatsappCaptureErrorHd strong{font-size:14px;color:#7D2421}
+    .whatsappCaptureErrorGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 14px;margin-top:8px;font-size:12px;line-height:1.35}
+    .whatsappCaptureErrorGrid b{color:#5D2826}
+    .whatsappCaptureErrorActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .whatsappCaptureErrorActions button{background:#fff;color:#3B2020;border-color:#D58A84}
+    @media(max-width:700px){.whatsappCaptureErrorGrid{grid-template-columns:1fr}}
   </style>
   <link rel="stylesheet" href="criare.css" />
   <link rel="manifest" href="manifest.webmanifest" />
@@ -837,6 +850,26 @@
             <button class="ghost" id="btnImportReadyAnalysis" type="button">Importar análise pronta</button>
           </div>
           <div class="whatsappSummaryMeta" id="whatsappSyncStatus">A extensão verificará o telefone, carregará o histórico disponível e impedirá uma análise parcial.</div>
+          <div class="whatsappCaptureError" id="whatsappCaptureError" hidden>
+            <div class="whatsappCaptureErrorHd"><strong>Falha ao capturar conversa</strong><button class="ghost" id="btnCloseCaptureError" type="button">Fechar aviso</button></div>
+            <div class="whatsappCaptureErrorGrid">
+              <div><b>Causa:</b> <span id="whatsappCaptureErrorCause">—</span></div>
+              <div><b>Etapa:</b> <span id="whatsappCaptureErrorStage">—</span></div>
+              <div><b>Versão exigida:</b> <span id="whatsappCaptureErrorRequired">—</span></div>
+              <div><b>Versão instalada:</b> <span id="whatsappCaptureErrorInstalled">—</span></div>
+              <div><b>Telefone:</b> <span id="whatsappCaptureErrorPhone">—</span></div>
+              <div><b>Contato detectado:</b> <span id="whatsappCaptureErrorContact">—</span></div>
+              <div><b>URL utilizada:</b> <span id="whatsappCaptureErrorUrl">—</span></div>
+              <div><b>Elementos encontrados:</b> <span id="whatsappCaptureErrorDom">0</span></div>
+              <div><b>Mensagens interpretadas:</b> <span id="whatsappCaptureErrorInterpreted">0</span></div>
+              <div><b>Mensagens salvas:</b> <span id="whatsappCaptureErrorSaved">0</span></div>
+            </div>
+            <div class="whatsappCaptureErrorActions">
+              <button class="ghost" id="btnCopyCaptureError" type="button">Copiar diagnóstico</button>
+              <button class="ghost" id="btnRetryCaptureError" type="button">Tentar novamente</button>
+              <button class="ghost" id="btnOpenCaptureError" type="button">Capturar conversa aberta</button>
+            </div>
+          </div>
           <div class="whatsappPrivacy">A análise automática usa a API configurada. A alternativa manual copia a conversa para você colar no GPT da Criare, sem chamada automática à API.</div>
           <div class="whatsappPrivacy">A extensão não envia nem altera mensagens. O histórico capturado fica protegido pelo acesso do CRM e a análise usa apenas o serviço de IA configurado pela Criare.</div>
           <div hidden aria-hidden="true">
@@ -1057,7 +1090,7 @@ function fmtBRDateTime(iso){
   return d.toLocaleString("pt-BR", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"});
 }
 function escapeHtml(s){ return (s??"").toString().replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;"); }
-function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._tm); toast._tm=setTimeout(()=>t.classList.remove("show"),2400); }
+function toast(msg,{error=false,duration=2400}={}){ const t=$("toast"); t.textContent=msg; t.classList.toggle("error",Boolean(error)); t.classList.add("show"); clearTimeout(toast._tm); toast._tm=setTimeout(()=>t.classList.remove("show"),Math.max(2400,duration)); }
 function recordType(r){ return r?.record_type === "specifier" ? "specifier" : "lead"; }
 function isSpecifier(r){ return recordType(r) === "specifier"; }
 function localScheduleIso(dateValue, timeValue="09:00"){
@@ -1190,7 +1223,7 @@ function openWhatsAppFor(record=null){
   const webUrl=`https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
   window.open(webUrl,"_blank","noopener,noreferrer");
 }
-const WHATSAPP_EXTENSION_VERSION = "2.1.3";
+const WHATSAPP_EXTENSION_VERSION = "2.1.4";
 const whatsappAutoSyncWaiters = new Map();
 const whatsappOpenCaptureWaiters = new Map();
 const whatsappExtensionPingWaiters = new Map();
@@ -1383,6 +1416,7 @@ function updateCapturedWhatsAppIndicators(record){
   renderWhatsAppSectionSummary(record);
 }
 async function captureFreeWhatsAppConversation(record,{openOnly=false}={}){
+  clearCaptureFailure();
   const context={stage:"iniciando",result:null};
   const setStage=stage=>{
     context.stage=stage;
@@ -1406,9 +1440,20 @@ async function captureFreeWhatsAppConversation(record,{openOnly=false}={}){
   }catch(error){error.captureContext={...context};throw error;}
 }
 function captureFailureMessage(record,error){
-  const context=error?.captureContext||{};const result=context.result||{};const crmVersion=document.querySelector('meta[name="crm-version"]')?.content||"PENDENTE DE CONFIRMAÇÃO";
-  const phone=whatsappNumber(record?.phone)||"inválido";const detected=result.detectedTitle||result.title||"não identificada";const url=result.tabUrl||"não disponível";const found=Number(result.domCount||result.count||0);const saved=Number(context.savedCount||record?.whatsapp_sync_message_count||0);
-  return `Falha na captura • CRM ${crmVersion} • extensão ${result.extensionVersion||WHATSAPP_EXTENSION_VERSION} • telefone ${phone} • conversa ${detected} • URL ${url} • DOM ${found} • salvas ${saved} • etapa ${context.stage||"desconhecida"} • ${error?.message||"erro não identificado"}`;
+  const details=captureFailureDetails(record,error);return `Falha na captura • CRM ${details.requiredVersion} • extensão ${details.installedVersion} • telefone ${details.phone} • conversa ${details.contact} • URL ${details.url} • DOM ${details.domCount} • interpretadas ${details.interpretedCount} • salvas ${details.savedCount} • etapa ${details.stage} • ${details.cause}`;
+}
+function captureFailureDetails(record,error,override={}){
+  const context=error?.captureContext||{};const result=context.result||{};
+  const phone=whatsappNumber(record?.phone||$("phone")?.value)||"inválido";
+  return {cause:error?.message||"erro não identificado",stage:override.stage||context.stage||"desconhecida",requiredVersion:WHATSAPP_EXTENSION_VERSION,installedVersion:result.extensionVersion||"não respondida",phone,contact:result.detectedTitle||result.title||"não identificada",url:result.tabUrl||"não disponível",domCount:Number(result.domCount||0),interpretedCount:Number(result.count||0),savedCount:Number(context.savedCount||record?.whatsapp_sync_message_count||0)};
+}
+function showCaptureFailure(record,error,override={}){
+  const details=captureFailureDetails(record,error,override);const panel=$("whatsappCaptureError");
+  ["Cause","Stage","Required","Installed","Phone","Contact","Url","Dom","Interpreted","Saved"].forEach(key=>{const id={Cause:"whatsappCaptureErrorCause",Stage:"whatsappCaptureErrorStage",Required:"whatsappCaptureErrorRequired",Installed:"whatsappCaptureErrorInstalled",Phone:"whatsappCaptureErrorPhone",Contact:"whatsappCaptureErrorContact",Url:"whatsappCaptureErrorUrl",Dom:"whatsappCaptureErrorDom",Interpreted:"whatsappCaptureErrorInterpreted",Saved:"whatsappCaptureErrorSaved"}[key];if($(id))$(id).textContent=details[{Cause:"cause",Stage:"stage",Required:"requiredVersion",Installed:"installedVersion",Phone:"phone",Contact:"contact",Url:"url",Dom:"domCount",Interpreted:"interpretedCount",Saved:"savedCount"}[key]];});
+  panel.hidden=false;setLeadSectionOpen("whatsappSection",true);return details;
+}
+function clearCaptureFailure(){$("whatsappCaptureError").hidden=true;}
+function captureDiagnosticText(){const fields=["Cause","Stage","Required","Installed","Phone","Contact","Url","Dom","Interpreted","Saved"];return ["Falha ao capturar conversa",...fields.map(key=>{const id={Cause:"whatsappCaptureErrorCause",Stage:"whatsappCaptureErrorStage",Required:"whatsappCaptureErrorRequired",Installed:"whatsappCaptureErrorInstalled",Phone:"whatsappCaptureErrorPhone",Contact:"whatsappCaptureErrorContact",Url:"whatsappCaptureErrorUrl",Dom:"whatsappCaptureErrorDom",Interpreted:"whatsappCaptureErrorInterpreted",Saved:"whatsappCaptureErrorSaved"}[key];return `${key}: ${$(id)?.textContent||"—"}`})].join("\n");
 }
 async function analyzeSavedWhatsAppConversation(record){
   const saved=normalizeLegacyWhatsAppRecord(record);
@@ -3788,8 +3833,8 @@ $("btnLoadOlderWhatsApp").addEventListener("click",()=>{
   const record=records.find(item=>item.id===$("id").value)||null;loadOfficialWhatsApp(record,{older:true});
 });
 $("btnUpdateOfficialAnalysis").addEventListener("click",async()=>{
-  const recordId=$("id").value;const button=$("btnUpdateOfficialAnalysis");if(!recordId)return toast("Salve o cliente antes de atualizar a análise.");
-  const record=records.find(item=>item.id===recordId);if(!record)return toast("Lead não localizado.");
+  const recordId=$("id").value;const button=$("btnUpdateOfficialAnalysis");if(!recordId){const error=new Error("Salve o lead antes de capturar a conversa.");showCaptureFailure(null,error,{stage:"validando lead"});return toast(captureFailureMessage(null,error),{error:true,duration:12000});}
+  const record=records.find(item=>item.id===recordId);if(!record){const error=new Error("Lead não localizado. Salve o lead antes de capturar a conversa.");showCaptureFailure(null,error,{stage:"validando lead"});return toast(captureFailureMessage(null,error),{error:true,duration:12000});}
   button.disabled=true;button.textContent="Capturando conversa…";
   $("whatsappOfficialAnalysis").textContent="Lendo e validando a conversa";
   $("whatsappOfficialAnalysis").classList.add("whatsappCaptureProgress");
@@ -3798,14 +3843,14 @@ $("btnUpdateOfficialAnalysis").addEventListener("click",async()=>{
     toast("Conversa salva no lead.");
   }catch(error){
     $("whatsappOfficialAnalysis").textContent="Captura não concluída";$("whatsappOfficialAnalysis").classList.add("stale");
-    $("whatsappSyncStatus").textContent=`${captureFailureMessage(record,error)} Abra a conversa correta no WhatsApp Web e clique em “Capturar conversa aberta”.`;toast($("whatsappSyncStatus").textContent);
+    showCaptureFailure(record,error);$("whatsappSyncStatus").textContent=`${captureFailureMessage(record,error)} Abra a conversa correta no WhatsApp Web e clique em “Capturar conversa aberta”.`;toast($("whatsappSyncStatus").textContent,{error:true,duration:12000});
   }finally{
     $("whatsappOfficialAnalysis").classList.remove("whatsappCaptureProgress");button.disabled=false;button.textContent="Capturar conversa";
   }
 });
 $("btnCaptureOpenWhatsApp").addEventListener("click",async()=>{
-  const recordId=$("id").value;const button=$("btnCaptureOpenWhatsApp");if(!recordId)return toast("Salve o cliente antes de capturar a conversa aberta.");
-  const record=records.find(item=>item.id===recordId);if(!record)return toast("Lead não localizado.");
+  const recordId=$("id").value;const button=$("btnCaptureOpenWhatsApp");if(!recordId){const error=new Error("Salve o lead antes de capturar a conversa aberta.");showCaptureFailure(null,error,{stage:"validando lead"});return toast(captureFailureMessage(null,error),{error:true,duration:12000});}
+  const record=records.find(item=>item.id===recordId);if(!record){const error=new Error("Lead não localizado. Salve o lead antes de capturar a conversa aberta.");showCaptureFailure(null,error,{stage:"validando lead"});return toast(captureFailureMessage(null,error),{error:true,duration:12000});}
   button.disabled=true;button.textContent="Capturando conversa aberta…";
   $("whatsappOfficialAnalysis").textContent="Lendo conversa aberta no WhatsApp Web";
   $("whatsappOfficialAnalysis").classList.add("whatsappCaptureProgress");
@@ -3814,10 +3859,18 @@ $("btnCaptureOpenWhatsApp").addEventListener("click",async()=>{
     toast("Conversa aberta salva no lead.");
   }catch(error){
     $("whatsappOfficialAnalysis").textContent="Captura não concluída";$("whatsappOfficialAnalysis").classList.add("stale");
-    $("whatsappSyncStatus").textContent=captureFailureMessage(record,error);toast($("whatsappSyncStatus").textContent);
+    showCaptureFailure(record,error);$("whatsappSyncStatus").textContent=captureFailureMessage(record,error);toast($("whatsappSyncStatus").textContent,{error:true,duration:12000});
   }finally{
     $("whatsappOfficialAnalysis").classList.remove("whatsappCaptureProgress");button.disabled=false;button.textContent="Capturar conversa aberta";
   }
+});
+$("btnCloseCaptureError").addEventListener("click",clearCaptureFailure);
+$("btnRetryCaptureError").addEventListener("click",()=>$("btnUpdateOfficialAnalysis").click());
+$("btnOpenCaptureError").addEventListener("click",()=>$("btnCaptureOpenWhatsApp").click());
+$("btnCopyCaptureError").addEventListener("click",async()=>{
+  const text=captureDiagnosticText();
+  try{await navigator.clipboard.writeText(text);toast("Diagnóstico copiado.",{duration:5000});}
+  catch(error){toast("Não foi possível copiar o diagnóstico. Selecione e copie o texto do aviso.",{error:true,duration:12000});}
 });
 $("btnAnalyzeAutomatic").addEventListener("click",async()=>{
   const recordId=$("id").value;const button=$("btnAnalyzeAutomatic");if(!recordId)return toast("Salve o cliente antes de analisar.");

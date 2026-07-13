@@ -1,6 +1,6 @@
 "use strict";
 
-const CRIARE_CONTENT_SCRIPT_VERSION = "2.1.3";
+const CRIARE_CONTENT_SCRIPT_VERSION = chrome.runtime.getManifest().version;
 const CaptureCore = globalThis.CriareWhatsAppCaptureCore;
 const {cleanText, normalizedUiText, messageHash, continuationPrefix} = CaptureCore;
 
