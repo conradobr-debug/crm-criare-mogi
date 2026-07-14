@@ -2161,7 +2161,7 @@ function authDiagnostic(error, failedCall="sessão autenticada"){
 }
 
 function isNetworkAuthError(error){
-  return /failed to fetch|network|fetcherror/i.test(String(error?.message || error?.name || "")) && !error?.status;
+  return error?.code === "BOOT_TIMEOUT" || (/failed to fetch|network|fetcherror/i.test(String(error?.message || error?.name || "")) && !error?.status);
 }
 
 function sessionFromLocalFallback(){
