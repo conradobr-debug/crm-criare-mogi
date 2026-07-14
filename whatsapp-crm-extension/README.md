@@ -7,7 +7,7 @@ manual do CRM.
 
 ## Instalação
 
-1. Extraia o arquivo `criare-whatsapp-extension-2.1.4.zip`.
+1. Extraia o arquivo `criare-whatsapp-extension-2.1.5.zip`.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação** e selecione a pasta extraída.
@@ -31,6 +31,10 @@ Mensagens repetidas são preservadas. Alterações de texto são atualizadas pel
 mesmo identificador. Imagem, vídeo, documento, localização, contato e figurinha
 entram no histórico com marcador explícito. Áudio entra somente como
 `[Áudio sem transcrição]`.
+
+Áudios são capturados sem bloquear o histórico e entram em uma fila opcional de
+transcrição local. Se o Transcritor Criare estiver desligado, permanecem como
+`[Áudio sem transcrição]` pendentes.
 
 ## Limites e segurança
 

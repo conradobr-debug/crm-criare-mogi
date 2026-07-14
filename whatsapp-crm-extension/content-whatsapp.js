@@ -6,6 +6,26 @@ const {cleanText, normalizedUiText, messageHash, continuationPrefix} = CaptureCo
 
 function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 
+const LOCAL_TRANSCRIBER_URL = "http://127.0.0.1:32123/v1/transcribe";
+const AUDIO_MAX_BYTES = 15 * 1024 * 1024;
+function voiceMessageNodes(main=activeMain()){return messageNodes(main).filter(node=>node.querySelector('[aria-label*="mensagem de voz" i],[aria-label*="voice message" i],[data-testid*="audio" i],audio'));}
+function audioElement(node){return node.querySelector("audio")||null;}
+function audioSource(node){const audio=audioElement(node);const candidates=[audio?.currentSrc,audio?.src,audio?.getAttribute("src"),node.querySelector("a[download],a[href*='blob:'],[data-url],[data-download-url]")?.getAttribute("href"),node.querySelector("[data-url],[data-download-url]")?.getAttribute("data-url")];return candidates.map(value=>String(value||"").trim()).find(value=>/^(blob:|data:|https?:)/i.test(value))||"";}
+function audioDuration(node){const raw=Number(audioElement(node)?.duration);if(Number.isFinite(raw)&&raw>0)return Math.round(raw);const match=cleanText(node.innerText||"").match(/(?:^|\s)(\d{1,2}):(\d{2})(?:\s|$)/);return match?Number(match[1])*60+Number(match[2]):null;}
+function audioMeta(id,patch={}){return {messageId:id||null,durationSeconds:null,mimeType:null,sizeBytes:null,sha256:null,sourceAvailable:false,extractionStatus:"pending",transcriptionStatus:"pending",transcription:"",error:"",...patch};}
+function publicAudioMeta(meta){if(!meta)return null;const {buffer,...safe}=meta;return safe;}
+async function sha256Hex(buffer){const digest=await crypto.subtle.digest("SHA-256",buffer);return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,"0")).join("");}
+function bytesToBase64(buffer){const bytes=new Uint8Array(buffer);let binary="";for(let offset=0;offset<bytes.length;offset+=0x8000)binary+=String.fromCharCode(...bytes.subarray(offset,offset+0x8000));return btoa(binary);}
+async function extractAudioFile(node,id){
+  const source=audioSource(node);const base=audioMeta(id,{source:source?(source.startsWith("blob:")?"blob":"url"):"none",durationSeconds:audioDuration(node)});
+  if(!source){base.extractionStatus="unavailable";base.transcriptionStatus="unavailable";base.error="O WhatsApp não expôs o arquivo de áudio.";return base;}
+  try{const response=await fetch(source,{credentials:"include",cache:"no-store"});if(!response.ok)throw new Error(`download_http_${response.status}`);const blob=await response.blob();if(!blob.size)throw new Error("arquivo_vazio");if(blob.size>AUDIO_MAX_BYTES)throw new Error("audio_maior_que_15mb");const buffer=await blob.arrayBuffer();const sha256=await sha256Hex(buffer);return {...base,sourceAvailable:true,extractionStatus:"extracted",mimeType:blob.type||"audio/ogg",sizeBytes:blob.size,sha256,buffer};}catch(error){return {...base,extractionStatus:"error",transcriptionStatus:"error",error:error.message||"Não foi possível obter o áudio."};}
+}
+async function transcribeLocally(meta){
+  if(!meta?.buffer)return meta;
+  try{const response=await fetch(LOCAL_TRANSCRIBER_URL,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({message_id:meta.messageId,sha256:meta.sha256,mime_type:meta.mimeType,duration_seconds:meta.durationSeconds,audio_base64:bytesToBase64(meta.buffer)})});const body=await response.json().catch(()=>({}));if(response.status===503||body?.code==="TRANSCRIBER_NOT_STARTED")return {...meta,transcriptionStatus:"pending",error:"Transcritor local não está iniciado."};if(!response.ok||!body?.text)return {...meta,transcriptionStatus:"error",error:body?.error||`transcritor_http_${response.status}`};return {...meta,transcriptionStatus:"completed",transcription:cleanText(body.text),error:""};}catch(error){return {...meta,transcriptionStatus:"pending",error:"Transcritor local não está iniciado."};}
+}
+
 function activeMain(){
   return document.querySelector("#main") || document.querySelector('main[role="main"]') || document.querySelector('[role="main"]');
 }
@@ -149,11 +169,12 @@ function chatLoadState(request={}){
   if(!main) return {ready:false,title:"",count:0,unavailable:conversationUnavailable()};
   const title = activeChatTitle();
   const count = messageNodes(main).length;
-  return {
+  const payload={
     ready:Boolean(title && count), empty:Boolean(title && !count), title, count,
     matches:sameCustomer(title, request), profilePhotoUrl:profilePhotoUrl(main),
     olderMessagesAvailable:Boolean(olderMessagesButton(main)), unavailable:conversationUnavailable()
   };
+  return payload;
 }
 
 function mediaType(node){
@@ -178,10 +199,11 @@ function explicitAuthor(node){
   return cleanText(label).replace(/:\s*$/, "");
 }
 
-function messageBody(node){
+function messageBody(node,audioState=new Map()){
   const type = mediaType(node);
   if(type === "Áudio"){
-    return {body:"[Áudio sem transcrição]",type,audioTranscribed:false};
+    const id=messageId(node)||`fp:${messageHash(cleanText(node.innerText||"audio"))}`;const audio=audioState.get(id)||audioMeta(id);
+    return {body:audio.transcription?`[Transcrição de áudio] ${audio.transcription}`:"[Áudio sem transcrição]",type,audioTranscribed:Boolean(audio.transcription),audioMeta:publicAudioMeta(audio)};
   }
   const detail = node.querySelector("[data-pre-plain-text]");
   const selectableText = [...node.querySelectorAll("span.selectable-text")]
@@ -203,7 +225,7 @@ function messageBody(node){
   return {body:text || "[Mensagem sem texto]",type:type || "Texto",audioTranscribed:false};
 }
 
-function readVisibleMessageWindow(main){
+function readVisibleMessageWindow(main,audioState=new Map()){
   const occurrences = new Map();
   const entries = [];
   let previousPrefix = "";
@@ -212,7 +234,7 @@ function readVisibleMessageWindow(main){
     let prefix = cleanText(detail?.getAttribute("data-pre-plain-text"));
     if(!prefix) prefix = continuationPrefix(previousPrefix, visibleTime(node), explicitAuthor(node));
     previousPrefix = prefix || previousPrefix;
-    const message = messageBody(node);
+    const message = messageBody(node,audioState);
     const text = cleanText(`${prefix}${prefix && !prefix.endsWith(" ") ? " " : ""}${message.body}`);
     if(!text) continue;
     const stableId = messageId(node);
@@ -225,6 +247,7 @@ function readVisibleMessageWindow(main){
       type:message.type,
       hasVoiceMessage:message.type === "Áudio",
       audioTranscribed:message.audioTranscribed,
+      audioMeta:message.audioMeta||null,
       capturedAt:new Date().toISOString()
     });
   }
@@ -253,7 +276,7 @@ function messageScrollContainer(main){
 }
 
 async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={}){
-  let entries = readVisibleMessageWindow(main);
+  const audioState=new Map();let entries = readVisibleMessageWindow(main,audioState);
   const deadline = Date.now() + timeoutMs;
   let scrollPasses = 0;
   let stableTopPasses = 0;
@@ -269,7 +292,7 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
     scroller.dispatchEvent(new Event("scroll",{bubbles:true}));
     await sleep(550);
     await waitForMessagesToSettle(main,{timeoutMs:3500,minWaitMs:450});
-    const merged = mergeWindow(entries, readVisibleMessageWindow(main));
+    const merged = mergeWindow(entries, readVisibleMessageWindow(main,audioState));
     entries = merged.entries;
     scrollPasses += 1;
     const atTop = scroller.scrollTop <= 2;
@@ -286,10 +309,19 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
   if(entries.length > maximum) entries = entries.slice(-maximum);
   const scroller = messageScrollContainer(main);
   if(scroller){ scroller.scrollTop = scroller.scrollHeight; scroller.dispatchEvent(new Event("scroll",{bubbles:true})); }
-  return {entries,reachedStart,loadedStartReached,scrollPasses,limited};
+  return {entries,reachedStart,loadedStartReached,scrollPasses,limited,audioState};
 }
 
-async function extractLoadedMessages(){
+async function processAudioQueue(main,request,history){
+  const voices=voiceMessageNodes(main);if(!voices.length)return;
+  for(const node of voices){
+    const id=messageId(node)||`fp:${messageHash(cleanText(node.innerText||"audio"))}`;const entry=history.entries.find(item=>item.id===`wa:${id}`||item.id===id||item.text.includes("[Áudio"));if(!entry)continue;
+    let meta=await extractAudioFile(node,id);if(meta.extractionStatus==="extracted")meta=await transcribeLocally(meta);
+    const transcript=cleanText(meta.transcription||"");const text=transcript?entry.text.replace("[Áudio sem transcrição]",`[Transcrição de áudio] ${transcript}`):entry.text;
+    chrome.runtime.sendMessage({type:"criare-audio-transcription-complete",request:{phone:request?.phone||"",customerName:request?.customerName||""},entry:{...entry,text,audioMeta:publicAudioMeta(meta),audioTranscribed:Boolean(transcript),hasVoiceMessage:true}}).catch(()=>{});
+  }
+}
+async function extractLoadedMessages(request={}){
   const main = activeMain();
   if(!main) throw new Error("Abra uma conversa no WhatsApp Web antes de capturar.");
   await waitForMessagesToSettle(main);
@@ -305,9 +337,9 @@ async function extractLoadedMessages(){
   if(!history.entries.length) throw new Error("Não encontrei mensagens carregadas nesta conversa.");
   const audioCount = history.entries.filter(entry=>entry.hasVoiceMessage).length;
   const audioTranscribed = history.entries.filter(entry=>entry.audioTranscribed).length;
-  return {
+  const payload={
     transcript:history.entries.map(entry=>entry.text).join("\n"),
-    entries:history.entries.map(({id,text,type,capturedAt})=>({id,text,type,capturedAt})),
+    entries:history.entries.map(({id,text,type,capturedAt,hasVoiceMessage,audioTranscribed,audioMeta})=>({id,text,type,capturedAt,hasVoiceMessage,audioTranscribed,audioMeta})),
     count:history.entries.length,audioCount,audioTranscribed,
     audioExtensionDetected:false,
     olderHistoryRequested:olderHistory.requested,
@@ -318,6 +350,8 @@ async function extractLoadedMessages(){
     scrollPasses:history.scrollPasses,
     profilePhotoUrl:profilePhotoUrl(main),limited:history.limited
   };
+  queueMicrotask(()=>processAudioQueue(main,request,history).catch(()=>{}));
+  return payload;
 }
 
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
@@ -340,7 +374,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
       if(!sameCustomer(title,message.request || {})){
         throw new Error(`A conversa aberta é “${title || "não identificada"}”, mas o cliente solicitado é “${cleanText(message.request?.customerName) || "o lead do CRM"}”.`);
       }
-      sendResponse({ok:true,title,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...await extractLoadedMessages()});
+      sendResponse({ok:true,title,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...await extractLoadedMessages(message.request || {})});
     }catch(error){
       sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,error:error.message || "Não foi possível ler a conversa aberta."});
     }

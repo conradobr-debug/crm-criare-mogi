@@ -2,6 +2,7 @@
 
 const TARGETS_KEY = "criareWhatsAppTargetTabs";
 const CAPTURE_TIMEOUT_MS = 210000;
+const crmCaptureTabs = new Map();
 
 function sleep(ms){ return new Promise(resolve=>setTimeout(resolve,ms)); }
 
@@ -129,6 +130,23 @@ async function withProfilePhoto(result,source){
   return clean;
 }
 
+async function captureChatFromTab(tabId,request,loadedState=null){
+  const extensionVersion = chrome.runtime.getManifest().version;
+  if(loadedState?.empty){
+    return withProfilePhoto({
+      ok:true,empty:true,noConversation:Boolean(loadedState.unavailable),transcript:"",entries:[],count:0,
+      audioCount:0,audioTranscribed:0,audioExtensionDetected:false,reachedStart:true,limited:false,
+      extensionVersion,tabUrl:(await chrome.tabs.get(tabId).catch(()=>({}))).url||"",detectedTitle:loadedState.title||"",domCount:0
+    },loadedState.profilePhotoUrl);
+  }
+  const extraction = chrome.tabs.sendMessage(tabId,{type:"criare-extract-active-chat",request});
+  const timeout = new Promise(resolve=>setTimeout(()=>resolve({ok:false,error:"A leitura completa ultrapassou o tempo de segurança. O histórico anterior foi preservado."}),CAPTURE_TIMEOUT_MS));
+  const result = await Promise.race([extraction,timeout]);
+  const currentTab=await chrome.tabs.get(tabId).catch(()=>({}));
+  if(!result?.ok) return {...(result || {}),ok:false,extensionVersion,tabUrl:currentTab.url||"",detectedTitle:result?.title||loadedState?.title||"",domCount:Number(result?.count||loadedState?.count||0),error:result?.error || "A conversa não devolveu mensagens."};
+  return withProfilePhoto({...result,extensionVersion,tabUrl:currentTab.url||"",detectedTitle:result.title||loadedState?.title||"",domCount:Number(result.count||0)},result.profilePhotoUrl || loadedState?.profilePhotoUrl);
+}
+
 async function openCustomerChat(request){
   const phone = validPhone(request?.phone);
   if(!phone) return {ok:false,error:"O telefone do cliente está incompleto."};
@@ -138,9 +156,10 @@ async function openCustomerChat(request){
   return {ok:true,extensionVersion:chrome.runtime.getManifest().version};
 }
 
-async function syncCustomerChat(request){
+async function syncCustomerChat(request,sender){
   const phone = validPhone(request?.phone);
   if(!phone) return {ok:false,extensionVersion:chrome.runtime.getManifest().version,error:"O telefone do cliente está incompleto."};
+  if(sender?.tab?.id) crmCaptureTabs.set(phone,sender.tab.id);
   const tab = await reusableWhatsAppTab({active:false});
   try{ await chrome.tabs.sendMessage(tab.id,{type:"criare-prepare-next-chat"}); }catch(error){}
   await chrome.tabs.update(tab.id,{url:`https://web.whatsapp.com/send/?phone=${phone}&type=phone_number&app_absent=0`,active:false});
@@ -154,27 +173,12 @@ async function syncCustomerChat(request){
       ? `A conversa aberta é “${loaded.state?.title || "não identificada"}”, mas o lead solicitado é “${request.customerName || "não identificado"}”. Abra o cliente correto no WhatsApp Web.`
       : "O WhatsApp não confirmou que a conversa correta terminou de carregar."};
   }
-  if(loaded.empty){
-    return withProfilePhoto({
-      ok:true,empty:true,noConversation:Boolean(loaded.unavailable),transcript:"",entries:[],count:0,
-      audioCount:0,audioTranscribed:0,audioExtensionDetected:false,reachedStart:true,limited:false,
-      extensionVersion:chrome.runtime.getManifest().version,tabUrl:(await chrome.tabs.get(tab.id).catch(()=>({}))).url||"",detectedTitle:loaded.state?.title||"",domCount:0
-    },loaded.state?.profilePhotoUrl);
-  }
-
-  const extraction = chrome.tabs.sendMessage(tab.id,{
-    type:"criare-extract-active-chat",
-    request
-  });
-  const timeout = new Promise(resolve=>setTimeout(()=>resolve({ok:false,error:"A leitura completa ultrapassou o tempo de segurança. O histórico anterior foi preservado."}),CAPTURE_TIMEOUT_MS));
-  const result = await Promise.race([extraction,timeout]);
-  const currentTab=await chrome.tabs.get(tab.id).catch(()=>({}));
-  if(!result?.ok) return {...(result || {}),ok:false,extensionVersion:chrome.runtime.getManifest().version,tabUrl:currentTab.url||"",detectedTitle:result?.title||loaded.state?.title||"",domCount:Number(result?.count||loaded.state?.count||0),error:result?.error || "A conversa não devolveu mensagens."};
-  return withProfilePhoto({...result,extensionVersion:chrome.runtime.getManifest().version,tabUrl:currentTab.url||"",detectedTitle:result.title||loaded.state?.title||"",domCount:Number(result.count||0)},result.profilePhotoUrl || loaded.state?.profilePhotoUrl);
+  return captureChatFromTab(tab.id,request,loaded.state);
 }
 
-async function captureCustomerChat(request){
+async function captureCustomerChat(request,sender){
   const phone = validPhone(request?.phone);
+  if(sender?.tab?.id) crmCaptureTabs.set(phone,sender.tab.id);
   const targets = await targetTabs();
   const target = targets[phone];
   if(!target?.tabId) return {ok:false,error:"Abra primeiro a conversa deste cliente pelo CRM."};
@@ -188,23 +192,26 @@ async function captureCustomerChat(request){
   }
 }
 
-async function captureOpenWhatsAppChat(request){
+async function captureOpenWhatsAppChat(request,sender){
   const extensionVersion = chrome.runtime.getManifest().version;
+  const phone = validPhone(request?.phone);if(sender?.tab?.id&&phone)crmCaptureTabs.set(phone,sender.tab.id);
   const activeTabs = await chrome.tabs.query({url:"https://web.whatsapp.com/*",active:true,currentWindow:true});
   const allTabs = activeTabs.length ? activeTabs : await chrome.tabs.query({url:"https://web.whatsapp.com/*"});
   const tab = allTabs.sort((a,b)=>(b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
   if(!tab?.id) return {ok:false,extensionVersion,error:"Nenhuma aba do WhatsApp Web está aberta. Abra a conversa correta e tente novamente."};
   try{
     await ensureCurrentContentScript(tab.id);
-    const extraction = chrome.tabs.sendMessage(tab.id,{type:"criare-extract-active-chat",request});
-    const timeout = new Promise(resolve=>setTimeout(()=>resolve({ok:false,error:"A leitura da conversa aberta ultrapassou o tempo de segurança."}),CAPTURE_TIMEOUT_MS));
-    const result = await Promise.race([extraction,timeout]);
-    const currentTab=await chrome.tabs.get(tab.id).catch(()=>tab);
-    if(!result?.ok) return {...(result || {}),ok:false,extensionVersion,tabUrl:currentTab.url||tab.url||"",detectedTitle:result?.title||"",domCount:Number(result?.count||0),error:result?.error || "A conversa aberta não devolveu mensagens."};
-    return withProfilePhoto({...result,extensionVersion,tabUrl:currentTab.url||tab.url||"",detectedTitle:result.title||"",domCount:Number(result.count||0)},result.profilePhotoUrl);
+    return captureChatFromTab(tab.id,request);
   }catch(error){
     return {ok:false,extensionVersion,tabUrl:tab.url||"",detectedTitle:"",domCount:0,error:error.message || "Não foi possível capturar a conversa aberta."};
   }
+}
+
+async function forwardAudioTranscription(message){
+  const phone=validPhone(message?.request?.phone);const crmTabId=crmCaptureTabs.get(phone);
+  if(!crmTabId)return {ok:false,error:"Nenhuma aba do CRM está associada a este lead."};
+  try{await chrome.tabs.sendMessage(crmTabId,{type:"criare-audio-transcription-update",phone,entry:message.entry||{}});return {ok:true};}
+  catch(error){crmCaptureTabs.delete(phone);return {ok:false,error:"A aba do CRM foi fechada antes da transcrição terminar."};}
 }
 
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
@@ -216,11 +223,13 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
     "criare-open-whatsapp-chat":openCustomerChat,
     "criare-capture-active-whatsapp":captureCustomerChat,
     "criare-capture-open-whatsapp":captureOpenWhatsAppChat,
+    "criare-audio-transcription-complete":forwardAudioTranscription,
     "criare-sync-whatsapp-record":syncCustomerChat
   };
   const handler = handlers[message?.type];
   if(!handler) return false;
-  handler(message.request || {}).then(sendResponse).catch(error=>sendResponse({
+  const payload = message?.type === "criare-audio-transcription-complete" ? message : (message.request || {});
+  handler(payload,sender).then(sendResponse).catch(error=>sendResponse({
     ok:false,extensionVersion:chrome.runtime.getManifest().version,error:error.message || "Não foi possível acessar a conversa."
   }));
   return true;
