@@ -222,6 +222,58 @@ function chatLoadState(request={}){
   return payload;
 }
 
+function conversationOpenState(request={}){
+  const main = activeMain();
+  if(conversationUnavailable()) return {ready:false,code:"contact_not_found",error:"Contato não localizado no WhatsApp."};
+  if(!main) return {ready:false,code:"panel_not_created",error:"O painel principal da conversa não foi criado."};
+  const title = activeChatTitle();
+  if(!title) return {ready:false,code:"header_not_found",error:"O cabeçalho da conversa não foi identificado."};
+  const container = main.querySelector('[data-testid="conversation-panel-messages"],[data-testid="msg-container"],[data-id]');
+  if(!container) return {ready:false,code:"messages_not_loaded",error:"O container de mensagens não foi carregado.",title};
+  if(!sameCustomer(title,request)) return {ready:false,code:"contact_mismatch",error:"O contato aberto é diferente do lead solicitado.",title};
+  return {ready:true,title,count:messageNodes(main).length,signature:`${title}:${messageNodes(main).length}`,profilePhotoUrl:profilePhotoUrl(main)};
+}
+
+function waitForConversationStable(request={}, {timeoutMs=65000}={}){
+  return new Promise(resolve=>{
+    const deadline = Date.now() + timeoutMs;
+    let observer = null;
+    let timer = null;
+    let interval = null;
+    let queued = false;
+    let stableChecks = 0;
+    let previousSignature = "";
+    let lastState = null;
+    const finish = result => {
+      if(observer) observer.disconnect();
+      if(timer) clearTimeout(timer);
+      if(interval) clearInterval(interval);
+      resolve(result);
+    };
+    const inspect = () => {
+      queued = false;
+      const state = conversationOpenState(request);
+      lastState = state;
+      if(["contact_not_found","contact_mismatch"].includes(state.code)) return finish(state);
+      if(state.ready){
+        stableChecks = state.signature === previousSignature ? stableChecks + 1 : 0;
+        previousSignature = state.signature;
+        if(stableChecks >= 2) return finish(state);
+      }else{
+        stableChecks = 0;
+        previousSignature = "";
+      }
+      if(Date.now() >= deadline) finish({...lastState,ready:false,code:lastState?.code||"spa_timeout",error:lastState?.error||"Tempo esgotado na transição interna do WhatsApp Web."});
+    };
+    const schedule = () => { if(!queued){ queued = true; setTimeout(inspect,120); } };
+    observer = new MutationObserver(schedule);
+    observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true});
+    interval = setInterval(inspect,450);
+    timer = setTimeout(()=>finish({...lastState,ready:false,code:lastState?.code||"spa_timeout",error:lastState?.error||"Tempo esgotado na transição interna do WhatsApp Web."}),timeoutMs);
+    inspect();
+  });
+}
+
 function mediaType(node){
   if(node.querySelector('[data-testid*="audio" i],audio,[aria-label*="mensagem de voz" i],[aria-label*="voice message" i]')) return "Áudio";
   if(node.querySelector('[data-testid*="document" i],[aria-label*="documento" i],[aria-label*="document" i]')) return "Documento";
@@ -416,6 +468,12 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   if(message?.type === "criare-chat-load-state"){
     sendResponse({ok:true,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...chatLoadState(message.request || {})});
     return false;
+  }
+  if(message?.type === "criare-wait-for-conversation"){
+    waitForConversationStable(message.request || {},{timeoutMs:Number(message.timeoutMs)||65000})
+      .then(state=>sendResponse({ok:Boolean(state.ready),contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...state}))
+      .catch(error=>sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,code:"spa_timeout",error:error.message||"Tempo esgotado na transição interna do WhatsApp Web."}));
+    return true;
   }
   if(message?.type !== "criare-extract-active-chat") return false;
   (async()=>{

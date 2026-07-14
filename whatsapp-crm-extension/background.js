@@ -3,6 +3,7 @@
 const TARGETS_KEY = "criareWhatsAppTargetTabs";
 const CAPTURE_TIMEOUT_MS = 210000;
 const crmCaptureTabs = new Map();
+let activeConversationOperation = null;
 
 function sleep(ms){ return new Promise(resolve=>setTimeout(resolve,ms)); }
 
@@ -51,6 +52,31 @@ async function waitForTabComplete(tabId,{timeoutMs=45000}={}){
     await sleep(350);
   }
   throw new Error("O WhatsApp Web demorou demais para abrir a conversa correta.");
+}
+
+async function ensureConversationOpened(request,{active=false,operationId=null}={}){
+  const phone = validPhone(request?.phone);
+  if(!phone) return {ok:false,code:"invalid_phone",error:"Telefone inválido ou incompleto."};
+  const requestId = operationId || request?.request_id || crypto.randomUUID();
+  const ownsOperation = !operationId;
+  if(activeConversationOperation && activeConversationOperation !== requestId) return {ok:false,code:"operation_in_progress",error:"Já existe uma navegação de conversa em andamento."};
+  if(ownsOperation) activeConversationOperation = requestId;
+  try{
+    const tab = await reusableWhatsAppTab({active});
+    if(!tab?.id) return {ok:false,code:"tab_not_found",error:"Aba do WhatsApp Web não encontrada."};
+    await chrome.tabs.update(tab.id,{url:`https://web.whatsapp.com/send/?phone=${phone}&type=phone_number&app_absent=0`,active});
+    await saveTarget(phone,tab.id);
+    await waitForTabComplete(tab.id);
+    await ensureCurrentContentScript(tab.id);
+    const ready = await chrome.tabs.sendMessage(tab.id,{type:"criare-wait-for-conversation",request:{...request,phone,request_id:requestId},timeoutMs:65000});
+    const currentTab = await chrome.tabs.get(tab.id).catch(()=>({}));
+    if(!ready?.ok) return {ok:false,code:ready?.code||"spa_timeout",error:ready?.error||"Tempo esgotado na transição interna do WhatsApp Web.",tabId:tab.id,tabUrl:currentTab.url||"",detectedTitle:ready?.title||"",domCount:Number(ready?.count||0)};
+    return {ok:true,tabId:tab.id,tabUrl:currentTab.url||"",requestId,loadedState:ready,extensionVersion:chrome.runtime.getManifest().version};
+  }catch(error){
+    return {ok:false,code:"spa_navigation_failed",error:error.message||"Não foi possível abrir a conversa correta no WhatsApp Web."};
+  }finally{
+    if(ownsOperation && activeConversationOperation === requestId) activeConversationOperation = null;
+  }
 }
 
 async function waitForChat(tabId,request,{timeoutMs=65000}={}){
@@ -148,32 +174,23 @@ async function captureChatFromTab(tabId,request,loadedState=null){
 }
 
 async function openCustomerChat(request){
-  const phone = validPhone(request?.phone);
-  if(!phone) return {ok:false,error:"O telefone do cliente está incompleto."};
-  const tab = await reusableWhatsAppTab({active:true});
-  await chrome.tabs.update(tab.id,{url:`https://web.whatsapp.com/send/?phone=${phone}&type=phone_number&app_absent=0`,active:true});
-  await saveTarget(phone,tab.id);
-  return {ok:true,extensionVersion:chrome.runtime.getManifest().version};
+  return ensureConversationOpened(request,{active:true});
 }
 
 async function syncCustomerChat(request,sender){
   const phone = validPhone(request?.phone);
   if(!phone) return {ok:false,extensionVersion:chrome.runtime.getManifest().version,error:"O telefone do cliente está incompleto."};
+  if(activeConversationOperation) return {ok:false,extensionVersion:chrome.runtime.getManifest().version,code:"operation_in_progress",error:"Já existe uma navegação ou captura em andamento."};
+  const operationId = request?.request_id || crypto.randomUUID();
+  activeConversationOperation = operationId;
   if(sender?.tab?.id) crmCaptureTabs.set(phone,sender.tab.id);
-  const tab = await reusableWhatsAppTab({active:false});
-  try{ await chrome.tabs.sendMessage(tab.id,{type:"criare-prepare-next-chat"}); }catch(error){}
-  await chrome.tabs.update(tab.id,{url:`https://web.whatsapp.com/send/?phone=${phone}&type=phone_number&app_absent=0`,active:false});
-  await saveTarget(phone,tab.id);
-  await waitForTabComplete(tab.id);
-  await ensureCurrentContentScript(tab.id);
-  const loaded = await waitForChat(tab.id,request);
-  if(!loaded.ready){
-    const currentTab=await chrome.tabs.get(tab.id).catch(()=>({}));
-    return {ok:false,extensionVersion:chrome.runtime.getManifest().version,tabUrl:currentTab.url||"",detectedTitle:loaded.state?.title||"",domCount:Number(loaded.state?.count||0),error:loaded.mismatch
-      ? `A conversa aberta é “${loaded.state?.title || "não identificada"}”, mas o lead solicitado é “${request.customerName || "não identificado"}”. Abra o cliente correto no WhatsApp Web.`
-      : "O WhatsApp não confirmou que a conversa correta terminou de carregar."};
+  try{
+    const opened = await ensureConversationOpened({...request,phone,request_id:operationId},{active:false,operationId});
+    if(!opened.ok) return {...opened,extensionVersion:chrome.runtime.getManifest().version};
+    return await captureChatFromTab(opened.tabId,request,opened.loadedState);
+  }finally{
+    if(activeConversationOperation === operationId) activeConversationOperation = null;
   }
-  return captureChatFromTab(tab.id,request,loaded.state);
 }
 
 async function captureCustomerChat(request,sender){
