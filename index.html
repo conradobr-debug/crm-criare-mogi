@@ -499,6 +499,8 @@
     <div><strong id="appStateTitle">Carregando seus dados</strong><span id="appStateMessage">Conectando à base compartilhada da Criare…</span></div>
     <button class="ghost" id="btnRetryLoad" type="button" hidden>Tentar novamente</button>
     <button class="ghost" id="btnCopyLoadDiagnostic" type="button" hidden>Copiar diagnóstico</button>
+    <button class="ghost" id="btnValidateSession" type="button" hidden>Validar sessão novamente</button>
+    <button class="ghost" id="btnLoginAgain" type="button" hidden>Entrar novamente</button>
     <button class="ghost" id="btnExitLoad" type="button" hidden>Sair</button>
   </div>
 
@@ -2073,6 +2075,13 @@ let recordsFetchPromise = null;
 let recordsRefreshQueued = false;
 let bootPromise = null;
 let bootedUserId = null;
+let authListenerRegistered = false;
+let authListenerSubscription = null;
+let authInitializationFinished = false;
+let currentAuthState = "unauthenticated";
+let lastAuthEvent = "nenhum";
+let localAuthInfo = { found:false, accessToken:false, refreshToken:false, expiresAt:null, expired:false, user:null };
+let lastAuthValidationError = null;
 let appDataState = "loading";
 let appDataTitle = "Carregando seus dados";
 let appDataMessage = "Conectando à base compartilhada da Criare…";
@@ -2099,6 +2108,68 @@ function withTimeout(promise, milliseconds=BOOT_QUERY_TIMEOUT_MS, label="consult
       error => { clearTimeout(timer); reject(error); }
     );
   });
+}
+
+function readLocalAuthInfo(){
+  const storageKey = sb?.auth?.storageKey;
+  if(!storageKey) return { found:false, accessToken:false, refreshToken:false, expiresAt:null, expired:false, user:null };
+  try{
+    const raw = window.localStorage.getItem(storageKey);
+    if(!raw) return { found:false, accessToken:false, refreshToken:false, expiresAt:null, expired:false, user:null };
+    const parsed = JSON.parse(raw);
+    const localSession = parsed?.currentSession || parsed?.session || parsed;
+    const expiresAt = Number(localSession?.expires_at || 0) || null;
+    return {
+      found:Boolean(localSession?.access_token || localSession?.refresh_token || localSession?.user),
+      accessToken:Boolean(localSession?.access_token),
+      refreshToken:Boolean(localSession?.refresh_token),
+      expiresAt,
+      expired:Boolean(expiresAt && expiresAt * 1000 <= Date.now()),
+      user:localSession?.user || null,
+      session:localSession?.access_token ? localSession : null
+    };
+  }catch(error){
+    console.warn("[CRM Auth] Não foi possível ler o estado local da sessão.", error);
+    return { found:false, accessToken:false, refreshToken:false, expiresAt:null, expired:false, user:null };
+  }
+}
+
+function authStateLabel(){
+  if(currentAuthState === "authenticated") return "authenticated";
+  if(currentAuthState === "local_session_pending_validation") return "local_session_pending_validation";
+  if(currentAuthState === "expired_session") return "expired_session";
+  return "unauthenticated";
+}
+
+function authDiagnostic(error, failedCall="sessão autenticada"){
+  const expires = localAuthInfo.expiresAt ? new Date(localAuthInfo.expiresAt * 1000).toLocaleString("pt-BR") : "não informado";
+  return [
+    `Estado: ${authStateLabel()}`,
+    `Sessão local encontrada: ${localAuthInfo.found ? "sim" : "não"}`,
+    `Access token presente: ${localAuthInfo.accessToken ? "sim" : "não"}`,
+    `Token expirado: ${localAuthInfo.expired ? "sim" : "não"}`,
+    `Expiração: ${expires}`,
+    `Chamada: ${failedCall}`,
+    `Erro: ${error?.message || "não informado"}`,
+    `Resposta HTTP recebida: ${error?.status ? `sim (${error.status})` : "não"}`,
+    `Online: ${navigator.onLine ? "sim" : "não"}`,
+    `Supabase: ${SUPABASE_URL}`,
+    `Evento de autenticação: ${lastAuthEvent}`,
+    `Horário: ${new Date().toLocaleString("pt-BR")}`
+  ].join(" • ");
+}
+
+function isNetworkAuthError(error){
+  return /failed to fetch|network|fetcherror/i.test(String(error?.message || error?.name || "")) && !error?.status;
+}
+
+function setAuthenticatedActionsEnabled(enabled){
+  ["btnNew","btnSync","btnSyncWhatsAppAll","btnWhatsAppBatchTest","btnWhatsAppBatch","btnExportJson","btnWipe"].forEach(id=>{
+    const element = $(id);
+    if(element) element.disabled = !enabled;
+  });
+  const importer = $("importJson");
+  if(importer) importer.disabled = !enabled;
 }
 
 function sessionProfileFallback(){
@@ -2137,6 +2208,9 @@ function updateAppStateBanner(){
   $("appStateMessage").textContent = appDataMessage;
   $("btnRetryLoad").hidden = appDataState !== "error";
   $("btnCopyLoadDiagnostic").hidden = appDataState !== "error";
+  const authRecoveryVisible = appDataState === "error" && ["local_session_pending_validation","expired_session"].includes(currentAuthState);
+  $("btnValidateSession").hidden = !authRecoveryVisible;
+  $("btnLoginAgain").hidden = !authRecoveryVisible;
   $("btnExitLoad").hidden = appDataState !== "error";
 }
 function statePanelHtml(){
@@ -2182,16 +2256,34 @@ function updateSessionLine(){
     el.textContent = "Template offline. Cole SUPABASE_URL e SUPABASE_ANON_KEY para ativar login e sincronização.";
     return;
   }
+  if(currentAuthState === "local_session_pending_validation" && session?.user){
+    el.textContent = `Sessão local: ${session.user.email || "usuário identificado"} • servidor indisponível`;
+    return;
+  }
+  if(currentAuthState === "expired_session"){
+    el.textContent = "Sessão expirada • entre novamente para continuar.";
+    return;
+  }
   if(!session?.user){
     el.textContent = "Desconectado. Clique em “Entrar” (ou recarregue) para autenticar.";
     return;
   }
   el.textContent = `Conectado: ${session.user.email}`;
 }
+function registerAuthListener(){
+  if(!sb || authListenerRegistered) return;
+  authListenerRegistered = true;
+  authListenerSubscription = sb.auth.onAuthStateChange((event, newSession) => {
+    setTimeout(() => handleAuthStateChange(event, newSession), 0);
+  });
+}
 async function initSupabase(){
   if(!isConfigured()) return;
   setAppDataState("loading", "Carregando seus dados", "Conectando à base compartilhada da Criare…");
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  registerAuthListener();
+  localAuthInfo = readLocalAuthInfo();
+  setAuthenticatedActionsEnabled(false);
   whatsappDataService = CriareWhatsAppDataService.create({
     supabaseClient:sb,
     supabaseUrl:SUPABASE_URL,
@@ -2205,36 +2297,63 @@ async function initSupabase(){
     if(result.error) throw result.error;
   }catch(error){
     console.error("[CRM Auth] Falha ao recuperar sessão.", error);
-    bootDiagnostic = describeBootError(error, error?.stage || "sessão autenticada");
-    setAppDataState("error", "Não foi possível iniciar o CRM.", bootDiagnostic);
+    authInitializationFinished = true;
+    if(localAuthInfo.found && localAuthInfo.session && isNetworkAuthError(error)){
+      lastAuthValidationError = error;
+      session = localAuthInfo.session;
+      currentAuthState = localAuthInfo.expired ? "expired_session" : "local_session_pending_validation";
+      updateSessionLine();
+      bootDiagnostic = authDiagnostic(error, "supabase.auth.getSession()");
+      if(currentAuthState === "expired_session"){
+        setAppDataState("error", "Sua sessão expirou e não pôde ser renovada.", bootDiagnostic);
+        setSyncConnectionState("error");
+        render();
+        return;
+      }
+      setAppDataState("loading", "Sessão local — servidor indisponível", "Tentando carregar os leads com a sessão local…");
+      render();
+      await bootAfterLogin();
+      return;
+    }
+    currentAuthState = "unauthenticated";
+    session = null;
+    updateSessionLine();
+    bootDiagnostic = authDiagnostic(error, "supabase.auth.getSession()");
+    setAuthenticatedActionsEnabled(false);
+    setAppDataState("auth", "Login necessário", "Não há uma sessão local disponível. Entre novamente para continuar.");
     render();
     setSyncConnectionState("error");
+    openLogin();
     return;
   }
-  session = data.session;
-  updateSessionLine();
-
-  sb.auth.onAuthStateChange((event, newSession) => {
-    // Evita chamadas assíncronas dentro do callback interno do cliente Supabase.
-    setTimeout(() => handleAuthStateChange(event, newSession), 0);
-  });
+  authInitializationFinished = true;
+  session = data?.session || null;
 
   if(!session?.user){
+    currentAuthState = "unauthenticated";
+    setAuthenticatedActionsEnabled(false);
     setAppDataState("auth", "Login necessário", "Entre com um usuário autorizado para carregar a base compartilhada.");
     render();
     openLogin();
   }else{
+    currentAuthState = "local_session_pending_validation";
+    updateSessionLine();
     await bootAfterLogin();
   }
 }
 
 async function handleAuthStateChange(event, newSession){
+  lastAuthEvent = event || "desconhecido";
   const previousUserId = session?.user?.id || null;
   session = newSession;
   updateSessionLine();
   console.info("[CRM Auth] Estado alterado.", { event, authenticated: Boolean(session?.user) });
 
+  if(event === "INITIAL_SESSION" && !authInitializationFinished) return;
+
   if(!session?.user){
+    if(event === "INITIAL_SESSION" && localAuthInfo.found && ["local_session_pending_validation","expired_session"].includes(currentAuthState)) return;
+    currentAuthState = "unauthenticated";
     bootedUserId = null;
     hasInitialRecordSnapshot = false;
     await syncController.stop();
@@ -2244,6 +2363,7 @@ async function handleAuthStateChange(event, newSession){
   }
 
   const userChanged = previousUserId !== session.user.id;
+  if(event === "TOKEN_REFRESHED" || event === "SIGNED_IN") currentAuthState = "local_session_pending_validation";
   if(userChanged || bootedUserId !== session.user.id){
     await bootAfterLogin();
     return;
@@ -2253,6 +2373,56 @@ async function handleAuthStateChange(event, newSession){
     await syncController.resume("token atualizado");
   }else if(event === "SIGNED_IN"){
     await syncController.resume("sessão confirmada");
+  }
+}
+
+async function validateSessionAgain(){
+  if(!sb || bootPromise) return;
+  localAuthInfo = readLocalAuthInfo();
+  setAuthenticatedActionsEnabled(false);
+  setAppDataState("loading", "Validando sessão", "Tentando validar sua sessão novamente…");
+  render();
+  try{
+    const result = await withTimeout(sb.auth.getSession(), BOOT_QUERY_TIMEOUT_MS, "supabase.auth.getSession()");
+    if(result.error) throw result.error;
+    session = result.data?.session || null;
+    if(!session?.user){
+      currentAuthState = "unauthenticated";
+      updateSessionLine();
+      setAppDataState("auth", "Login necessário", "Não há uma sessão válida neste navegador.");
+      render();
+      openLogin();
+      return;
+    }
+    currentAuthState = "local_session_pending_validation";
+    lastAuthValidationError = null;
+    updateSessionLine();
+    bootedUserId = null;
+    await bootAfterLogin();
+  }catch(error){
+    lastAuthValidationError = error;
+    if(localAuthInfo.found && localAuthInfo.session && isNetworkAuthError(error)){
+      session = localAuthInfo.session;
+      currentAuthState = localAuthInfo.expired ? "expired_session" : "local_session_pending_validation";
+      updateSessionLine();
+      bootDiagnostic = authDiagnostic(error, "supabase.auth.getSession()");
+      if(currentAuthState === "expired_session"){
+        setAppDataState("error", "Sua sessão expirou e não pôde ser renovada.", bootDiagnostic);
+        setSyncConnectionState("error");
+        render();
+        return;
+      }
+      bootedUserId = null;
+      await bootAfterLogin();
+      return;
+    }
+    currentAuthState = "unauthenticated";
+    session = null;
+    updateSessionLine();
+    bootDiagnostic = authDiagnostic(error, "supabase.auth.getSession()");
+    setAppDataState("error", "Não foi possível validar sua sessão.", bootDiagnostic);
+    setSyncConnectionState("error");
+    render();
   }
 }
 
@@ -2267,6 +2437,7 @@ function lockApp(){
   whatsappAvatarUrls = new Map();
   hasInitialRecordSnapshot = false;
   hasInitialWeeklySnapshot = false;
+  setAuthenticatedActionsEnabled(false);
   setSyncConnectionState("offline");
   setAppDataState("auth", "Login necessário", "Entre novamente para carregar os dados compartilhados do CRM.");
   render();
@@ -2293,6 +2464,8 @@ async function doLogin(){
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if(error) throw error;
     session = data.session;
+    currentAuthState = "local_session_pending_validation";
+    lastAuthValidationError = null;
     updateSessionLine();
     await bootAfterLogin();
     if(bootedUserId === session?.user?.id) closeLogin();
@@ -2534,7 +2707,7 @@ async function bootAfterLogin(){
     hasInitialRecordSnapshot = false;
     hasInitialWeeklySnapshot = false;
     setSyncConnectionState(navigator.onLine ? "reconnecting" : "offline");
-    bootDiagnostic = "";
+    if(currentAuthState === "authenticated") bootDiagnostic = "";
     profiles = sessionProfileFallback();
     buildFilters();
     const loaded = await fetchRecords({
@@ -2546,11 +2719,16 @@ async function bootAfterLogin(){
       throwOnError:true
     });
     if(!loaded) throw new Error("Não foi possível carregar os registros compartilhados.");
+    currentAuthState = "authenticated";
+    lastAuthValidationError = null;
+    setAuthenticatedActionsEnabled(true);
+    updateSessionLine();
     bootedUserId = userId;
     setAppDataState("ready", "Dados carregados", `${records.length} registros sincronizados.`);
     render();
     if($("loginModal").open) closeLogin();
     await syncController.start();
+    setSyncConnectionState("online");
 
     void (async()=>{
       try{
@@ -2593,8 +2771,13 @@ async function bootAfterLogin(){
     });
   })().catch(error => {
     console.error("[CRM Boot] Falha ao iniciar aplicação.", error);
-    bootDiagnostic = describeBootError(error, error?.stage || "crm_records");
-    setAppDataState("error", "Não foi possível carregar os leads.", bootDiagnostic);
+    if(currentAuthState === "local_session_pending_validation"){
+      bootDiagnostic = `${authDiagnostic(lastAuthValidationError || error, "supabase.auth.getSession()")} • Leitura crm_records: ${error?.message || "falhou"}`;
+      setAppDataState("error", "Sessão local — servidor indisponível", bootDiagnostic);
+    }else{
+      bootDiagnostic = describeBootError(error, error?.stage || "crm_records");
+      setAppDataState("error", "Não foi possível carregar os leads.", bootDiagnostic);
+    }
     render();
     toast("Banco temporariamente indisponível. Tente carregar novamente.");
     setSyncConnectionState("error");
@@ -4469,6 +4652,11 @@ $("btnCopyLoadDiagnostic").addEventListener("click", async ()=>{
   }catch(error){
     toast("Não foi possível copiar o diagnóstico.", { error:true });
   }
+});
+$("btnValidateSession").addEventListener("click", ()=>validateSessionAgain());
+$("btnLoginAgain").addEventListener("click", ()=>{
+  if(!sb) return;
+  openLogin();
 });
 $("btnExitLoad").addEventListener("click", ()=>doSignOut());
 
