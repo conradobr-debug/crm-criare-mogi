@@ -68,7 +68,20 @@ async function ensureConversationOpened(request,{active=false,operationId=null}=
     await saveTarget(phone,tab.id);
     await waitForTabComplete(tab.id);
     await ensureCurrentContentScript(tab.id);
-    const ready = await chrome.tabs.sendMessage(tab.id,{type:"criare-wait-for-conversation",request:{...request,phone,request_id:requestId},timeoutMs:65000});
+    const conversationRequest = {...request,phone,request_id:requestId};
+    // A primeira abertura da sessão pode não criar #main só com a rota /send.
+    // Primeiro observamos a transição SPA; se ela não montar o painel, usamos a
+    // busca/lista lateral e somente então aguardamos a conversa estabilizar.
+    let ready = await chrome.tabs.sendMessage(tab.id,{type:"criare-wait-for-conversation",request:conversationRequest,timeoutMs:14000});
+    const needsSidebarFallback = ["panel_not_created","header_not_found","messages_not_loaded","spa_timeout"].includes(ready?.code);
+    if(!ready?.ok && needsSidebarFallback){
+      const fallback = await chrome.tabs.sendMessage(tab.id,{type:"criare-open-conversation-fallback",request:conversationRequest});
+      if(!fallback?.ok){
+        const currentTab = await chrome.tabs.get(tab.id).catch(()=>({}));
+        return {ok:false,code:fallback?.code||"sidebar_open_failed",error:fallback?.error||"Não foi possível abrir o primeiro contato pela lista lateral.",tabId:tab.id,tabUrl:currentTab.url||"",detectedTitle:"",domCount:0};
+      }
+      ready = await chrome.tabs.sendMessage(tab.id,{type:"criare-wait-for-conversation",request:conversationRequest,timeoutMs:51000});
+    }
     const currentTab = await chrome.tabs.get(tab.id).catch(()=>({}));
     if(!ready?.ok) return {ok:false,code:ready?.code||"spa_timeout",error:ready?.error||"Tempo esgotado na transição interna do WhatsApp Web.",tabId:tab.id,tabUrl:currentTab.url||"",detectedTitle:ready?.title||"",domCount:Number(ready?.count||0)};
     return {ok:true,tabId:tab.id,tabUrl:currentTab.url||"",requestId,loadedState:ready,extensionVersion:chrome.runtime.getManifest().version};

@@ -49,8 +49,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.7"/);
-  assert.equal(manifest.version,"2.1.7");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.8"/);
+  assert.equal(manifest.version,"2.1.8");
   assert(crm.includes("https://web.whatsapp.com/send/?phone=${number}"));
   assert(!crm.includes("whatsapp://"));
   assert.match(crm,/id="btnCaptureOpenWhatsApp"[^>]*>Capturar conversa aberta/);
@@ -68,6 +68,10 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(background,/criare-preflight-whatsapp/);
   assert.match(contentCrm,/criare-whatsapp-preflight/);
   assert.match(content,/criare-whatsapp-readiness/);
+  assert.match(content,/const connectedWithoutChat = ready && !qrCodeDetected && conversationListDetected;/);
+  assert.match(content,/criare-open-conversation-fallback/);
+  assert.match(background,/criare-open-conversation-fallback/);
+  assert.match(background,/timeoutMs:14000/);
   assert.match(content,/if\(!request\?\.disableAudio\)/);
   assert.match(crm,/whatsappAnalysisIsStale/);
   assert.match(content,/LOCAL_TRANSCRIBER_URL/);

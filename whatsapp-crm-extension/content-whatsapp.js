@@ -47,7 +47,9 @@ function whatsappReadiness(){
   const composerDetected = composerCount > 0;
   const headerDetected = headerCount > 0;
   const ready = ["interactive","complete"].includes(readyState);
-  const connectedWithoutChat = ready && !qrCodeDetected && conversationListDetected && searchDetected;
+  // A lista lateral é suficiente para comprovar uma sessão conectada. O campo de
+  // busca varia entre versões do WhatsApp e pode não existir antes do primeiro chat.
+  const connectedWithoutChat = ready && !qrCodeDetected && conversationListDetected;
   const connectedWithChat = ready && !qrCodeDetected && panelDetected && (headerDetected || composerDetected);
   let state = "interface_unrecognized";
   let message = "A interface do WhatsApp Web não foi reconhecida.";
@@ -234,6 +236,59 @@ function conversationOpenState(request={}){
   return {ready:true,title,count:messageNodes(main).length,signature:`${title}:${messageNodes(main).length}`,profilePhotoUrl:profilePhotoUrl(main)};
 }
 
+function sidebarConversationRows(){
+  const selectors = [
+    '#pane-side [role="listitem"]',
+    '#pane-side [role="row"]',
+    '[data-testid="chat-list"] [role="row"]',
+    '[data-testid="chat-list"] [role="listitem"]'
+  ];
+  return [...new Set(selectors.flatMap(selector=>[...document.querySelectorAll(selector)]))];
+}
+
+function sidebarSearchControl(){
+  return document.querySelector('#pane-side input,#pane-side [contenteditable="true"][role="textbox"],#pane-side [contenteditable="true"],[data-testid="chat-list-search"] input,[data-testid="chat-list-search"] [contenteditable="true"]');
+}
+
+function sidebarRowMatches(row,request={}){
+  const rowText = comparableText(row?.innerText || row?.textContent || "");
+  const phone = String(request?.phone || "").replace(/\D/g,"");
+  const rowDigits = rowText.replace(/\D/g,"");
+  if(phone && rowDigits.includes(phone.slice(-8))) return true;
+  const tokens = comparableText(request?.customerName).split(" ").filter(token=>token.length>=3);
+  return tokens.length > 0 && tokens.filter(token=>rowText.includes(token)).length >= Math.min(2,tokens.length);
+}
+
+function setSidebarSearchValue(control,value){
+  control.focus();
+  if(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement){
+    const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control),"value");
+    descriptor?.set?.call(control,value);
+  }else{
+    control.textContent = value;
+  }
+  control.dispatchEvent(new InputEvent("input",{bubbles:true,inputType:"insertText",data:value}));
+  control.dispatchEvent(new Event("change",{bubbles:true}));
+}
+
+async function openConversationFromSidebar(request={}){
+  const findRow = () => sidebarConversationRows().find(row=>sidebarRowMatches(row,request));
+  let row = findRow();
+  if(!row){
+    const search = sidebarSearchControl();
+    if(!search) return {ok:false,code:"sidebar_search_not_found",error:"A busca da lista lateral não foi localizada para abrir o primeiro contato."};
+    setSidebarSearchValue(search,String(request.phone || "").replace(/\D/g,""));
+    for(let attempt=0;attempt<20&&!row;attempt+=1){
+      await sleep(350);
+      row = findRow();
+    }
+  }
+  if(!row) return {ok:false,code:"contact_not_found",error:"Contato não localizado na lista lateral do WhatsApp."};
+  row.scrollIntoView({block:"center"});
+  row.click();
+  return {ok:true,code:"sidebar_contact_opened"};
+}
+
 function waitForConversationStable(request={}, {timeoutMs=65000}={}){
   return new Promise(resolve=>{
     const deadline = Date.now() + timeoutMs;
@@ -267,7 +322,7 @@ function waitForConversationStable(request={}, {timeoutMs=65000}={}){
     };
     const schedule = () => { if(!queued){ queued = true; setTimeout(inspect,120); } };
     observer = new MutationObserver(schedule);
-    observer.observe(document.documentElement,{childList:true,subtree:true,attributes:true});
+    observer.observe(document.body || document.documentElement,{childList:true,subtree:true,attributes:true});
     interval = setInterval(inspect,450);
     timer = setTimeout(()=>finish({...lastState,ready:false,code:lastState?.code||"spa_timeout",error:lastState?.error||"Tempo esgotado na transição interna do WhatsApp Web."}),timeoutMs);
     inspect();
@@ -473,6 +528,12 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
     waitForConversationStable(message.request || {},{timeoutMs:Number(message.timeoutMs)||65000})
       .then(state=>sendResponse({ok:Boolean(state.ready),contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...state}))
       .catch(error=>sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,code:"spa_timeout",error:error.message||"Tempo esgotado na transição interna do WhatsApp Web."}));
+    return true;
+  }
+  if(message?.type === "criare-open-conversation-fallback"){
+    openConversationFromSidebar(message.request || {})
+      .then(result=>sendResponse({contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...result}))
+      .catch(error=>sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,code:"sidebar_open_failed",error:error.message||"Não foi possível abrir o contato pela lista lateral."}));
     return true;
   }
   if(message?.type !== "criare-extract-active-chat") return false;
