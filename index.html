@@ -472,7 +472,8 @@
     <button class="primary" id="btnNew">+ Novo lead</button>
     <button class="ghost" id="btnSync">Sincronizar</button>
     <button class="ghost desktopUtility" id="btnSyncWhatsAppAll" type="button">Extensão WhatsApp</button>
-    <button class="ghost desktopUtility" id="btnWhatsAppBatch" type="button">Atualizar conversas do WhatsApp</button>
+    <button class="ghost desktopUtility" id="btnWhatsAppBatchTest" type="button">Testar atualização em 3 leads</button>
+    <button class="ghost desktopUtility" id="btnWhatsAppBatch" type="button" disabled>Atualizar conversas do WhatsApp</button>
     <button class="ghost mobileUtility" id="btnInstall" hidden>Instalar aplicativo</button>
     <button class="ghost desktopUtility" id="btnSound">Som: OFF</button>
     <button class="ghost desktopUtility" id="btnExportJson">Exportar backup</button>
@@ -541,11 +542,12 @@
 
   <div class="whatsappBatchPanel" id="whatsappBatchPanel" hidden>
     <div class="whatsappBatchHd"><strong>Atualizando conversas do WhatsApp</strong><span id="whatsappBatchLastRun">Última atualização geral: nunca</span></div>
+    <div class="whatsappBatchMeta" id="whatsappBatchPreflight">Pré-verificação pendente.</div>
     <div class="whatsappBatchMeta" id="whatsappBatchCurrent">Aguardando início.</div>
     <div class="whatsappBatchStats">
-      <span id="whatsappBatchPosition">0/0</span><span id="whatsappBatchUpdated">Atualizados: 0</span><span id="whatsappBatchNew">Com novidades: 0</span><span id="whatsappBatchStale">Análises desatualizadas: 0</span><span id="whatsappBatchAudio">Áudios: 0</span><span id="whatsappBatchAudioDone">Áudios transcritos: 0</span><span id="whatsappBatchAudioPending">Áudios pendentes: 0</span><span id="whatsappBatchIgnored">Ignorados: 0</span><span id="whatsappBatchErrorsCount">Erros: 0</span>
+      <span id="whatsappBatchPosition">0/0</span><span id="whatsappBatchUpdated">Atualizados: 0</span><span id="whatsappBatchNew">Com novidades: 0</span><span id="whatsappBatchStale">Análises desatualizadas: 0</span><span id="whatsappBatchIgnored">Ignorados: 0</span><span id="whatsappBatchErrorsCount">Erros: 0</span>
     </div>
-    <div class="whatsappBatchActions"><button class="ghost" id="btnWhatsAppBatchPause" type="button">Pausar</button><button class="ghost" id="btnWhatsAppBatchContinue" type="button" hidden>Continuar</button><button class="ghost" id="btnWhatsAppBatchCancel" type="button">Cancelar</button><button class="ghost" id="btnWhatsAppBatchCopyErrors" type="button">Copiar relatório de falhas</button><button class="ghost" id="btnWhatsAppBatchFilterStale" type="button">Mostrar análises desatualizadas</button></div>
+    <div class="whatsappBatchActions"><button class="ghost" id="btnWhatsAppBatchPreflight" type="button">Executar diagnóstico novamente</button><button class="ghost" id="btnWhatsAppBatchPause" type="button">Pausar</button><button class="ghost" id="btnWhatsAppBatchContinue" type="button" hidden>Continuar</button><button class="ghost" id="btnWhatsAppBatchCancel" type="button">Cancelar</button><button class="ghost" id="btnWhatsAppBatchRetrySave" type="button" hidden>Tentar salvar novamente</button><button class="ghost" id="btnWhatsAppBatchCopyErrors" type="button">Copiar relatório de falhas</button><button class="ghost" id="btnWhatsAppBatchFilterStale" type="button">Mostrar análises desatualizadas</button></div>
     <div class="whatsappBatchErrors" id="whatsappBatchErrors" hidden></div>
   </div>
 
@@ -1245,10 +1247,14 @@ function openWhatsAppFor(record=null){
   const webUrl=`https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
   window.open(webUrl,"_blank","noopener,noreferrer");
 }
-const WHATSAPP_EXTENSION_VERSION = "2.1.5";
+const WHATSAPP_EXTENSION_VERSION = "2.1.6";
+const WHATSAPP_BATCH_AUDIO_ENABLED = false;
+const WHATSAPP_CAPTURE_ESSENTIAL_COLUMNS = ["whatsapp_message_entries","whatsapp_transcript","whatsapp_transcript_updated_at","whatsapp_sync_message_count","whatsapp_sync_new_message_count","whatsapp_sync_error","whatsapp_channel_status"];
+const WHATSAPP_CAPTURE_OPTIONAL_COLUMNS = ["whatsapp_analysis_status","whatsapp_capture_complete","whatsapp_capture_note","whatsapp_capture_source","whatsapp_capture_version","whatsapp_profile_photo_path","whatsapp_profile_photo_updated_at"];
 const whatsappAutoSyncWaiters = new Map();
 const whatsappOpenCaptureWaiters = new Map();
 const whatsappExtensionPingWaiters = new Map();
+const whatsappPreflightWaiters = new Map();
 
 document.addEventListener("criare-whatsapp-auto-sync-result",()=>{
   let result;
@@ -1274,6 +1280,12 @@ document.addEventListener("criare-whatsapp-extension-ping-result",()=>{
   const waiter=whatsappExtensionPingWaiters.get(result.requestId);if(!waiter)return;
   clearTimeout(waiter.timer);whatsappExtensionPingWaiters.delete(result.requestId);waiter.resolve(result);
 });
+document.addEventListener("criare-whatsapp-preflight-result",()=>{
+  let result;try{result=JSON.parse(document.documentElement.dataset.criareWhatsAppPreflightResult||"{}");}catch(error){result={ok:false,error:"A extensão devolveu um diagnóstico inválido."};}
+  delete document.documentElement.dataset.criareWhatsAppPreflightResult;
+  const waiter=whatsappPreflightWaiters.get(result.requestId);if(!waiter)return;
+  clearTimeout(waiter.timer);whatsappPreflightWaiters.delete(result.requestId);waiter.resolve(result);
+});
 document.addEventListener("criare-whatsapp-audio-transcription-update",async()=>{
   let payload;try{payload=JSON.parse(document.documentElement.dataset.criareWhatsAppAudioTranscriptionUpdate||"{}");}catch(error){payload={};}
   delete document.documentElement.dataset.criareWhatsAppAudioTranscriptionUpdate;
@@ -1294,27 +1306,38 @@ async function requireCurrentWhatsAppExtension(){
   if(result.extensionVersion!==WHATSAPP_EXTENSION_VERSION){const error=new Error(`A extensão instalada é a versão ${result.extensionVersion||"desconhecida"}. Instale a versão ${WHATSAPP_EXTENSION_VERSION} e recarregue CRM e WhatsApp Web.`);error.extensionVersion=result.extensionVersion||"desconhecida";throw error;}
   return result;
 }
-function requestWhatsAppAutomaticSync(record){
+function requestWhatsAppAutomaticSync(record,{batch=false}={}){
   return new Promise(resolve=>{
     const phone=whatsappNumber(record?.phone);if(!phone)return resolve({ok:false,error:"Telefone inválido ou sem DDD."});
     const requestId=crypto.randomUUID();
-    const request={requestId,requestedAt:nowISO(),phone,customerName:`${record?.first_name||""} ${record?.last_name||""}`.trim()};
+    const request={requestId,requestedAt:nowISO(),phone,customerName:`${record?.first_name||""} ${record?.last_name||""}`.trim(),batch,disableAudio:batch&&!WHATSAPP_BATCH_AUDIO_ENABLED};
     const timer=setTimeout(()=>{whatsappAutoSyncWaiters.delete(requestId);resolve({ok:false,requestId,error:"A captura ultrapassou o tempo de segurança; o histórico anterior foi preservado."});},225000);
     whatsappAutoSyncWaiters.set(requestId,{resolve,timer});
     document.documentElement.dataset.criareWhatsAppAutoSyncRequest=JSON.stringify(request);
     document.dispatchEvent(new CustomEvent("criare-whatsapp-auto-sync"));
   });
 }
-function requestWhatsAppOpenCapture(record){
+function requestWhatsAppOpenCapture(record,{batch=false}={}){
   return new Promise(resolve=>{
     const phone=whatsappNumber(record?.phone);if(!phone)return resolve({ok:false,error:"Telefone inválido ou sem DDD."});
     const requestId=crypto.randomUUID();
-    const request={requestId,requestedAt:nowISO(),phone,customerName:`${record?.first_name||""} ${record?.last_name||""}`.trim()};
+    const request={requestId,requestedAt:nowISO(),phone,customerName:`${record?.first_name||""} ${record?.last_name||""}`.trim(),batch,disableAudio:batch&&!WHATSAPP_BATCH_AUDIO_ENABLED};
     const timer=setTimeout(()=>{whatsappOpenCaptureWaiters.delete(requestId);resolve({ok:false,requestId,error:"A captura da conversa aberta ultrapassou o tempo de segurança."});},225000);
     whatsappOpenCaptureWaiters.set(requestId,{resolve,timer});
     document.documentElement.dataset.criareWhatsAppOpenCaptureRequest=JSON.stringify(request);
     document.dispatchEvent(new CustomEvent("criare-whatsapp-open-capture"));
   });
+}
+function requestWhatsAppPreflight(){
+  return new Promise(resolve=>{
+    const requestId=crypto.randomUUID();const timer=setTimeout(()=>{whatsappPreflightWaiters.delete(requestId);resolve({ok:false,error:"A extensão não respondeu à pré-verificação."});},12000);
+    whatsappPreflightWaiters.set(requestId,{resolve,timer});
+    document.documentElement.dataset.criareWhatsAppPreflightRequest=JSON.stringify({requestId,requestedAt:nowISO()});
+    document.dispatchEvent(new CustomEvent("criare-whatsapp-preflight"));
+  });
+}
+async function openAndCaptureLeadConversation(record,{openOnly=false,batch=false}={}){
+  return openOnly?requestWhatsAppOpenCapture(record,{batch}):requestWhatsAppAutomaticSync(record,{batch});
 }
 function normalizeCapturedEntry(entry){
   if(entry&&typeof entry==="object"){
@@ -1396,6 +1419,25 @@ async function uploadWhatsAppProfilePhoto(recordId,dataUrl){
   const blob=dataUrlToBlob(dataUrl);if(blob.size>1572864)throw new Error("A foto de perfil ultrapassa 1,5 MB.");
   const path=`${recordId}/profile`;const {error}=await sb.storage.from(WHATSAPP_AVATAR_BUCKET).upload(path,blob,{upsert:true,contentType:blob.type,cacheControl:"3600"});if(error)throw error;return path;
 }
+function databaseErrorDetails(error){return {code:String(error?.code||""),message:String(error?.message||error||"Erro ao gravar."),details:String(error?.details||""),hint:String(error?.hint||""),status:Number(error?.status||0)||null};}
+function isSchemaCacheUnavailable(error){const info=databaseErrorDetails(error);return info.code==="PGRST002"||/could not query the database for the schema cache/i.test(info.message);}
+function isSchemaCompatibilityError(error){const info=databaseErrorDetails(error);return info.code==="PGRST204"||/could not find .* column|schema cache.*column/i.test(info.message);}
+function capturePatchByColumns(patch,columns){return Object.fromEntries(columns.filter(column=>Object.hasOwn(patch,column)).map(column=>[column,patch[column]]));}
+async function writeWhatsAppCapturePatch(record,fullPatch){
+  const essentialPatch=capturePatchByColumns(fullPatch,WHATSAPP_CAPTURE_ESSENTIAL_COLUMNS);
+  let patch=fullPatch,compatibilityMode=false,lastError=null;
+  for(let attempt=0;attempt<3;attempt+=1){
+    const {data,error}=await sb.from(TBL_RECORDS).update(patch).eq("id",record.id).select("*").single();
+    if(!error)return {data,compatibilityMode,attempts:attempt+1};
+    lastError=error;
+    if(isSchemaCacheUnavailable(error)&&attempt<2){await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));continue;}
+    if(!compatibilityMode&&isSchemaCompatibilityError(error)){
+      patch=essentialPatch;compatibilityMode=true;attempt=-1;continue;
+    }
+    break;
+  }
+  const failure=new Error(databaseErrorDetails(lastError).message||"Não foi possível gravar a conversa no CRM.");failure.database=databaseErrorDetails(lastError);failure.compatibilityMode=compatibilityMode;throw failure;
+}
 async function saveWhatsAppCapture(record,result){
   const merged=mergeWhatsAppMessages(record,result);
   const continuity=Boolean(result.reachedStart||(record.whatsapp_capture_complete&&merged.overlapCount>0));
@@ -1418,10 +1460,10 @@ async function saveWhatsAppCapture(record,result){
     whatsapp_channel_status:result.noConversation?"not_available":(result.empty?"no_messages":"conversation"),
     whatsapp_profile_photo_path:photoPath,whatsapp_profile_photo_updated_at:photoUpdatedAt
   };
-  const {data,error}=await sb.from(TBL_RECORDS).update(patch).eq("id",record.id).select("*").single();
-  if(error)throw new Error(error.message||"Não foi possível gravar a conversa no CRM.");
+  const write=await writeWhatsAppCapturePatch(record,patch);
+  const data=write.data;
   const index=records.findIndex(item=>item.id===data.id);if(index>=0)records[index]=data;
-  return {record:data,...merged,complete,analysisReady:complete||loadedHistoryReady,note};
+  return {record:data,...merged,complete,analysisReady:complete||loadedHistoryReady,note,database:{write_attempted:true,write_succeeded:true,compatibilityMode:write.compatibilityMode,attempts:write.attempts}};
 }
 function capturedEntryParts(text){
   const match=String(text||"").match(/^\[([^,\]]+),\s*([^\]]+)\]\s*([^:]+):\s*([\s\S]*)$/);
@@ -1479,7 +1521,7 @@ async function captureFreeWhatsAppConversation(record,{openOnly=false}={}){
     setStage("Localizando WhatsApp Web");
     await requireCurrentWhatsAppExtension();
     setStage(openOnly?"Lendo conversa aberta no WhatsApp Web":"Abrindo conversa no WhatsApp Web");
-    const result=openOnly?await requestWhatsAppOpenCapture(record):await requestWhatsAppAutomaticSync(record);context.result=result;
+    const result=await openAndCaptureLeadConversation(record,{openOnly});context.result=result;
     if(result.ok&&result.extensionVersion!==WHATSAPP_EXTENSION_VERSION)throw new Error(`Atualize a extensão para a versão ${WHATSAPP_EXTENSION_VERSION}.`);
     if(!result.ok)throw new Error(result.error||"Não foi possível capturar a conversa.");
     if(result.empty)throw new Error(result.noConversation?"Nenhuma conversa foi encontrada para este telefone no WhatsApp Web.":"Nenhuma mensagem foi encontrada na conversa.");
@@ -1515,6 +1557,40 @@ function whatsappAnalysisIsStale(record){
   return Boolean(captured&&(!analyzed||captured>analyzed));
 }
 function whatsappBatchName(record){return `${record?.first_name||""} ${record?.last_name||""}`.trim()||"Lead sem nome";}
+const pendingWhatsAppCaptureSaves = new Map();
+function whatsappBatchReport(record,capture={},database={}){
+  return [`${whatsappBatchName(record)} • telefone ${whatsappNumber(record?.phone)||"inválido"}`,
+    `Histórico anterior: ${capture.previously_saved_messages||0}`,
+    `Encontradas nesta tentativa: ${capture.message_nodes_found||0}`,
+    `Interpretadas nesta tentativa: ${capture.messages_parsed||0}`,
+    `Novas nesta tentativa: ${capture.new_messages_found||0}`,
+    `Total após atualização: ${capture.messages_saved_after_merge||capture.previously_saved_messages||0}`,
+    `Captura concluída: ${capture.completed?"sim":"não"}`,
+    `Gravação concluída: ${database.write_succeeded?"sim":"não"}`,
+    `Etapa: ${capture.failed_stage||database.failed_stage||"—"}`,
+    `Código: ${database.error_code||"—"}`,
+    database.error||capture.error||""].filter(Boolean).join("\n");
+}
+function batchPreflightLabel(preflight){
+  if(!preflight)return "Pré-verificação pendente.";
+  const mark=value=>value?"OK":"ERRO";
+  return `Pré-verificação do WhatsApp • Extensão: ${mark(preflight.extension)} (${preflight.extensionVersion||"—"}) • WhatsApp Web: ${mark(preflight.whatsappWeb)} • Content script: ${mark(preflight.contentScript)} • Supabase Auth: ${mark(preflight.supabaseAuth)} • Banco: ${mark(preflight.database)} • Schema necessário: ${mark(preflight.schema)}${preflight.compatibilityMode?" (modo compatível)":""}${preflight.error?` • ${preflight.error}`:""}`;
+}
+async function runWhatsAppBatchPreflight(){
+  const result={extension:false,extensionVersion:"—",whatsappWeb:false,contentScript:false,supabaseAuth:false,database:false,schema:false,compatibilityMode:false,error:""};
+  try{
+    const extension=await requireCurrentWhatsAppExtension();result.extension=true;result.extensionVersion=extension.extensionVersion||WHATSAPP_EXTENSION_VERSION;
+    const whatsapp=await requestWhatsAppPreflight();result.whatsappWeb=Boolean(whatsapp.whatsappTabFound&&whatsapp.whatsappLoggedIn);result.contentScript=Boolean(whatsapp.contentScriptReady);
+    if(!whatsapp.ok)throw new Error(whatsapp.error||"O WhatsApp Web não passou na pré-verificação.");
+    const {data:authData,error:authError}=await sb.auth.getSession();if(authError||!authData?.session?.user)throw new Error(authError?.message||"Sessão Supabase inválida.");result.supabaseAuth=true;
+    const basic=await sb.from(TBL_RECORDS).select("id").limit(1);if(basic.error)throw basic.error;result.database=true;
+    const essential=await sb.from(TBL_RECORDS).select(WHATSAPP_CAPTURE_ESSENTIAL_COLUMNS.join(",")).limit(1);if(essential.error)throw essential.error;
+    const optional=await sb.from(TBL_RECORDS).select(WHATSAPP_CAPTURE_OPTIONAL_COLUMNS.join(",")).limit(1);
+    if(optional.error){if(isSchemaCompatibilityError(optional.error)){result.compatibilityMode=true;}else throw optional.error;}
+    result.schema=true;
+  }catch(error){result.error=databaseErrorDetails(error).message;result.errorCode=databaseErrorDetails(error).code;}
+  whatsappBatchState.preflight=result;updateWhatsAppBatchPanel(batchPreflightLabel(result));return result;
+}
 function updateWhatsAppBatchPanel(current="Aguardando início."){
   const state=whatsappBatchState;const panel=$("whatsappBatchPanel");if(!panel)return;
   panel.hidden=false;
@@ -1523,12 +1599,14 @@ function updateWhatsAppBatchPanel(current="Aguardando início."){
   $("whatsappBatchUpdated").textContent=`Atualizados: ${state.stats.updated}`;
   $("whatsappBatchNew").textContent=`Com novidades: ${state.stats.newMessages}`;
   $("whatsappBatchStale").textContent=`Análises desatualizadas: ${state.stats.stale}`;
-  $("whatsappBatchAudio").textContent=`Áudios: ${state.stats.audioTotal||0}`;$("whatsappBatchAudioDone").textContent=`Áudios transcritos: ${state.stats.audioDone||0}`;$("whatsappBatchAudioPending").textContent=`Áudios pendentes: ${state.stats.audioPending||0}`;
   $("whatsappBatchIgnored").textContent=`Ignorados: ${state.stats.ignored}`;
   $("whatsappBatchErrorsCount").textContent=`Erros: ${state.stats.errors}`;
   $("whatsappBatchCurrent").textContent=current;
+  $("whatsappBatchPreflight").textContent=batchPreflightLabel(state.preflight);
   $("whatsappBatchLastRun").textContent=`Última atualização geral: ${state.lastRunAt?fmtBRDateTime(state.lastRunAt):"nunca"}`;
   $("btnWhatsAppBatchPause").hidden=!state.running||state.paused;$("btnWhatsAppBatchContinue").hidden=!state.running||!state.paused;$("btnWhatsAppBatchCancel").disabled=!state.running;
+  $("btnWhatsAppBatchRetrySave").hidden=!pendingWhatsAppCaptureSaves.size;
+  $("btnWhatsAppBatch").disabled=!state.fullBatchUnlocked||state.running;
   const errorBox=$("whatsappBatchErrors");errorBox.textContent=state.errors.join("\n\n");errorBox.hidden=!state.errors.length;
   $("btnWhatsAppBatchFilterStale").textContent=whatsappBatchStaleFilter?"Mostrar todos os leads":"Mostrar análises desatualizadas";
 }
@@ -1538,33 +1616,44 @@ function whatsappBatchCandidates(){
   return {queue,ignored:active.length-queue.length};
 }
 function whatsappBatchError(record,error){
-  const message=captureFailureMessage(record,error);return `${whatsappBatchName(record)} • telefone ${whatsappNumber(record?.phone)||"inválido"}\n${message}`;
+  const context=error?.batchContext||{};return whatsappBatchReport(record,context.capture||{},context.database||{error:error?.message||"Falha sem diagnóstico.",error_code:error?.database?.code||"",failed_stage:context.stage||"—"});
 }
 function waitWhatsAppBatch(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
+function systemicFailureType(error){const text=`${error?.message||""} ${error?.database?.code||""} ${error?.database?.message||""}`.toLowerCase();if(/pgrst002|schema cache/.test(text))return "PGRST002";if(/failed to fetch/.test(text))return "Failed to fetch";if(/sessão.*inválida|session.*invalid|jwt/.test(text))return "sessão Supabase inválida";if(/content script|extensão|extension/.test(text))return "extensão/content script indisponível";if(/nenhuma aba.*whatsapp|whatsapp web.*aberta/.test(text))return "WhatsApp Web não localizado";return "";}
+function captureAttemptDetails(record,result){return {extension_responded:Boolean(result?.extensionVersion),whatsapp_tab_found:Boolean(result?.tabUrl),conversation_opened:Boolean(result?.detectedTitle||result?.title),contact_confirmed:Boolean(result?.ok&&!result?.empty),message_nodes_found:Number(result?.domCount||0),messages_parsed:Number(result?.count||0),previously_saved_messages:Number(record?.whatsapp_sync_message_count||0),new_messages_found:0,messages_saved_after_merge:Number(record?.whatsapp_sync_message_count||0),completed:Boolean(result?.ok&&!result?.empty&&Number(result?.count||0)>0),failed_stage:"",error:""};}
+async function retryPendingWhatsAppSaves(){
+  for(const [recordId,pending] of [...pendingWhatsAppCaptureSaves]){
+    try{const saved=await saveWhatsAppCapture(pending.record,pending.result);pendingWhatsAppCaptureSaves.delete(recordId);Object.assign(pending.capture,{new_messages_found:saved.addedCount,messages_saved_after_merge:saved.totalCount});whatsappBatchState.stats.updated+=1;updateWhatsAppBatchPanel(`Conversa de ${whatsappBatchName(pending.record)} salva sem nova captura.`);}catch(error){pending.error=error;}}
+  updateWhatsAppBatchPanel();
+}
 async function runWhatsAppBatch(){
   const state=whatsappBatchState;
   while(state.position<state.queue.length&&!state.cancelled){
     if(state.paused){await new Promise(resolve=>{state.resume=resolve;});continue;}
     const record=state.queue[state.position];const leadPosition=state.position+1;updateWhatsAppBatchPanel(`Lead atual: ${whatsappBatchName(record)} • posição ${leadPosition} de ${state.queue.length}`);
-    let saved=null;let lastError=null;
-    for(let attempt=0;attempt<2&&!saved;attempt+=1){
-      try{
-        const result=await requestWhatsAppAutomaticSync(record);if(!result?.ok)throw Object.assign(new Error(result?.error||"A captura não foi confirmada."),{captureContext:{stage:`lote • tentativa ${attempt+1}`,result}});
-        const merged=await saveWhatsAppCapture(record,result);saved={...merged,result};
-      }catch(error){lastError=error;error.captureContext={stage:`lote • tentativa ${attempt+1}`,result:error.captureContext?.result||null};if(attempt===0)await waitWhatsAppBatch(1000);}
-    }
-    if(saved){const audio=audioStats(saved.record);state.stats.updated+=1;state.stats.newMessages+=saved.addedCount>0?1:0;state.stats.stale+=whatsappAnalysisIsStale(saved.record)?1:0;state.stats.audioTotal=(state.stats.audioTotal||0)+audio.total;state.stats.audioDone=(state.stats.audioDone||0)+audio.completed;state.stats.audioPending=(state.stats.audioPending||0)+audio.pending+audio.error;updateWhatsAppBatchPanel(`Lead atualizado: ${whatsappBatchName(record)} • ${saved.totalCount} mensagens encontradas • ${saved.addedCount} novas`);}
-    else{state.stats.errors+=1;state.errors.push(whatsappBatchError(record,lastError||new Error("Falha sem diagnóstico.")));updateWhatsAppBatchPanel(`Falha em ${whatsappBatchName(record)}; seguindo para o próximo lead.`);}
+    let saved=null,lastError=null,capture=null;
+    try{
+      const result=await openAndCaptureLeadConversation(record,{batch:true});capture=captureAttemptDetails(record,result);
+      if(!result?.ok||result?.empty||!Number(result?.count||0))throw Object.assign(new Error(result?.error||"Nenhuma mensagem foi interpretada; o lead não foi alterado."),{batchContext:{stage:"captura",capture:{...capture,failed_stage:"leitura do DOM",error:result?.error||"DOM vazio"}}});
+      try{saved=await saveWhatsAppCapture(record,result);}catch(error){pendingWhatsAppCaptureSaves.set(record.id,{record,result,capture});throw Object.assign(error,{batchContext:{stage:"gravação no Supabase",capture,database:{write_attempted:true,write_succeeded:false,...databaseErrorDetails(error)}}});}
+    }catch(error){lastError=error;}
+    if(saved){state.stats.updated+=1;state.stats.newMessages+=saved.addedCount>0?1:0;state.stats.stale+=whatsappAnalysisIsStale(saved.record)?1:0;state.systemFailure={type:"",count:0};updateWhatsAppBatchPanel(`Lead atualizado: ${whatsappBatchName(record)} • Histórico anterior: ${capture.previously_saved_messages} • Encontradas: ${capture.messages_parsed} • Novas: ${saved.addedCount} • Total: ${saved.totalCount}`);}
+    else{state.stats.errors+=1;const type=systemicFailureType(lastError);state.systemFailure=type&&state.systemFailure.type===type?{type,count:state.systemFailure.count+1}:{type,count:type?1:0};state.errors.push(whatsappBatchError(record,lastError||new Error("Falha sem diagnóstico.")));if(type&&state.systemFailure.count>=2){state.paused=true;state.systemPaused=true;updateWhatsAppBatchPanel(`Atualização pausada por falha sistêmica: ${type}. Último lead: ${whatsappBatchName(record)}. Corrija a pré-verificação antes de continuar.`);break;}updateWhatsAppBatchPanel(`Falha em ${whatsappBatchName(record)}; nenhuma alteração foi salva para este lead.`);}
     state.position+=1;await waitWhatsAppBatch(900);
   }
   state.running=false;state.paused=false;state.lastRunAt=nowISO();localStorage.setItem("criare_whatsapp_batch_last_run",state.lastRunAt);
-  updateWhatsAppBatchPanel(state.cancelled?"Atualização cancelada.":`Atualização concluída • ${state.stats.updated} conversas atualizadas • ${state.stats.newMessages} com mensagens novas • ${state.stats.stale} análises desatualizadas • ${state.stats.errors} falhas.`);
+  if(state.mode==="test"&&state.stats.updated===3&&state.stats.errors===0){state.fullBatchUnlocked=true;$("btnWhatsAppBatch").disabled=false;}
+  updateWhatsAppBatchPanel(state.systemPaused?"Atualização pausada por falha sistêmica.":state.cancelled?"Atualização cancelada.":`Atualização concluída • ${state.stats.updated} conversas atualizadas • ${state.stats.newMessages} com mensagens novas • ${state.stats.stale} análises desatualizadas • ${state.stats.errors} falhas.`);
   state.cancelled=false;
 }
-function startWhatsAppBatch(){
+function whatsappBatchTestCandidates(){const {queue}=whatsappBatchCandidates();const find=name=>queue.find(record=>whatsappBatchName(record).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().includes(name));const first=find("nathalia"),second=find("melissa"),third=queue.find(record=>record!==first&&record!==second&&Number(record.whatsapp_sync_message_count||0)===0);return [first,second,third].filter(Boolean);}
+async function startWhatsAppBatch({mode="full"}={}){
   if(whatsappBatchState.running)return;
-  const candidates=whatsappBatchCandidates();Object.assign(whatsappBatchState,{running:true,paused:false,cancelled:false,queue:candidates.queue,position:0,stats:{updated:0,newMessages:0,stale:0,audioTotal:0,audioDone:0,audioPending:0,ignored:candidates.ignored,errors:0},errors:[],resume:null});
-  updateWhatsAppBatchPanel(`Preparando fila sequencial com ${candidates.queue.length} leads válidos.`);runWhatsAppBatch().catch(error=>{whatsappBatchState.running=false;whatsappBatchState.stats.errors+=1;whatsappBatchState.errors.push(error.message||"Falha no lote.");updateWhatsAppBatchPanel("Atualização interrompida com erro.");});
+  if(mode==="full"&&!whatsappBatchState.fullBatchUnlocked)return toast("O lote completo permanece bloqueado até o teste controlado passar.",{error:true,duration:12000});
+  const preflight=await runWhatsAppBatchPreflight();if(!preflight.extension||!preflight.whatsappWeb||!preflight.contentScript||!preflight.supabaseAuth||!preflight.database||!preflight.schema)return updateWhatsAppBatchPanel("Lote bloqueado: corrija a pré-verificação antes de iniciar.");
+  const candidates=whatsappBatchCandidates();const queue=mode==="test"?whatsappBatchTestCandidates():candidates.queue;if(mode==="test"&&queue.length!==3)return updateWhatsAppBatchPanel("Teste bloqueado: Nathalia, Melissa e um lead novo com telefone válido são necessários.");
+  Object.assign(whatsappBatchState,{running:true,paused:false,cancelled:false,systemPaused:false,mode,queue,position:0,stats:{updated:0,newMessages:0,stale:0,ignored:mode==="test"?0:candidates.ignored,errors:0},errors:[],resume:null,systemFailure:{type:"",count:0}});
+  updateWhatsAppBatchPanel(`Preparando ${mode==="test"?"teste controlado":"fila sequencial"} com ${queue.length} leads válidos.`);runWhatsAppBatch().catch(error=>{whatsappBatchState.running=false;whatsappBatchState.stats.errors+=1;whatsappBatchState.errors.push(error.message||"Falha no lote.");updateWhatsAppBatchPanel("Atualização interrompida com erro.");});
 }
 async function analyzeSavedWhatsAppConversation(record){
   const saved=normalizeLegacyWhatsAppRecord(record);
@@ -1987,7 +2076,7 @@ let appDataTitle = "Carregando seus dados";
 let appDataMessage = "Conectando à base compartilhada da Criare…";
 let deferredInstallPrompt = null;
 let whatsappBatchStaleFilter = false;
-const whatsappBatchState = {running:false,paused:false,cancelled:false,queue:[],position:0,stats:{updated:0,newMessages:0,stale:0,ignored:0,errors:0},errors:[],lastRunAt:localStorage.getItem("criare_whatsapp_batch_last_run")||""};
+const whatsappBatchState = {running:false,paused:false,cancelled:false,systemPaused:false,fullBatchUnlocked:false,mode:"test",queue:[],position:0,stats:{updated:0,newMessages:0,stale:0,ignored:0,errors:0},errors:[],preflight:null,systemFailure:{type:"",count:0},lastRunAt:localStorage.getItem("criare_whatsapp_batch_last_run")||""};
 
 let syncConnectionState = "offline";
 let lastSuccessfulSyncAt = null;
@@ -4248,10 +4337,13 @@ $("btnSync").addEventListener("click", async ()=>{
 });
 
 $("btnSyncWhatsAppAll").addEventListener("click", showOfficialWhatsAppOverview);
-$("btnWhatsAppBatch").addEventListener("click", startWhatsAppBatch);
+$("btnWhatsAppBatch").addEventListener("click", ()=>startWhatsAppBatch({mode:"full"}));
+$("btnWhatsAppBatchTest").addEventListener("click", ()=>startWhatsAppBatch({mode:"test"}));
+$("btnWhatsAppBatchPreflight").addEventListener("click", ()=>runWhatsAppBatchPreflight());
 $("btnWhatsAppBatchPause").addEventListener("click",()=>{whatsappBatchState.paused=true;updateWhatsAppBatchPanel("Atualização pausada pelo usuário.");});
-$("btnWhatsAppBatchContinue").addEventListener("click",()=>{whatsappBatchState.paused=false;whatsappBatchState.resume?.();whatsappBatchState.resume=null;updateWhatsAppBatchPanel("Atualização retomada.");});
+$("btnWhatsAppBatchContinue").addEventListener("click",async()=>{if(whatsappBatchState.systemPaused){const preflight=await runWhatsAppBatchPreflight();if(!preflight.extension||!preflight.whatsappWeb||!preflight.contentScript||!preflight.supabaseAuth||!preflight.database||!preflight.schema)return updateWhatsAppBatchPanel("Continuação bloqueada pela pré-verificação.");whatsappBatchState.systemPaused=false;whatsappBatchState.systemFailure={type:"",count:0};}whatsappBatchState.paused=false;whatsappBatchState.resume?.();whatsappBatchState.resume=null;updateWhatsAppBatchPanel("Atualização retomada.");});
 $("btnWhatsAppBatchCancel").addEventListener("click",()=>{whatsappBatchState.cancelled=true;whatsappBatchState.paused=false;whatsappBatchState.resume?.();whatsappBatchState.resume=null;updateWhatsAppBatchPanel("Cancelando após concluir o lead atual…");});
+$("btnWhatsAppBatchRetrySave").addEventListener("click",()=>retryPendingWhatsAppSaves());
 $("btnWhatsAppBatchCopyErrors").addEventListener("click",async()=>{const report=whatsappBatchState.errors.join("\n\n")||"Nenhuma falha registrada.";try{await navigator.clipboard.writeText(report);toast("Relatório de falhas copiado.",{duration:5000});}catch(error){toast("Não foi possível copiar o relatório.",{error:true,duration:12000});}});
 $("btnWhatsAppBatchFilterStale").addEventListener("click",()=>{whatsappBatchStaleFilter=!whatsappBatchStaleFilter;updateWhatsAppBatchPanel();render();});
 $("btnRetryLoad").addEventListener("click", async ()=>{

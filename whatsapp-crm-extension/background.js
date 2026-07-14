@@ -207,6 +207,21 @@ async function captureOpenWhatsAppChat(request,sender){
   }
 }
 
+async function preflightWhatsApp(request,sender){
+  const extensionVersion = chrome.runtime.getManifest().version;
+  const tabs = await chrome.tabs.query({url:"https://web.whatsapp.com/*"});
+  const tab = tabs.sort((a,b)=>(b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
+  if(!tab?.id) return {ok:false,extensionVersion,whatsappTabFound:false,contentScriptReady:false,whatsappLoggedIn:false,error:"Nenhuma aba do WhatsApp Web está aberta."};
+  try{
+    const status = await chrome.tabs.sendMessage(tab.id,{type:"criare-content-script-status"});
+    if(status?.contentScriptVersion !== extensionVersion) throw new Error("O leitor do WhatsApp Web está desatualizado.");
+    const readiness = await chrome.tabs.sendMessage(tab.id,{type:"criare-whatsapp-readiness"});
+    return {ok:Boolean(readiness?.ok&&readiness.loggedIn),extensionVersion,whatsappTabFound:true,contentScriptReady:Boolean(readiness?.ok),whatsappLoggedIn:Boolean(readiness?.loggedIn),tabUrl:tab.url||"",messageNodes:Number(readiness?.messageNodes||0),detectedTitle:readiness?.title||"",error:readiness?.loggedIn?"":"O WhatsApp Web não está conectado."};
+  }catch(error){
+    return {ok:false,extensionVersion,whatsappTabFound:true,contentScriptReady:false,whatsappLoggedIn:false,tabUrl:tab.url||"",error:error.message||"O content script do WhatsApp Web não respondeu."};
+  }
+}
+
 async function forwardAudioTranscription(message){
   const phone=validPhone(message?.request?.phone);const crmTabId=crmCaptureTabs.get(phone);
   if(!crmTabId)return {ok:false,error:"Nenhuma aba do CRM está associada a este lead."};
@@ -223,6 +238,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
     "criare-open-whatsapp-chat":openCustomerChat,
     "criare-capture-active-whatsapp":captureCustomerChat,
     "criare-capture-open-whatsapp":captureOpenWhatsAppChat,
+    "criare-preflight-whatsapp":preflightWhatsApp,
     "criare-audio-transcription-complete":forwardAudioTranscription,
     "criare-sync-whatsapp-record":syncCustomerChat
   };

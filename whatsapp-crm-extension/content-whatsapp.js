@@ -350,7 +350,8 @@ async function extractLoadedMessages(request={}){
     scrollPasses:history.scrollPasses,
     profilePhotoUrl:profilePhotoUrl(main),limited:history.limited
   };
-  queueMicrotask(()=>processAudioQueue(main,request,history).catch(()=>{}));
+  // A fila em lote precisa concluir texto e gravação sem depender de áudio local.
+  if(!request?.disableAudio) queueMicrotask(()=>processAudioQueue(main,request,history).catch(()=>{}));
   return payload;
 }
 
@@ -361,6 +362,12 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   }
   if(message?.type === "criare-prepare-next-chat"){
     sendResponse({ok:true,dismissed:dismissUnavailableDialog(),contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION});
+    return false;
+  }
+  if(message?.type === "criare-whatsapp-readiness"){
+    const qr = Boolean(document.querySelector('[data-testid="qrcode"],[data-ref] canvas'));
+    const main = activeMain();
+    sendResponse({ok:true,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,mainFound:Boolean(main),loggedIn:Boolean(main)&&!qr,title:activeChatTitle(),messageNodes:messageNodes(main).length});
     return false;
   }
   if(message?.type === "criare-chat-load-state"){

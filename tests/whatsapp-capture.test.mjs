@@ -49,8 +49,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.5"/);
-  assert.equal(manifest.version,"2.1.5");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.6"/);
+  assert.equal(manifest.version,"2.1.6");
   assert(crm.includes("https://web.whatsapp.com/send/?phone=${number}"));
   assert(!crm.includes("whatsapp://"));
   assert.match(crm,/id="btnCaptureOpenWhatsApp"[^>]*>Capturar conversa aberta/);
@@ -58,7 +58,17 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(background,/criare-audio-transcription-complete/);
   assert.match(contentCrm,/criare-whatsapp-open-capture/);
   assert.match(crm,/id="btnWhatsAppBatch"[^>]*>Atualizar conversas do WhatsApp/);
+  assert.match(crm,/id="btnWhatsAppBatchTest"[^>]*>Testar atualização em 3 leads/);
   assert.match(crm,/id="whatsappBatchPanel"/);
+  assert.match(crm,/runWhatsAppBatchPreflight/);
+  assert.match(crm,/WHATSAPP_BATCH_AUDIO_ENABLED = false/);
+  assert.match(crm,/openAndCaptureLeadConversation/);
+  assert.match(crm,/writeWhatsAppCapturePatch/);
+  assert.match(crm,/PGRST002/);
+  assert.match(background,/criare-preflight-whatsapp/);
+  assert.match(contentCrm,/criare-whatsapp-preflight/);
+  assert.match(content,/criare-whatsapp-readiness/);
+  assert.match(content,/if\(!request\?\.disableAudio\)/);
   assert.match(crm,/whatsappAnalysisIsStale/);
   assert.match(content,/LOCAL_TRANSCRIBER_URL/);
   assert.match(content,/matches:sameCustomer\(title, request\)/);

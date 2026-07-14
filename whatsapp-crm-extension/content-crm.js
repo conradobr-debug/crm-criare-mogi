@@ -47,6 +47,15 @@ document.addEventListener("criare-whatsapp-extension-ping",()=>{
   });
 });
 
+document.addEventListener("criare-whatsapp-preflight",()=>{
+  const request = readRequest("criareWhatsAppPreflightRequest");
+  chrome.runtime.sendMessage({type:"criare-preflight-whatsapp",request},result=>{
+    returnResult("criareWhatsAppPreflightResult","criare-whatsapp-preflight-result",chrome.runtime.lastError
+      ? {ok:false,requestId:request.requestId,error:"A extensão Criare não respondeu ao diagnóstico."}
+      : {...(result || {ok:false}),requestId:request.requestId});
+  });
+});
+
 chrome.runtime.onMessage.addListener((message)=>{
   if(message?.type!=="criare-audio-transcription-update")return false;
   document.documentElement.dataset.criareWhatsAppAudioTranscriptionUpdate=JSON.stringify({phone:message.phone||"",entry:message.entry||{}});
