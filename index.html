@@ -498,6 +498,8 @@
     <span class="appStateSpinner" aria-hidden="true"></span>
     <div><strong id="appStateTitle">Carregando seus dados</strong><span id="appStateMessage">Conectando à base compartilhada da Criare…</span></div>
     <button class="ghost" id="btnRetryLoad" type="button" hidden>Tentar novamente</button>
+    <button class="ghost" id="btnCopyLoadDiagnostic" type="button" hidden>Copiar diagnóstico</button>
+    <button class="ghost" id="btnExitLoad" type="button" hidden>Sair</button>
   </div>
 
   <div class="toolbar">
@@ -2074,12 +2076,51 @@ let bootedUserId = null;
 let appDataState = "loading";
 let appDataTitle = "Carregando seus dados";
 let appDataMessage = "Conectando à base compartilhada da Criare…";
+let bootDiagnostic = "";
 let deferredInstallPrompt = null;
 let whatsappBatchStaleFilter = false;
 const whatsappBatchState = {running:false,paused:false,cancelled:false,systemPaused:false,fullBatchUnlocked:false,mode:"test",queue:[],position:0,stats:{updated:0,newMessages:0,stale:0,ignored:0,errors:0},errors:[],preflight:null,systemFailure:{type:"",count:0},lastRunAt:localStorage.getItem("criare_whatsapp_batch_last_run")||""};
 
 let syncConnectionState = "offline";
 let lastSuccessfulSyncAt = null;
+const BOOT_QUERY_TIMEOUT_MS = 10000;
+
+function withTimeout(promise, milliseconds=BOOT_QUERY_TIMEOUT_MS, label="consulta"){
+  let timer = null;
+  return new Promise((resolve, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(`Tempo esgotado na etapa: ${label}.`);
+      error.code = "BOOT_TIMEOUT";
+      error.stage = label;
+      reject(error);
+    }, milliseconds);
+    Promise.resolve(promise).then(
+      value => { clearTimeout(timer); resolve(value); },
+      error => { clearTimeout(timer); reject(error); }
+    );
+  });
+}
+
+function sessionProfileFallback(){
+  const name = session?.user?.user_metadata?.display_name
+    || session?.user?.user_metadata?.name
+    || session?.user?.email?.split("@")[0]
+    || "Usuário";
+  return [{ id: session?.user?.id || "current-user", display_name: name }];
+}
+
+function describeBootError(error, stage){
+  const code = error?.code || "SEM_CODIGO";
+  const message = error?.message || "Consulta não respondeu.";
+  const at = new Date().toLocaleString("pt-BR");
+  const authenticated = session?.user ? "sim" : "não";
+  return `Etapa: ${stage} • Código: ${code} • ${message} • Horário: ${at} • Sessão autenticada: ${authenticated}`;
+}
+
+function noteOptionalBootFailure(label, error){
+  console.warn(`[CRM Boot] ${label} indisponível.`, error);
+  toast(`${label} temporariamente indisponível. O CRM continua disponível.`, { duration:5000 });
+}
 
 function isMobileLayout(){ return window.matchMedia("(max-width: 760px)").matches; }
 function setAppDataState(state, title, message){
@@ -2095,6 +2136,8 @@ function updateAppStateBanner(){
   $("appStateTitle").textContent = appDataTitle;
   $("appStateMessage").textContent = appDataMessage;
   $("btnRetryLoad").hidden = appDataState !== "error";
+  $("btnCopyLoadDiagnostic").hidden = appDataState !== "error";
+  $("btnExitLoad").hidden = appDataState !== "error";
 }
 function statePanelHtml(){
   const title = appDataState === "auth" ? "Entre para ver os dados" : appDataTitle;
@@ -2267,14 +2310,15 @@ async function doSignOut(){
 async function ensureProfile(){
   const uid = session.user.id;
   const { data, error } = await sb.from(TBL_PROFILES).select("id, display_name").eq("id", uid).maybeSingle();
-  if(error) return toast("Erro ao ler perfil.");
+  if(error){ toast("Erro ao ler perfil."); return false; }
 
   if(!data){
     const display = prompt("Seu nome para exibir no CRM (ex.: Marianna):");
     const name = (display||"").trim() || "Usuário";
     const ins = await sb.from(TBL_PROFILES).insert({ id: uid, display_name: name });
-    if(ins.error) return toast("Erro ao criar perfil.");
+    if(ins.error){ toast("Erro ao criar perfil."); return false; }
   }
+  return true;
 }
 
 async function ensureConfigRow(){
@@ -2282,25 +2326,28 @@ async function ensureConfigRow(){
   const { data, error } = await sb.from(TBL_CONFIG).select("id, sources, lost_reasons").eq("id", 1).maybeSingle();
   if(error){
     toast("Erro ao ler config.");
-    return;
+    return false;
   }
   if(!data){
     const { error: insErr } = await sb.from(TBL_CONFIG).insert({ id: 1, sources: DEFAULT_SOURCES, lost_reasons: DEFAULT_LOST_REASONS });
-    if(insErr) toast("Erro ao criar config.");
+    if(insErr){ toast("Erro ao criar config."); return false; }
   }
+  return true;
 }
 
 async function fetchConfig(){
   const { data, error } = await sb.from(TBL_CONFIG).select("id, sources, lost_reasons").eq("id", 1).single();
-  if(error) return toast("Erro ao carregar config.");
+  if(error){ toast("Erro ao carregar config."); return false; }
   config.sources = Array.isArray(data.sources) ? data.sources : DEFAULT_SOURCES.slice();
   config.lost_reasons = Array.isArray(data.lost_reasons) ? data.lost_reasons : DEFAULT_LOST_REASONS.slice();
+  return true;
 }
 
 async function fetchProfiles(){
   const { data, error } = await sb.from(TBL_PROFILES).select("id, display_name").order("display_name", { ascending: true });
-  if(error) return toast("Erro ao carregar usuários.");
+  if(error){ toast("Erro ao carregar usuários."); return false; }
   profiles = data || [];
+  return true;
 }
 
 async function fetchRecordEvents(){
@@ -2397,7 +2444,7 @@ async function refreshWhatsAppAvatarUrls(items=records){
   whatsappAvatarUrls = next;
 }
 
-async function fetchRecords({ reason="sincronização", notifyNew=true, showError=false }={}){
+async function fetchRecords({ reason="sincronização", notifyNew=true, showError=false, timeoutMs=0, deferAvatarRefresh=false, throwOnError=false }={}){
   if(!sb || !session?.user) return false;
 
   if(recordsFetchPromise){
@@ -2410,17 +2457,26 @@ async function fetchRecords({ reason="sincronização", notifyNew=true, showErro
   const hadInitialSnapshot = hasInitialRecordSnapshot;
 
   recordsFetchPromise = (async () => {
-    const { data, error } = await sb
+    const query = sb
       .from(TBL_RECORDS)
       .select("*")
       .order("stage_entered_at", { ascending: false });
+    const { data, error } = timeoutMs
+      ? await withTimeout(query, timeoutMs, "crm_records")
+      : await query;
 
     if(error) throw error;
 
     const loadedRecords = data || [];
     const changed = previousVersion !== recordsStateVersion(loadedRecords);
     records = loadedRecords;
-    await refreshWhatsAppAvatarUrls(records);
+    if(deferAvatarRefresh){
+      void withTimeout(refreshWhatsAppAvatarUrls(records), BOOT_QUERY_TIMEOUT_MS, "fotos dos leads")
+        .then(() => render())
+        .catch(error => console.warn("[CRM Boot] Fotos dos leads indisponíveis.", error));
+    }else{
+      await refreshWhatsAppAvatarUrls(records);
+    }
     if(hadInitialSnapshot && notifyNew){
       records
         .filter(record => !previousIds.has(record.id))
@@ -2437,6 +2493,7 @@ async function fetchRecords({ reason="sincronização", notifyNew=true, showErro
     console.error("[CRM Sync] Erro ao carregar registros.", { reason, error });
     setSyncConnectionState(navigator.onLine ? "error" : "offline");
     if(showError) toast("Erro ao sincronizar. Tente novamente.");
+    if(throwOnError) throw error;
     return false;
   }).finally(() => {
     recordsFetchPromise = null;
@@ -2469,23 +2526,69 @@ async function bootAfterLogin(){
     hasInitialRecordSnapshot = false;
     hasInitialWeeklySnapshot = false;
     setSyncConnectionState(navigator.onLine ? "reconnecting" : "offline");
-    await ensureConfigRow();
-    await ensureProfile();
-    await Promise.all([fetchConfig(), fetchProfiles()]);
+    bootDiagnostic = "";
+    profiles = sessionProfileFallback();
     buildFilters();
-    const loaded = await fetchRecords({ reason:"carga inicial", notifyNew:false, showError:true });
+    const loaded = await fetchRecords({
+      reason:"carga inicial",
+      notifyNew:false,
+      showError:false,
+      timeoutMs:BOOT_QUERY_TIMEOUT_MS,
+      deferAvatarRefresh:true,
+      throwOnError:true
+    });
     if(!loaded) throw new Error("Não foi possível carregar os registros compartilhados.");
-    await Promise.all([fetchRecordEvents(), fetchWeeklyReports(), fetchPendingData(), fetchOutlookStatus(), typeof partnerFetchContents === "function" ? partnerFetchContents() : Promise.resolve()]);
     bootedUserId = userId;
-    setAppDataState("ready", "Dados carregados", `${records.length} registros e ${pendingItems.length} pendências sincronizados.`);
+    setAppDataState("ready", "Dados carregados", `${records.length} registros sincronizados.`);
     render();
     if($("loginModal").open) closeLogin();
     await syncController.start();
+
+    void (async()=>{
+      try{
+        if(!await withTimeout(ensureConfigRow(), BOOT_QUERY_TIMEOUT_MS, "crm_config")) throw new Error("Não foi possível consultar crm_config.");
+        if(!await withTimeout(fetchConfig(), BOOT_QUERY_TIMEOUT_MS, "crm_config")) throw new Error("Não foi possível carregar crm_config.");
+        buildFilters();
+        render();
+      }catch(error){
+        config = { sources: DEFAULT_SOURCES.slice(), lost_reasons: DEFAULT_LOST_REASONS.slice() };
+        buildFilters();
+        render();
+        noteOptionalBootFailure("Configuração", error);
+      }
+    })();
+    void (async()=>{
+      try{
+        if(!await withTimeout(ensureProfile(), BOOT_QUERY_TIMEOUT_MS, "perfil atual")) throw new Error("Não foi possível consultar o perfil atual.");
+        if(!await withTimeout(fetchProfiles(), BOOT_QUERY_TIMEOUT_MS, "crm_profiles")) throw new Error("Não foi possível carregar crm_profiles.");
+        if(!profiles.length) profiles = sessionProfileFallback();
+        buildFilters();
+        render();
+      }catch(error){
+        profiles = sessionProfileFallback();
+        buildFilters();
+        render();
+        noteOptionalBootFailure("Perfis", error);
+      }
+    })();
+    void Promise.allSettled([
+      withTimeout(fetchRecordEvents(), BOOT_QUERY_TIMEOUT_MS, "histórico de eventos"),
+      withTimeout(fetchWeeklyReports(), BOOT_QUERY_TIMEOUT_MS, "relatórios"),
+      withTimeout(fetchPendingData(), BOOT_QUERY_TIMEOUT_MS, "crm_pending_items"),
+      withTimeout(fetchOutlookStatus(), BOOT_QUERY_TIMEOUT_MS, "Outlook"),
+      withTimeout(typeof partnerFetchContents === "function" ? partnerFetchContents() : Promise.resolve(), BOOT_QUERY_TIMEOUT_MS, "parceiros")
+    ]).then(results => {
+      results.forEach((result, index) => {
+        if(result.status === "rejected") noteOptionalBootFailure(["Histórico", "Relatórios", "Pendências", "Outlook", "Parceiros"][index], result.reason);
+      });
+      render();
+    });
   })().catch(error => {
     console.error("[CRM Boot] Falha ao iniciar aplicação.", error);
-    setAppDataState("error", "Não foi possível carregar os dados", "Sua base continua segura. Verifique a conexão e toque em “Tentar novamente”.");
+    bootDiagnostic = describeBootError(error, error?.stage || "crm_records");
+    setAppDataState("error", "Não foi possível carregar os leads.", bootDiagnostic);
     render();
-    toast("Falha ao carregar os dados. Tente novamente.");
+    toast("Banco temporariamente indisponível. Tente carregar novamente.");
     setSyncConnectionState("error");
   }).finally(() => {
     bootPromise = null;
@@ -4351,6 +4454,15 @@ $("btnRetryLoad").addEventListener("click", async ()=>{
   bootedUserId = null;
   await bootAfterLogin();
 });
+$("btnCopyLoadDiagnostic").addEventListener("click", async ()=>{
+  try{
+    await navigator.clipboard.writeText(bootDiagnostic || "Nenhum diagnóstico disponível.");
+    toast("Diagnóstico copiado.");
+  }catch(error){
+    toast("Não foi possível copiar o diagnóstico.", { error:true });
+  }
+});
+$("btnExitLoad").addEventListener("click", ()=>doSignOut());
 
 window.addEventListener("beforeinstallprompt", event=>{
   event.preventDefault();
