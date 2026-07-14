@@ -2164,6 +2164,11 @@ function isNetworkAuthError(error){
   return /failed to fetch|network|fetcherror/i.test(String(error?.message || error?.name || "")) && !error?.status;
 }
 
+function sessionFromLocalFallback(){
+  if(localAuthInfo.session) return localAuthInfo.session;
+  return session?.user ? session : { user:localAuthInfo.user || { id:"local-session-pending", email:"" } };
+}
+
 function setAuthenticatedActionsEnabled(enabled){
   ["btnNew","btnSync","btnSyncWhatsAppAll","btnWhatsAppBatchTest","btnWhatsAppBatch","btnExportJson","btnWipe"].forEach(id=>{
     const element = $(id);
@@ -2299,9 +2304,12 @@ async function initSupabase(){
   }catch(error){
     console.error("[CRM Auth] Falha ao recuperar sessão.", error);
     authInitializationFinished = true;
-    if(localAuthInfo.found && localAuthInfo.session && isNetworkAuthError(error)){
+    if(isNetworkAuthError(error)){
+      // getSession só tenta refresh remoto quando encontrou uma sessão persistida.
+      // Em falha de rede, preservamos essa evidência sem expor ou inventar tokens.
+      localAuthInfo.found = true;
       lastAuthValidationError = error;
-      session = localAuthInfo.session;
+      session = sessionFromLocalFallback();
       currentAuthState = localAuthInfo.expired ? "expired_session" : "local_session_pending_validation";
       updateSessionLine();
       bootDiagnostic = authDiagnostic(error, "supabase.auth.getSession()");
@@ -2402,8 +2410,9 @@ async function validateSessionAgain(){
     await bootAfterLogin();
   }catch(error){
     lastAuthValidationError = error;
-    if(localAuthInfo.found && localAuthInfo.session && isNetworkAuthError(error)){
-      session = localAuthInfo.session;
+    if(isNetworkAuthError(error)){
+      localAuthInfo.found = true;
+      session = sessionFromLocalFallback();
       currentAuthState = localAuthInfo.expired ? "expired_session" : "local_session_pending_validation";
       updateSessionLine();
       bootDiagnostic = authDiagnostic(error, "supabase.auth.getSession()");
