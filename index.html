@@ -2198,10 +2198,18 @@ async function initSupabase(){
     anonKey:SUPABASE_ANON_KEY,
     getAccessToken:async()=>session?.access_token || (await sb.auth.getSession()).data.session?.access_token || ""
   });
-  const { data, error } = await sb.auth.getSession();
-  if(error){
+  let data;
+  try{
+    const result = await withTimeout(sb.auth.getSession(), BOOT_QUERY_TIMEOUT_MS, "sessão autenticada");
+    data = result.data;
+    if(result.error) throw result.error;
+  }catch(error){
     console.error("[CRM Auth] Falha ao recuperar sessão.", error);
-    toast("Não foi possível recuperar a sessão.");
+    bootDiagnostic = describeBootError(error, error?.stage || "sessão autenticada");
+    setAppDataState("error", "Não foi possível iniciar o CRM.", bootDiagnostic);
+    render();
+    setSyncConnectionState("error");
+    return;
   }
   session = data.session;
   updateSessionLine();
