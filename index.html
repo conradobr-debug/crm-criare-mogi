@@ -1578,22 +1578,45 @@ function whatsappBatchReport(record,capture={},database={}){
 }
 function batchPreflightLabel(preflight){
   if(!preflight)return "Pré-verificação pendente.";
-  const mark=value=>value?"OK":"ERRO";
-  return `Pré-verificação do WhatsApp • Extensão: ${mark(preflight.extension)} (${preflight.extensionVersion||"—"}) • WhatsApp Web: ${mark(preflight.whatsappWeb)} • Content script: ${mark(preflight.contentScript)} • Supabase Auth: ${mark(preflight.supabaseAuth)} • Banco: ${mark(preflight.database)} • Schema necessário: ${mark(preflight.schema)}${preflight.compatibilityMode?" (modo compatível)":""}${preflight.error?` • ${preflight.error}`:""}`;
+  const label = status => ({ok:"OK",error:"ERRO",warning:"AVISO",not_tested:"NÃO TESTADO"}[status] || "NÃO TESTADO");
+  const check = key => label(preflight.checks?.[key]?.status);
+  const details = preflight.whatsappDetails;
+  const whatsappText = preflight.checks?.whatsapp?.message || "—";
+  const technical = details ? `\nWhatsApp técnico • URL: ${details.tabUrl||"—"} • Título: ${details.title||"—"} • readyState: ${details.readyState||"—"} • QR Code: ${details.qrCodeDetected?"sim":"não"} • Lista lateral: ${details.conversationListCount||0} • Busca: ${details.searchDetected?"sim":"não"} • Painel: ${details.panelDetected?"sim":"não"} • Composer: ${details.composerDetected?"sim":"não"} • Classificação: ${details.state||"—"}` : "";
+  return `Pré-verificação do WhatsApp • Extensão: ${check("extension")} (${preflight.extensionVersion||"—"}) • Background: ${check("background")} • Aba: ${check("tab")} • Content script: ${check("contentScript")} • WhatsApp Web: ${check("whatsapp")} — ${whatsappText} • Supabase Auth: ${check("supabaseAuth")} • Banco: ${check("database")} • Schema necessário: ${check("schema")}${preflight.compatibilityMode?" (modo compatível)":""}${technical}`;
 }
 async function runWhatsAppBatchPreflight(){
-  const result={extension:false,extensionVersion:"—",whatsappWeb:false,contentScript:false,supabaseAuth:false,database:false,schema:false,compatibilityMode:false,error:""};
+  const checks=Object.fromEntries(["extension","background","tab","contentScript","whatsapp","supabaseAuth","database","schema"].map(key=>[key,{status:"not_tested",message:"Não testado."}]));
+  const result={extension:false,extensionVersion:"—",whatsappWeb:false,contentScript:false,supabaseAuth:false,database:false,schema:false,compatibilityMode:false,checks,whatsappDetails:null};
   try{
-    const extension=await requireCurrentWhatsAppExtension();result.extension=true;result.extensionVersion=extension.extensionVersion||WHATSAPP_EXTENSION_VERSION;
-    const whatsapp=await requestWhatsAppPreflight();result.whatsappWeb=Boolean(whatsapp.whatsappTabFound&&whatsapp.whatsappLoggedIn);result.contentScript=Boolean(whatsapp.contentScriptReady);
-    if(!whatsapp.ok)throw new Error(whatsapp.error||"O WhatsApp Web não passou na pré-verificação.");
-    const {data:authData,error:authError}=await sb.auth.getSession();if(authError||!authData?.session?.user)throw new Error(authError?.message||"Sessão Supabase inválida.");result.supabaseAuth=true;
-    const basic=await sb.from(TBL_RECORDS).select("id").limit(1);if(basic.error)throw basic.error;result.database=true;
-    const essential=await sb.from(TBL_RECORDS).select(WHATSAPP_CAPTURE_ESSENTIAL_COLUMNS.join(",")).limit(1);if(essential.error)throw essential.error;
-    const optional=await sb.from(TBL_RECORDS).select(WHATSAPP_CAPTURE_OPTIONAL_COLUMNS.join(",")).limit(1);
+    const extension=await requireCurrentWhatsAppExtension();result.extension=true;result.extensionVersion=extension.extensionVersion||WHATSAPP_EXTENSION_VERSION;checks.extension={status:"ok",message:"Extensão disponível."};
+  }catch(error){checks.extension={status:"error",message:error.message||"Extensão indisponível."};}
+  if(result.extension){
+    const whatsapp=await requestWhatsAppPreflight();
+    result.whatsappDetails={tabUrl:whatsapp.tabUrl||"",title:whatsapp.detectedTitle||"",readyState:whatsapp.readyState||"",qrCodeDetected:Boolean(whatsapp.qrCodeDetected),conversationListCount:Number(whatsapp.signals?.conversationList||0),searchDetected:Boolean(whatsapp.signals?.search),panelDetected:Boolean(whatsapp.panelDetected),composerDetected:Boolean(whatsapp.composerDetected),state:whatsapp.whatsappState||""};
+    checks.background={status:whatsapp.whatsappTabFound!==undefined?"ok":"error",message:whatsapp.whatsappTabFound!==undefined?"Background respondeu.":(whatsapp.error||"Background não respondeu.")};
+    checks.tab={status:whatsapp.whatsappTabFound?"ok":"error",message:whatsapp.whatsappTabFound?"Aba do WhatsApp Web encontrada.":(whatsapp.error||"Aba não encontrada.")};
+    checks.contentScript={status:whatsapp.contentScriptReady?"ok":(whatsapp.whatsappTabFound?"error":"not_tested"),message:whatsapp.contentScriptReady?"Content script respondeu.":(whatsapp.error||"Content script não testado.")};
+    result.contentScript=Boolean(whatsapp.contentScriptReady);
+    result.whatsappWeb=Boolean(whatsapp.ok&&whatsapp.whatsappLoggedIn);
+    const stateMessages={tab_not_found:"Aba não encontrada.",content_script_no_response:"Content script sem resposta.",loading:"WhatsApp Web carregando.",login_required:"Login necessário / QR Code detectado.",connected_without_open_chat:"Conectado, nenhuma conversa aberta.",connected_with_open_chat:"Conectado, conversa aberta.",interface_unrecognized:"Interface não reconhecida."};
+    checks.whatsapp={status:result.whatsappWeb?"ok":(whatsapp.whatsappState==="loading"?"warning":"error"),message:stateMessages[whatsapp.whatsappState]||whatsapp.error||"WhatsApp Web não reconhecido."};
+  }
+  try{
+    const {data:authData,error:authError}=await withTimeout(sb.auth.getSession(),BOOT_QUERY_TIMEOUT_MS,"preflight Supabase Auth");
+    if(authError||!authData?.session?.user) throw authError||new Error("Sessão Supabase inválida.");
+    result.supabaseAuth=true;checks.supabaseAuth={status:"ok",message:"Sessão autenticada."};
+  }catch(error){checks.supabaseAuth={status:"error",message:databaseErrorDetails(error).message};}
+  try{
+    const basic=await withTimeout(sb.from(TBL_RECORDS).select("id").limit(1),BOOT_QUERY_TIMEOUT_MS,"preflight banco");if(basic.error)throw basic.error;
+    result.database=true;checks.database={status:"ok",message:"Leitura da base concluída."};
+  }catch(error){checks.database={status:"error",message:databaseErrorDetails(error).message};}
+  try{
+    const essential=await withTimeout(sb.from(TBL_RECORDS).select(WHATSAPP_CAPTURE_ESSENTIAL_COLUMNS.join(",")).limit(1),BOOT_QUERY_TIMEOUT_MS,"preflight schema");if(essential.error)throw essential.error;
+    const optional=await withTimeout(sb.from(TBL_RECORDS).select(WHATSAPP_CAPTURE_OPTIONAL_COLUMNS.join(",")).limit(1),BOOT_QUERY_TIMEOUT_MS,"preflight schema opcional");
     if(optional.error){if(isSchemaCompatibilityError(optional.error)){result.compatibilityMode=true;}else throw optional.error;}
-    result.schema=true;
-  }catch(error){result.error=databaseErrorDetails(error).message;result.errorCode=databaseErrorDetails(error).code;}
+    result.schema=true;checks.schema={status:result.compatibilityMode?"warning":"ok",message:result.compatibilityMode?"Schema em modo compatível.":"Schema necessário disponível."};
+  }catch(error){checks.schema={status:"error",message:databaseErrorDetails(error).message};}
   whatsappBatchState.preflight=result;updateWhatsAppBatchPanel(batchPreflightLabel(result));return result;
 }
 function updateWhatsAppBatchPanel(current="Aguardando início."){

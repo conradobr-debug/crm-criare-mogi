@@ -30,6 +30,51 @@ function activeMain(){
   return document.querySelector("#main") || document.querySelector('main[role="main"]') || document.querySelector('[role="main"]');
 }
 
+function whatsappReadiness(){
+  const count = selector => document.querySelectorAll(selector).length;
+  const readyState = document.readyState;
+  const qrCodeDetected = Boolean(document.querySelector('[data-testid="qrcode"],[data-ref] canvas,canvas[aria-label*="qr" i]'));
+  const sidebarCount = count('#pane-side,[data-testid="chat-list"],[role="grid"]');
+  const conversationListCount = count('#pane-side [role="listitem"],#pane-side [role="row"],[data-testid="chat-list"] [role="row"]');
+  const searchCount = count('[data-testid="chat-list-search"],[data-testid="search"],#pane-side input[placeholder],#pane-side [contenteditable="true"][role="textbox"]');
+  const main = activeMain();
+  const panelCount = main ? 1 : 0;
+  const headerCount = count('#main header,header[data-testid="conversation-header"],[data-testid="conversation-info-header-chat-title"]');
+  const composerCount = count('#main [contenteditable="true"][role="textbox"],#main footer [contenteditable="true"],[data-testid="conversation-compose-box-input"]');
+  const conversationListDetected = sidebarCount > 0 && conversationListCount > 0;
+  const searchDetected = searchCount > 0;
+  const panelDetected = panelCount > 0;
+  const composerDetected = composerCount > 0;
+  const headerDetected = headerCount > 0;
+  const ready = ["interactive","complete"].includes(readyState);
+  const connectedWithoutChat = ready && !qrCodeDetected && conversationListDetected && searchDetected;
+  const connectedWithChat = ready && !qrCodeDetected && panelDetected && (headerDetected || composerDetected);
+  let state = "interface_unrecognized";
+  let message = "A interface do WhatsApp Web não foi reconhecida.";
+  if(qrCodeDetected){ state = "login_required"; message = "Login necessário / QR Code detectado."; }
+  else if(!ready){ state = "loading"; message = "WhatsApp Web ainda está carregando."; }
+  else if(connectedWithChat){ state = "connected_with_open_chat"; message = "Conectado, conversa aberta."; }
+  else if(connectedWithoutChat){ state = "connected_without_open_chat"; message = "Conectado, nenhuma conversa aberta."; }
+  return {
+    ok:true,
+    connected:connectedWithoutChat || connectedWithChat,
+    state,
+    message,
+    url:location.href,
+    readyState,
+    title:document.title,
+    qrCodeDetected,
+    conversationListDetected,
+    panelDetected,
+    composerDetected,
+    headerDetected,
+    counts:{sidebar:sidebarCount,conversationList:conversationListCount,search:searchCount,panel:panelCount,header:headerCount,composer:composerCount},
+    mainFound:panelDetected,
+    loggedIn:connectedWithoutChat || connectedWithChat,
+    messageNodes:messageNodes(main).length
+  };
+}
+
 function activeChatTitle(){
   const main = activeMain();
   const titled = main?.querySelector('header [data-testid="conversation-info-header-chat-title"]')
@@ -365,9 +410,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
     return false;
   }
   if(message?.type === "criare-whatsapp-readiness"){
-    const qr = Boolean(document.querySelector('[data-testid="qrcode"],[data-ref] canvas'));
-    const main = activeMain();
-    sendResponse({ok:true,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,mainFound:Boolean(main),loggedIn:Boolean(main)&&!qr,title:activeChatTitle(),messageNodes:messageNodes(main).length});
+    sendResponse({contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...whatsappReadiness()});
     return false;
   }
   if(message?.type === "criare-chat-load-state"){
