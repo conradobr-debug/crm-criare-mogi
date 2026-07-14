@@ -49,8 +49,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.6"/);
-  assert.equal(manifest.version,"2.1.6");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.7"/);
+  assert.equal(manifest.version,"2.1.7");
   assert(crm.includes("https://web.whatsapp.com/send/?phone=${number}"));
   assert(!crm.includes("whatsapp://"));
   assert.match(crm,/id="btnCaptureOpenWhatsApp"[^>]*>Capturar conversa aberta/);
