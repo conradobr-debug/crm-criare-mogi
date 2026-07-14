@@ -1074,6 +1074,7 @@
 */
 const SUPABASE_URL = "https://mwpirdfcwqfmuythpawi.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_Zy25RqFpeNvTDRJvOxWTSg_g_lPA0Pm";
+const SUPABASE_AUTH_STORAGE_KEY = `sb-${new URL(SUPABASE_URL).hostname.split(".")[0]}-auth-token`;
 
 /* ===== Funis ===== */
 const LEAD_STAGES = ["Novo","Recepção e sondagem","Qualificação","Briefing e materiais","Projeto em desenvolvimento","Apresentação agendada","Negociação","Acompanhamento","Perdido"];
@@ -2111,7 +2112,7 @@ function withTimeout(promise, milliseconds=BOOT_QUERY_TIMEOUT_MS, label="consult
 }
 
 function readLocalAuthInfo(){
-  const storageKey = sb?.auth?.storageKey;
+  const storageKey = sb?.auth?.storageKey || SUPABASE_AUTH_STORAGE_KEY;
   if(!storageKey) return { found:false, accessToken:false, refreshToken:false, expiresAt:null, expired:false, user:null };
   try{
     const raw = window.localStorage.getItem(storageKey);
@@ -2280,7 +2281,7 @@ function registerAuthListener(){
 async function initSupabase(){
   if(!isConfigured()) return;
   setAppDataState("loading", "Carregando seus dados", "Conectando à base compartilhada da Criare…");
-  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth:{ storageKey:SUPABASE_AUTH_STORAGE_KEY } });
   registerAuthListener();
   localAuthInfo = readLocalAuthInfo();
   setAuthenticatedActionsEnabled(false);
