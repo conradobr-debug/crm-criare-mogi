@@ -57,8 +57,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.12"/);
-  assert.equal(manifest.version,"2.1.12");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.13"/);
+  assert.equal(manifest.version,"2.1.13");
   assert(manifest.permissions.includes("downloads"));
   assert(crm.includes("https://web.whatsapp.com/send/?phone=${number}"));
   assert(!crm.includes("whatsapp://"));
@@ -95,6 +95,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/download_clicked/);
   assert.match(content,/nao_localizado_no_dom/);
   assert.match(content,/downloadAudioFromContextMenu/);
+  assert.match(content,/revealMessageContextMenuTrigger/);
+  assert.match(content,/icon-down-context/);
   assert.match(background,/criare-start-audio-download-watch/);
   assert.match(background,/criare-open-conversation-fallback/);
   assert.match(background,/criare-recover-whatsapp-audios/);
