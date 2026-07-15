@@ -549,10 +549,11 @@
     <div class="whatsappBatchMeta" id="whatsappBatchPreflight">Pré-verificação pendente.</div>
     <div class="whatsappBatchMeta" id="whatsappBatchCurrent">Aguardando início.</div>
     <div class="whatsappBatchStats">
-      <span id="whatsappBatchPosition">0/0</span><span id="whatsappBatchUpdated">Atualizados: 0</span><span id="whatsappBatchNew">Com novidades: 0</span><span id="whatsappBatchStale">Análises desatualizadas: 0</span><span id="whatsappBatchIgnored">Ignorados: 0</span><span id="whatsappBatchErrorsCount">Erros: 0</span>
+      <span id="whatsappBatchPosition">0/0</span><span id="whatsappBatchUpdated">Atualizados: 0</span><span id="whatsappBatchNew">Com novidades: 0</span><span id="whatsappBatchStale">Análises desatualizadas: 0</span><span id="whatsappBatchNoConversation">Sem conversa: 0</span><span id="whatsappBatchIgnored">Ignorados: 0</span><span id="whatsappBatchErrorsCount">Erros: 0</span>
     </div>
     <div class="whatsappBatchActions"><button class="ghost" id="btnWhatsAppBatchPreflight" type="button">Executar diagnóstico novamente</button><button class="ghost" id="btnWhatsAppBatchPause" type="button">Pausar</button><button class="ghost" id="btnWhatsAppBatchContinue" type="button" hidden>Continuar</button><button class="ghost" id="btnWhatsAppBatchCancel" type="button">Cancelar</button><button class="ghost" id="btnWhatsAppBatchRetrySave" type="button" hidden>Tentar salvar novamente</button><button class="ghost" id="btnWhatsAppBatchCopyErrors" type="button">Copiar relatório de falhas</button><button class="ghost" id="btnWhatsAppBatchFilterStale" type="button">Mostrar análises desatualizadas</button></div>
     <div class="whatsappBatchErrors" id="whatsappBatchErrors" hidden></div>
+    <div class="whatsappBatchMeta" id="whatsappBatchNoConversationReport" hidden></div>
   </div>
 
   <div class="boardWrap">
@@ -1644,6 +1645,7 @@ function updateWhatsAppBatchPanel(current="Aguardando início."){
   $("whatsappBatchUpdated").textContent=`Atualizados: ${state.stats.updated}`;
   $("whatsappBatchNew").textContent=`Com novidades: ${state.stats.newMessages}`;
   $("whatsappBatchStale").textContent=`Análises desatualizadas: ${state.stats.stale}`;
+  $("whatsappBatchNoConversation").textContent=`Sem conversa: ${state.stats.noConversation}`;
   $("whatsappBatchIgnored").textContent=`Ignorados: ${state.stats.ignored}`;
   $("whatsappBatchErrorsCount").textContent=`Erros: ${state.stats.errors}`;
   $("whatsappBatchCurrent").textContent=current;
@@ -1654,6 +1656,7 @@ function updateWhatsAppBatchPanel(current="Aguardando início."){
   $("btnWhatsAppBatch").disabled=Boolean(state.running||state.starting);
   $("btnWhatsAppBatch").textContent=state.starting?"Iniciando atualização…":state.running?"Atualizando conversas…":"Atualizar conversas do WhatsApp";
   const errorBox=$("whatsappBatchErrors");errorBox.textContent=state.errors.join("\n\n");errorBox.hidden=!state.errors.length;
+  const noConversationBox=$("whatsappBatchNoConversationReport");noConversationBox.textContent=state.noConversationReports.join("\n\n");noConversationBox.hidden=!state.noConversationReports.length;
   $("btnWhatsAppBatchFilterStale").textContent=whatsappBatchStaleFilter?"Mostrar todos os leads":"Mostrar análises desatualizadas";
 }
 function whatsappBatchCandidates(){
@@ -1667,6 +1670,8 @@ function whatsappBatchError(record,error){
 function waitWhatsAppBatch(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
 function systemicFailureType(error){const text=`${error?.message||""} ${error?.database?.code||""} ${error?.database?.message||""}`.toLowerCase();if(/pgrst002|schema cache/.test(text))return "PGRST002";if(/failed to fetch/.test(text))return "Failed to fetch";if(/sessão.*inválida|session.*invalid|jwt/.test(text))return "sessão Supabase inválida";if(/content script|extensão|extension/.test(text))return "extensão/content script indisponível";if(/nenhuma aba.*whatsapp|whatsapp web.*aberta/.test(text))return "WhatsApp Web não localizado";return "";}
 function captureAttemptDetails(record,result){return {extension_responded:Boolean(result?.extensionVersion),whatsapp_tab_found:Boolean(result?.tabUrl),conversation_opened:Boolean(result?.detectedTitle||result?.title),contact_confirmed:Boolean(result?.ok&&!result?.empty),message_nodes_found:Number(result?.domCount||0),messages_parsed:Number(result?.count||0),previously_saved_messages:Number(record?.whatsapp_sync_message_count||0),new_messages_found:0,messages_saved_after_merge:Number(record?.whatsapp_sync_message_count||0),completed:Boolean(result?.ok&&!result?.empty&&Number(result?.count||0)>0),failed_stage:"",error:""};}
+function isEmptyWhatsAppConversation(result){return Boolean(result?.ok&&result?.empty&&!result?.noConversation&&(result?.detectedTitle||result?.title));}
+function whatsappNoConversationReport(record){return `${whatsappBatchName(record)} • Sem conversa encontrada\nCaptura concluída: sim\nMensagens encontradas: 0\nGravação: não necessária\nStatus do lead: sem histórico no WhatsApp\nAção recomendada: Iniciar contato pelo WhatsApp.`;}
 async function retryPendingWhatsAppSaves(){
   for(const [recordId,pending] of [...pendingWhatsAppCaptureSaves]){
     try{const saved=await saveWhatsAppCapture(pending.record,pending.result);pendingWhatsAppCaptureSaves.delete(recordId);Object.assign(pending.capture,{new_messages_found:saved.addedCount,messages_saved_after_merge:saved.totalCount});whatsappBatchState.stats.updated+=1;updateWhatsAppBatchPanel(`Conversa de ${whatsappBatchName(pending.record)} salva sem nova captura.`);}catch(error){pending.error=error;}}
@@ -1685,19 +1690,23 @@ async function runWhatsAppBatch(){
       await waitWhatsAppBatch(900);
       continue;
     }
-    let saved=null,lastError=null,capture=null;
+    let saved=null,lastError=null,capture=null,noConversation=false;
     try{
       const result=await openAndCaptureLeadConversation(record,{batch:true});capture=captureAttemptDetails(record,result);
-      if(!result?.ok||result?.empty||!Number(result?.count||0))throw Object.assign(new Error(result?.error||"Nenhuma mensagem foi interpretada; o lead não foi alterado."),{batchContext:{stage:"captura",capture:{...capture,failed_stage:"leitura do DOM",error:result?.error||"DOM vazio"}}});
-      try{saved=await saveWhatsAppCapture(record,result);}catch(error){pendingWhatsAppCaptureSaves.set(record.id,{record,result,capture});throw Object.assign(error,{batchContext:{stage:"gravação no Supabase",capture,database:{write_attempted:true,write_succeeded:false,...databaseErrorDetails(error)}}});}
+      if(isEmptyWhatsAppConversation(result)){noConversation=true;capture={...capture,contact_confirmed:true,completed:true};}
+      else{
+        if(!result?.ok||result?.empty||!Number(result?.count||0))throw Object.assign(new Error(result?.error||"Nenhuma mensagem foi interpretada; o lead não foi alterado."),{batchContext:{stage:"captura",capture:{...capture,failed_stage:"leitura do DOM",error:result?.error||"DOM vazio"}}});
+        try{saved=await saveWhatsAppCapture(record,result);}catch(error){pendingWhatsAppCaptureSaves.set(record.id,{record,result,capture});throw Object.assign(error,{batchContext:{stage:"gravação no Supabase",capture,database:{write_attempted:true,write_succeeded:false,...databaseErrorDetails(error)}}});}
+      }
     }catch(error){lastError=error;}
-    if(saved){state.stats.updated+=1;state.stats.newMessages+=saved.addedCount>0?1:0;state.stats.stale+=whatsappAnalysisIsStale(saved.record)?1:0;state.systemFailure={type:"",count:0};updateWhatsAppBatchPanel(`Lead atualizado: ${whatsappBatchName(record)} • Histórico anterior: ${capture.previously_saved_messages} • Encontradas: ${capture.messages_parsed} • Novas: ${saved.addedCount} • Total: ${saved.totalCount}`);}
+    if(noConversation){state.stats.noConversation+=1;state.noConversationReports.push(whatsappNoConversationReport(record));state.systemFailure={type:"",count:0};updateWhatsAppBatchPanel(`Sem conversa encontrada: ${whatsappBatchName(record)} • ação recomendada: iniciar contato pelo WhatsApp.`);}
+    else if(saved){state.stats.updated+=1;state.stats.newMessages+=saved.addedCount>0?1:0;state.stats.stale+=whatsappAnalysisIsStale(saved.record)?1:0;state.systemFailure={type:"",count:0};updateWhatsAppBatchPanel(`Lead atualizado: ${whatsappBatchName(record)} • Histórico anterior: ${capture.previously_saved_messages} • Encontradas: ${capture.messages_parsed} • Novas: ${saved.addedCount} • Total: ${saved.totalCount}`);}
     else{state.stats.errors+=1;const type=systemicFailureType(lastError);state.systemFailure=type&&state.systemFailure.type===type?{type,count:state.systemFailure.count+1}:{type,count:type?1:0};state.errors.push(whatsappBatchError(record,lastError||new Error("Falha sem diagnóstico.")));if(type&&state.systemFailure.count>=2){if(state.mode==="full")invalidateWhatsAppBatchApproval();state.paused=true;state.systemPaused=true;updateWhatsAppBatchPanel(`Atualização pausada por falha sistêmica: ${type}. Último lead: ${whatsappBatchName(record)}. Corrija a pré-verificação antes de continuar.`);break;}updateWhatsAppBatchPanel(`Falha em ${whatsappBatchName(record)}; nenhuma alteração foi salva para este lead.`);}
     state.position+=1;await waitWhatsAppBatch(900);
   }
   state.running=false;state.paused=false;state.lastRunAt=nowISO();localStorage.setItem("criare_whatsapp_batch_last_run",state.lastRunAt);
   if(state.mode==="test"&&state.stats.updated+state.stats.ignored===3&&state.stats.errors===0){state.fullBatchUnlocked=true;saveWhatsAppBatchApproval();}
-  updateWhatsAppBatchPanel(state.systemPaused?"Atualização pausada por falha sistêmica.":state.cancelled?"Atualização cancelada.":`Atualização concluída • ${state.stats.updated} conversas atualizadas • ${state.stats.newMessages} com mensagens novas • ${state.stats.stale} análises desatualizadas • ${state.stats.errors} falhas.`);
+  updateWhatsAppBatchPanel(state.systemPaused?"Atualização pausada por falha sistêmica.":state.cancelled?"Atualização cancelada.":`Atualização concluída • ${state.stats.updated} conversas atualizadas • ${state.stats.newMessages} com mensagens novas • ${state.stats.noConversation} sem conversa • ${state.stats.stale} análises desatualizadas • ${state.stats.ignored} ignorados • ${state.stats.errors} falhas.`);
   state.cancelled=false;
 }
 function whatsappBatchTestCandidates(){
@@ -1719,7 +1728,7 @@ async function startWhatsAppBatch({mode="full"}={}){
   if(!preflight.extension||!preflight.whatsappWeb||!preflight.contentScript||!preflight.supabaseAuth||!preflight.database||!preflight.schema){if(!preflight.extension||!preflight.schema)invalidateWhatsAppBatchApproval();whatsappBatchState.starting=false;whatsappBatchState.errors=[`Pré-verificação bloqueou o lote.\n${batchPreflightLabel(preflight)}`];updateWhatsAppBatchPanel("Pré-verificação falhou. Revise a etapa e a causa abaixo.");return;}
   const candidates=whatsappBatchCandidates();const queue=mode==="test"?whatsappBatchTestCandidates():candidates.queue;
   if(mode==="test"&&queue.length!==3){whatsappBatchState.starting=false;return updateWhatsAppBatchPanel("Teste bloqueado: são necessários dois leads válidos e o lead fjenkw jkenfjkenk com telefone 943948739.");}
-  Object.assign(whatsappBatchState,{starting:false,running:true,paused:false,cancelled:false,systemPaused:false,mode,queue,position:0,stats:{updated:0,newMessages:0,stale:0,ignored:mode==="test"?0:candidates.ignored,errors:0},errors:[],resume:null,systemFailure:{type:"",count:0}});
+  Object.assign(whatsappBatchState,{starting:false,running:true,paused:false,cancelled:false,systemPaused:false,mode,queue,position:0,stats:{updated:0,newMessages:0,stale:0,noConversation:0,ignored:mode==="test"?0:candidates.ignored,errors:0},errors:[],noConversationReports:[],resume:null,systemFailure:{type:"",count:0}});
   whatsappBatchLog("fila iniciada",{mode,total:queue.length});updateWhatsAppBatchPanel(mode==="test"?"Preparando teste controlado: lead válido, fjenkw jkenfjkenk (inválido), lead válido.":`Fila iniciada • 0 de ${queue.length} leads elegíveis.`);runWhatsAppBatch().catch(error=>{whatsappBatchState.running=false;whatsappBatchState.starting=false;whatsappBatchState.stats.errors+=1;whatsappBatchState.errors.push(error.message||"Falha no lote.");updateWhatsAppBatchPanel("Atualização interrompida com erro.");});
 }
 async function analyzeSavedWhatsAppConversation(record){
@@ -2151,7 +2160,7 @@ let appDataMessage = "Conectando à base compartilhada da Criare…";
 let bootDiagnostic = "";
 let deferredInstallPrompt = null;
 let whatsappBatchStaleFilter = false;
-const whatsappBatchState = {starting:false,startedAt:"",running:false,paused:false,cancelled:false,systemPaused:false,fullBatchUnlocked:whatsappBatchApproval(),mode:"test",queue:[],position:0,stats:{updated:0,newMessages:0,stale:0,ignored:0,errors:0},errors:[],preflight:null,systemFailure:{type:"",count:0},lastRunAt:localStorage.getItem("criare_whatsapp_batch_last_run")||""};
+const whatsappBatchState = {starting:false,startedAt:"",running:false,paused:false,cancelled:false,systemPaused:false,fullBatchUnlocked:whatsappBatchApproval(),mode:"test",queue:[],position:0,stats:{updated:0,newMessages:0,stale:0,noConversation:0,ignored:0,errors:0},errors:[],noConversationReports:[],preflight:null,systemFailure:{type:"",count:0},lastRunAt:localStorage.getItem("criare_whatsapp_batch_last_run")||""};
 
 let syncConnectionState = "offline";
 let lastSuccessfulSyncAt = null;
