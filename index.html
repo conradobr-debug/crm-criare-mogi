@@ -1254,7 +1254,7 @@ function openWhatsAppFor(record=null){
   const webUrl=`https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
   window.open(webUrl,"_blank","noopener,noreferrer");
 }
-const WHATSAPP_EXTENSION_VERSION = "2.1.14";
+const WHATSAPP_EXTENSION_VERSION = "2.1.15";
 const WHATSAPP_BATCH_AUDIO_ENABLED = false;
 const WHATSAPP_BATCH_APPROVAL_KEY = "crm_whatsapp_full_batch_unlocked";
 const WHATSAPP_BATCH_FLOW_VERSION = "capture-flow-2.1.8";
@@ -1526,7 +1526,7 @@ function audioStats(record){
 }
 function renderAudioTranscriptionStatus(record){
   const stats=audioStats(record);const status=$("whatsappAudioStatus");const button=$("btnTranscribeAudios");
-  if(status)status.textContent=`Áudios: ${stats.total} encontrados • ${stats.structured} estruturados • ${stats.located} localizados no DOM • ${stats.waitingDownload} aguardando download • ${stats.ready} prontos para transcrever • ${stats.completed} transcritos • ${stats.manual} requerem download manual • ${stats.unavailable} indisponíveis • ${stats.error} com erro.`;
+  let recovery={};try{recovery=JSON.parse(localStorage.getItem(`criare_audio_recovery_${record?.id}`)||"{}")||{};}catch(error){}const debuggerWarning=(recovery.diagnostics||[]).find(item=>item.synthetic_hover_failed&&!item.debugger_attached&&item.reason);if(status)status.textContent=debuggerWarning?`Aviso persistente: não foi possível autorizar o movimento real do ponteiro no WhatsApp Web. ${debuggerWarning.reason}`:`Áudios: ${stats.total} encontrados • ${stats.structured} estruturados • ${stats.located} localizados no DOM • ${stats.waitingDownload} aguardando download • ${stats.ready} prontos para transcrever • ${stats.completed} transcritos • ${stats.manual} requerem download manual • ${stats.unavailable} indisponíveis • ${stats.error} com erro.`;
   if(button){button.disabled=!stats.pending&&!stats.error&&!stats.legacy;button.textContent=(stats.pending||stats.error||stats.legacy)?`Transcrever áudios pendentes (${stats.total-stats.completed})`:"Transcrever áudios pendentes";}
   return stats;
 }
