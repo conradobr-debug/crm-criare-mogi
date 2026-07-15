@@ -44,6 +44,22 @@ async function cancelAudioDownloadWatch(request){
   return {ok:true};
 }
 
+async function dispatchRealMouseMove(request,sender){
+  const tabId=Number(sender?.tab?.id||0);const url=String(sender?.tab?.url||"");const x=Number(request?.clientX);const y=Number(request?.clientY);const result={ok:false,debugger_attached:false,mouse_move_dispatched:false,debugger_detached:false,target_coordinates:{x,y},error:""};
+  if(!tabId||!url.startsWith("https://web.whatsapp.com/")){result.error="O movimento real só pode ser enviado pela aba do WhatsApp Web.";return result;}
+  if(!Number.isFinite(x)||!Number.isFinite(y)||x<0||y<0){result.error="Coordenadas inválidas para o movimento do ponteiro.";return result;}
+  const target={tabId};
+  try{
+    await chrome.debugger.attach(target,"1.3");result.debugger_attached=true;
+    await chrome.debugger.sendCommand(target,"Input.dispatchMouseEvent",{type:"mouseMoved",x,y,button:"none",buttons:0,pointerType:"mouse"});result.mouse_move_dispatched=true;
+    await sleep(180);result.ok=true;
+  }catch(error){result.error=error?.message||"Não foi possível mover o ponteiro real na aba do WhatsApp Web.";}
+  finally{
+    if(result.debugger_attached){try{await chrome.debugger.detach(target);result.debugger_detached=true;}catch(error){result.error=result.error||error?.message||"O debugger não pôde ser desconectado automaticamente.";}}
+  }
+  return result;
+}
+
 async function targetTabs(){
   const stored = await chrome.storage.session.get(TARGETS_KEY);
   return stored[TARGETS_KEY] || {};
@@ -331,6 +347,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
     "criare-start-audio-download-watch":startAudioDownloadWatch,
     "criare-wait-audio-download":waitForAudioDownload,
     "criare-cancel-audio-download-watch":cancelAudioDownloadWatch,
+    "criare-dispatch-real-mouse-move":dispatchRealMouseMove,
     "criare-preflight-whatsapp":preflightWhatsApp,
     "criare-audio-transcription-complete":forwardAudioTranscription,
     "criare-sync-whatsapp-record":syncCustomerChat

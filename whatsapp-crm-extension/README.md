@@ -7,7 +7,7 @@ manual do CRM.
 
 ## Instalação
 
-1. Extraia o arquivo `criare-whatsapp-extension-2.1.13.zip`.
+1. Extraia o arquivo `criare-whatsapp-extension-2.1.14.zip`.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação** e selecione a pasta extraída.
@@ -39,6 +39,11 @@ transcrição local. Se o Transcritor Criare estiver desligado, permanecem como
 Para áudios, a permissão **downloads** é usada somente durante a operação ativa
 para correlacionar o arquivo baixado pelo menu da própria mensagem. Nenhum
 listener de downloads permanece ativo depois da conclusão, erro ou timeout.
+
+Para revelar o menu contextual de uma mensagem de áudio, a permissão
+**debugger** move temporariamente o ponteiro real apenas na aba já aberta do
+WhatsApp Web. A depuração é desconectada imediatamente após a tentativa, mesmo
+em caso de erro ou timeout.
 
 ## Limites e segurança
 

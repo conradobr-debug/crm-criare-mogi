@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Criare CRM — Analisar WhatsApp",
-  "version": "2.1.13",
+  "version": "2.1.14",
   "description": "Captura a conversa escolhida no WhatsApp Web e a envia com segurança ao CRM Criare para análise.",
-  "permissions": ["tabs", "storage", "downloads"],
+  "permissions": ["tabs", "storage", "downloads", "debugger"],
   "host_permissions": [
     "https://web.whatsapp.com/*",
     "https://*.whatsapp.net/*",
