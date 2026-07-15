@@ -57,8 +57,9 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.11"/);
-  assert.equal(manifest.version,"2.1.11");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.12"/);
+  assert.equal(manifest.version,"2.1.12");
+  assert(manifest.permissions.includes("downloads"));
   assert(crm.includes("https://web.whatsapp.com/send/?phone=${number}"));
   assert(!crm.includes("whatsapp://"));
   assert.match(crm,/id="btnCaptureOpenWhatsApp"[^>]*>Capturar conversa aberta/);
@@ -89,10 +90,12 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/criare-open-conversation-fallback/);
   assert.match(content,/function audioEntryId/);
   assert.match(content,/criare-recover-audios/);
-  assert.match(content,/requer_download_manual/);
+  assert.match(content,/menu_sem_opcao_baixar/);
   assert.match(content,/function audioDurationText/);
   assert.match(content,/download_clicked/);
   assert.match(content,/nao_localizado_no_dom/);
+  assert.match(content,/downloadAudioFromContextMenu/);
+  assert.match(background,/criare-start-audio-download-watch/);
   assert.match(background,/criare-open-conversation-fallback/);
   assert.match(background,/criare-recover-whatsapp-audios/);
   assert.match(contentCrm,/criare-whatsapp-recover-audios/);

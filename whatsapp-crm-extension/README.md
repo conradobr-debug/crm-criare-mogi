@@ -7,7 +7,7 @@ manual do CRM.
 
 ## Instalação
 
-1. Extraia o arquivo `criare-whatsapp-extension-2.1.11.zip`.
+1. Extraia o arquivo `criare-whatsapp-extension-2.1.12.zip`.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação** e selecione a pasta extraída.
@@ -35,6 +35,10 @@ entram no histórico com marcador explícito. Áudio entra somente como
 Áudios são capturados sem bloquear o histórico e entram em uma fila opcional de
 transcrição local. Se o Transcritor Criare estiver desligado, permanecem como
 `[Áudio sem transcrição]` pendentes.
+
+Para áudios, a permissão **downloads** é usada somente durante a operação ativa
+para correlacionar o arquivo baixado pelo menu da própria mensagem. Nenhum
+listener de downloads permanece ativo depois da conclusão, erro ou timeout.
 
 ## Limites e segurança
 

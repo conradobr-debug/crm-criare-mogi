@@ -4,8 +4,45 @@ const TARGETS_KEY = "criareWhatsAppTargetTabs";
 const CAPTURE_TIMEOUT_MS = 210000;
 const crmCaptureTabs = new Map();
 let activeConversationOperation = null;
+const activeAudioDownloads = new Map();
 
 function sleep(ms){ return new Promise(resolve=>setTimeout(resolve,ms)); }
+
+function downloadFromWhatsApp(item){
+  return /(?:^|\.)whatsapp(?:\.net|\.com)(?:\/|$)/i.test(`${item?.url||""} ${item?.finalUrl||""} ${item?.referrer||""}`);
+}
+
+function publicDownload(item={}){
+  const size=Number(item.fileSize||item.totalBytes||0);
+  return {download_id:Number(item.id||0)||null,download_state:String(item.state||""),filename:String(item.filename||""),mime_type:String(item.mime||""),size,source_url:String(item.finalUrl||item.url||"")};
+}
+
+async function startAudioDownloadWatch(request,sender){
+  const requestId=String(request?.request_id||"").trim();const messageId=String(request?.message_id||"").trim();const tabId=Number(sender?.tab?.id||0);
+  if(!requestId||!messageId||!tabId)return {ok:false,error:"Identificação insuficiente para monitorar o download do áudio."};
+  if(activeAudioDownloads.has(requestId))return {ok:false,error:"Já existe um monitoramento de download para este áudio."};
+  const startedAt=Date.now();const existing=new Set((await chrome.downloads.search({})).map(item=>item.id));
+  let resolveWatch;const watch=new Promise(resolve=>{resolveWatch=resolve;});let downloadId=null;let finished=false;
+  const finish=async(result)=>{if(finished)return;finished=true;clearTimeout(timer);chrome.downloads.onCreated.removeListener(onCreated);chrome.downloads.onChanged.removeListener(onChanged);activeAudioDownloads.delete(requestId);resolveWatch(result);};
+  const matches=item=>Boolean(item&&!existing.has(item.id)&&new Date(item.startTime||0).getTime()>=startedAt-1500&&downloadFromWhatsApp(item));
+  const onCreated=item=>{if(!matches(item)||downloadId)return;downloadId=item.id;if(item.state==="complete")finish({ok:Number(item.fileSize||item.totalBytes||0)>0,...publicDownload(item),request_id:requestId,message_id:messageId,tab_id:tabId});};
+  const onChanged=async delta=>{if(!downloadId||delta.id!==downloadId||!delta.state)return;if(delta.state.current!=="complete"&&delta.state.current!=="interrupted")return;const [item]=await chrome.downloads.search({id:downloadId});if(delta.state.current==="complete"&&Number(item?.fileSize||item?.totalBytes||0)>0)finish({ok:true,...publicDownload(item),request_id:requestId,message_id:messageId,tab_id:tabId});else finish({ok:false,code:delta.state.current==="interrupted"?"download_interrupted":"download_empty",error:delta.state.current==="interrupted"?"O download do áudio foi interrompido.":"O download retornou um arquivo vazio.",...publicDownload(item||{}),request_id:requestId,message_id:messageId,tab_id:tabId});};
+  const timer=setTimeout(()=>finish({ok:false,code:"timeout_download",error:"O download do áudio não foi identificado dentro do tempo de segurança.",request_id:requestId,message_id:messageId,tab_id:tabId}),30000);
+  chrome.downloads.onCreated.addListener(onCreated);chrome.downloads.onChanged.addListener(onChanged);
+  activeAudioDownloads.set(requestId,{watch,finish,messageId,tabId,startedAt});
+  return {ok:true,request_id:requestId,message_id:messageId,started_at:new Date(startedAt).toISOString(),tab_id:tabId};
+}
+
+async function waitForAudioDownload(request){
+  const requestId=String(request?.request_id||"").trim();const operation=activeAudioDownloads.get(requestId);
+  if(!operation)return {ok:false,error:"O monitoramento temporário deste download não está ativo."};
+  return operation.watch;
+}
+
+async function cancelAudioDownloadWatch(request){
+  const operation=activeAudioDownloads.get(String(request?.request_id||"").trim());if(operation)await operation.finish({ok:false,code:"download_cancelled",error:"O download do áudio foi cancelado antes da conclusão."});
+  return {ok:true};
+}
 
 async function targetTabs(){
   const stored = await chrome.storage.session.get(TARGETS_KEY);
@@ -291,6 +328,9 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
     "criare-capture-active-whatsapp":captureCustomerChat,
     "criare-capture-open-whatsapp":captureOpenWhatsAppChat,
     "criare-recover-whatsapp-audios":recoverCustomerAudios,
+    "criare-start-audio-download-watch":startAudioDownloadWatch,
+    "criare-wait-audio-download":waitForAudioDownload,
+    "criare-cancel-audio-download-watch":cancelAudioDownloadWatch,
     "criare-preflight-whatsapp":preflightWhatsApp,
     "criare-audio-transcription-complete":forwardAudioTranscription,
     "criare-sync-whatsapp-record":syncCustomerChat

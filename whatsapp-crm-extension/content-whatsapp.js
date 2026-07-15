@@ -23,16 +23,16 @@ function audioDurationText(node){
       sources.push({value:child.textContent||"",aria:false});
     }
   }
-  for(const source of sources){const text=cleanText(source.value||"");const match=source.aria?text.match(/(?:mensagem de voz|voice message|duraç[aã]o|duration)[^\d]*(\d{1,2}):(\d{2})/i):text.match(/^(\d{1,2}):(\d{2})$/);if(match&&Number(match[1])<10)return `${match[1]}:${match[2]}`;}
+  for(const source of sources){const text=cleanText(source.value||"");const match=source.aria?text.match(/(?:mensagem de voz|voice message|duraç[aã]o|duration)[^\d]*(\d+):(\d{2})(?::(\d{2}))?/i):text.match(/^(\d+):(\d{2})(?::(\d{2}))?$/);if(match)return match[3]?`${match[1]}:${match[2]}:${match[3]}`:`${match[1]}:${match[2]}`;}
   return "";
 }
-function audioDuration(node){const raw=Number(audioElement(node)?.duration);if(Number.isFinite(raw)&&raw>0)return Math.round(raw);const value=audioDurationText(node).match(/^(\d{1,2}):(\d{2})$/);return value?Number(value[1])*60+Number(value[2]):null;}
+function audioDuration(node){const raw=Number(audioElement(node)?.duration);if(Number.isFinite(raw)&&raw>0)return Math.round(raw);const value=audioDurationText(node).match(/^(\d+):(\d{2})(?::(\d{2}))?$/);return value?(value[3]?Number(value[1])*3600+Number(value[2])*60+Number(value[3]):Number(value[1])*60+Number(value[2])):null;}
 function audioMeta(id,patch={}){return {messageId:id||null,durationSeconds:null,mimeType:null,sizeBytes:null,sha256:null,sourceAvailable:false,extractionStatus:"pending",transcriptionStatus:"pending",transcription:"",error:"",...patch};}
 function publicAudioMeta(meta){if(!meta)return null;const {buffer,...safe}=meta;return safe;}
 async function sha256Hex(buffer){const digest=await crypto.subtle.digest("SHA-256",buffer);return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,"0")).join("");}
 function bytesToBase64(buffer){const bytes=new Uint8Array(buffer);let binary="";for(let offset=0;offset<bytes.length;offset+=0x8000)binary+=String.fromCharCode(...bytes.subarray(offset,offset+0x8000));return btoa(binary);}
-async function extractAudioFile(node,id){
-  const source=audioSource(node);const base=audioMeta(id,{source:source?(source.startsWith("blob:")?"blob":"url"):"none",durationSeconds:audioDuration(node)});
+async function extractAudioFile(node,id,sourceOverride=""){
+  const source=String(sourceOverride||audioSource(node)||"");const base=audioMeta(id,{source:source?(source.startsWith("blob:")?"blob":"url"):"none",durationSeconds:audioDuration(node)});
   if(!source){base.extractionStatus="unavailable";base.transcriptionStatus="unavailable";base.error="O WhatsApp não expôs o arquivo de áudio.";return base;}
   try{const response=await fetch(source,{credentials:"include",cache:"no-store"});if(!response.ok)throw new Error(`download_http_${response.status}`);const blob=await response.blob();if(!blob.size)throw new Error("arquivo_vazio");if(blob.size>AUDIO_MAX_BYTES)throw new Error("audio_maior_que_15mb");const buffer=await blob.arrayBuffer();const sha256=await sha256Hex(buffer);return {...base,sourceAvailable:true,extractionStatus:"extracted",mimeType:blob.type||"audio/ogg",sizeBytes:blob.size,sha256,buffer};}catch(error){return {...base,extractionStatus:"error",transcriptionStatus:"error",error:error.message||"Não foi possível obter o áudio."};}
 }
@@ -541,20 +541,48 @@ function audioDownloadButton(node){return node.querySelector('[data-testid*="dow
 function audioPlayControl(node){return node.querySelector('[data-testid*="audio" i],[aria-label*="reproduzir" i],[aria-label*="play" i],audio');}
 async function waitForAudioMedia(node,{timeoutMs=9000}={}){const deadline=Date.now()+timeoutMs;while(Date.now()<deadline){const source=audioSource(node);if(source)return source;await sleep(450);}return "";}
 async function waitForDownloadState(node,{timeoutMs=9000}={}){const deadline=Date.now()+timeoutMs;let buttonRemoved=false;while(Date.now()<deadline){buttonRemoved=buttonRemoved||!audioDownloadButton(node);const source=audioSource(node);if(source)return {source,buttonRemoved};await sleep(450);}return {source:"",buttonRemoved};}
+function extensionMessage(message){
+  return new Promise(resolve=>{
+    chrome.runtime.sendMessage(message,response=>{
+      resolve(chrome.runtime.lastError?{ok:false,error:chrome.runtime.lastError.message||"A extensão não respondeu."}:response||{ok:false,error:"A extensão não respondeu."});
+    });
+  });
+}
+function visibleElement(element){const style=element&&getComputedStyle(element);return Boolean(element&&style?.display!=="none"&&style?.visibility!=="hidden"&&element.getClientRects().length);}
+function messageContextMenuButton(node){
+  const candidates=[...node.querySelectorAll('button[aria-label*="menu" i],[data-testid*="context" i],[data-icon*="down-context" i],span[data-icon*="down-context" i]')];
+  return candidates.map(item=>item.closest("button,[role=button]")||item).find(visibleElement)||null;
+}
+function openMessageContextMenu(node){
+  node.dispatchEvent(new MouseEvent("mouseenter",{bubbles:true,view:window}));node.dispatchEvent(new MouseEvent("mouseover",{bubbles:true,view:window}));
+  const button=messageContextMenuButton(node);if(!button)return null;button.click();return button;
+}
+function downloadMenuOption(){
+  const menus=[...document.querySelectorAll('[role="menu"], [data-testid*="context-menu" i]')].filter(visibleElement);
+  for(const menu of menus){for(const item of menu.querySelectorAll('[role="menuitem"],button,[aria-label]')){const label=normalizedUiText(`${item.getAttribute("aria-label")||""} ${item.textContent||""}`);if(label==="baixar"||label==="download"||label.startsWith("baixar ")||label.startsWith("download "))return item;}}
+  return null;
+}
+async function waitForDownloadMenu({timeoutMs=2500}={}){const deadline=Date.now()+timeoutMs;while(Date.now()<deadline){const option=downloadMenuOption();if(option)return option;await sleep(120);}return null;}
+function closeContextMenu(){document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",code:"Escape",bubbles:true}));}
+async function downloadAudioFromContextMenu(node,{requestId,messageId,diagnostic}){
+  const started=await extensionMessage({type:"criare-start-audio-download-watch",request:{request_id:requestId,message_id:messageId}});if(!started?.ok)return {ok:false,code:"download_watch_failed",error:started?.error||"Não foi possível preparar o monitoramento do download."};
+  diagnostic.context_menu_found=Boolean(messageContextMenuButton(node));const menuButton=openMessageContextMenu(node);diagnostic.context_menu_opened=Boolean(menuButton);if(!menuButton){await extensionMessage({type:"criare-cancel-audio-download-watch",request:{request_id:requestId}});return {ok:false,code:"context_menu_not_found",error:"O menu contextual desta mensagem não foi localizado."};}
+  const option=await waitForDownloadMenu();diagnostic.download_option_found=Boolean(option);if(!option){closeContextMenu();await extensionMessage({type:"criare-cancel-audio-download-watch",request:{request_id:requestId}});return {ok:false,code:"menu_sem_opcao_baixar",error:"O menu da mensagem não apresentou a ação Baixar."};}
+  diagnostic.status="download_solicitado";diagnostic.download_clicked=true;option.click();closeContextMenu();const result=await extensionMessage({type:"criare-wait-audio-download",request:{request_id:requestId}});return result||{ok:false,code:"timeout_download",error:"O download não retornou resultado."};
+}
 async function recoverAudioEntries(request={}){
   const main=activeMain();if(!main)throw new Error("O painel da conversa não foi carregado para recuperar áudios.");
-  const targets=Array.isArray(request.audioTargets)?request.audioTargets:[];const targetKey=(target,index)=>target.id||target.message_id||`legacy:${index}`;const validDuration=value=>Number.isFinite(Number(value))&&Number(value)>0&&Number(value)<600?Number(value):null;const found=new Map();const diagnostics=new Map(targets.map((target,index)=>{const key=targetKey(target,index);return [key,{message_id:key,position:target.chronological_position??index,sender:target.sender||"",date:target.date||"",message_time:target.time||"",duration_text:target.duration_text||"",duration_seconds:validDuration(target.duration),found_in_dom:false,play_found:false,download_found:false,download_clicked:false,download_completed:false,url_found:false,file_obtained:false,mime_type:"",size:0,status:"aguardando_dom",reason:""}];}));
+  const targets=Array.isArray(request.audioTargets)?request.audioTargets:[];const targetKey=(target,index)=>target.id||target.message_id||`legacy:${index}`;const validDuration=value=>Number.isFinite(Number(value))&&Number(value)>0&&Number(value)<600?Number(value):null;const found=new Map();const diagnostics=new Map(targets.map((target,index)=>{const key=targetKey(target,index);return [key,{message_id:key,position:target.chronological_position??index,sender:target.sender||"",date:target.date||"",message_time:target.time||"",duration_text:target.duration_text||"",duration_seconds:validDuration(target.duration),found_in_dom:false,context_menu_found:false,context_menu_opened:false,download_option_found:false,download_clicked:false,download_id:null,download_state:"",filename:"",play_found:false,download_found:false,download_completed:false,url_found:false,file_obtained:false,mime_type:"",size:0,transcriber_called:false,status:"aguardando_dom",reason:""}];}));
   const inspect=async()=>{
     for(const [position,node] of voiceMessageNodes(main).entries()){
       const detail=node.querySelector("[data-pre-plain-text]");const prefix=cleanText(detail?.getAttribute("data-pre-plain-text"))||"";const id=audioEntryId(node,prefix,position);const target=targets.find((item,index)=>targetKey(item,index)===id)||targets.find((item,index)=>{const key=targetKey(item,index);return !found.has(key)&&item.sender===prefixParts(prefix).sender&&item.time===prefixParts(prefix).time&&Number(item.duration||0)===Number(audioDuration(node)||0);});if(!target)continue;
       const key=targetKey(target,targets.indexOf(target));if(found.has(key))continue;
       const diagnostic=diagnostics.get(key)||{};const parts=prefixParts(prefix);const playerDuration=audioDuration(node);diagnostic.found_in_dom=true;diagnostic.sender=parts.sender||diagnostic.sender;diagnostic.date=parts.date||diagnostic.date;diagnostic.message_time=parts.time||diagnostic.message_time;diagnostic.duration_text=audioDurationText(node)||diagnostic.duration_text;diagnostic.duration_seconds=playerDuration||diagnostic.duration_seconds;diagnostic.play_found=Boolean(audioPlayControl(node));diagnostic.download_found=Boolean(audioDownloadButton(node));diagnostic.url_found=Boolean(audioSource(node));diagnostic.status="localizado";
-      if(!audioSource(node)&&diagnostic.download_found){diagnostic.status="download_solicitado";diagnostic.download_clicked=true;audioDownloadButton(node).click();const downloaded=await waitForDownloadState(node);diagnostic.download_completed=Boolean(downloaded.source);diagnostic.download_button_removed=downloaded.buttonRemoved;diagnostic.url_found=Boolean(downloaded.source);if(!downloaded.source){diagnostic.status="requer_download_manual";diagnostic.reason="O botão de download foi acionado, mas o WhatsApp não expôs a mídia automaticamente.";}}
-      else if(!audioSource(node)){diagnostic.status="aguardando_midia";const source=await waitForAudioMedia(node,{timeoutMs:3500});diagnostic.url_found=Boolean(source);}
-      let meta=await extractAudioFile(node,key);if(meta.extractionStatus==="unavailable"&&diagnostic.download_found&&!diagnostic.download_completed){meta={...meta,transcriptionStatus:"pending",extractionStatus:"manual_download",error:diagnostic.reason||"Áudio localizado, mas requer download manual."};diagnostic.status="requer_download_manual";}
-      else if(meta.extractionStatus==="extracted"){diagnostic.status="pronto_para_transcrever";meta=await transcribeLocally(meta);diagnostic.status=meta.transcription?"transcrito":(meta.transcriptionStatus==="pending"?"pronto_para_transcrever":"erro");}
-      else if(meta.extractionStatus==="unavailable"){diagnostic.status="indisponivel";}
-      diagnostic.file_obtained=Boolean(meta.sourceAvailable);diagnostic.mime_type=meta.mimeType||"";diagnostic.size=Number(meta.sizeBytes||0);diagnostic.reason=meta.error||diagnostic.reason||"";found.set(key,{...target,audioMeta:publicAudioMeta(meta),audioTranscribed:Boolean(meta.transcription),hasVoiceMessage:true,type:"Áudio",text:meta.transcription?String(target.text||"").replace("[Áudio sem transcrição]",`[Transcrição de áudio] ${cleanText(meta.transcription)}`):target.text});
+      let downloaded=null;if(!audioSource(node)){downloaded=await downloadAudioFromContextMenu(node,{requestId:`${request.request_id||crypto.randomUUID()}:${key}`,messageId:key,diagnostic});diagnostic.download_id=downloaded?.download_id||null;diagnostic.download_state=downloaded?.download_state||"";diagnostic.filename=downloaded?.filename||"";diagnostic.mime_type=downloaded?.mime_type||"";diagnostic.size=Number(downloaded?.size||0);if(!downloaded?.ok){diagnostic.status=downloaded?.code||"erro";diagnostic.reason=downloaded?.error||"Não foi possível obter o áudio pelo menu contextual.";found.set(key,{...target,audioMeta:publicAudioMeta(audioMeta(key,{durationSeconds:playerDuration,extractionStatus:"pending",transcriptionStatus:"pending",error:diagnostic.reason})),audioTranscribed:false,hasVoiceMessage:true,type:"Áudio"});continue;}}
+      let meta=await extractAudioFile(node,key,downloaded?.source_url||"");if(meta.extractionStatus==="extracted"){diagnostic.file_obtained=true;diagnostic.size=Number(meta.sizeBytes||diagnostic.size||0);diagnostic.mime_type=meta.mimeType||diagnostic.mime_type||"";diagnostic.status="arquivo_obtido";diagnostic.transcriber_called=true;meta=await transcribeLocally(meta);diagnostic.status=meta.transcription?"transcrito":(meta.transcriptionStatus==="pending"?"pronto_para_transcrever":"erro");}
+      else if(downloaded?.ok){diagnostic.status="erro";diagnostic.reason=meta.error||"O download foi concluído, mas o arquivo não pôde ser lido com segurança.";}
+      else if(meta.extractionStatus==="unavailable"){diagnostic.status="menu_sem_opcao_baixar";diagnostic.reason=meta.error||"A mensagem foi localizada, mas não ofereceu uma mídia disponível.";}
+      diagnostic.file_obtained=Boolean(meta.sourceAvailable)||diagnostic.file_obtained;diagnostic.mime_type=meta.mimeType||diagnostic.mime_type||"";diagnostic.size=Number(meta.sizeBytes||diagnostic.size||0);diagnostic.reason=meta.error||diagnostic.reason||"";found.set(key,{...target,audioMeta:publicAudioMeta(meta),audioTranscribed:Boolean(meta.transcription),hasVoiceMessage:true,type:"Áudio",text:meta.transcription?String(target.text||"").replace("[Áudio sem transcrição]",`[Transcrição de áudio] ${cleanText(meta.transcription)}`):target.text});
     }
   };
   const scroller=messageScrollContainer(main);let passes=0;let stable=0;let previous="";if(scroller)scroller.scrollTop=scroller.scrollHeight;
