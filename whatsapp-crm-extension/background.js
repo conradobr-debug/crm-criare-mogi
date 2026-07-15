@@ -44,6 +44,11 @@ async function reusableWhatsAppTab({active=false}={}){
   return chrome.tabs.create({url:"https://web.whatsapp.com/",active});
 }
 
+async function existingWhatsAppTab(){
+  const tabs=await chrome.tabs.query({url:"https://web.whatsapp.com/*"});
+  return tabs.sort((a,b)=>(b.lastAccessed||0)-(a.lastAccessed||0))[0]||null;
+}
+
 async function waitForTabComplete(tabId,{timeoutMs=45000}={}){
   const deadline = Date.now() + timeoutMs;
   while(Date.now() < deadline){
@@ -244,10 +249,12 @@ async function recoverCustomerAudios(request,sender){
   const operationId=request?.request_id||crypto.randomUUID();activeConversationOperation=operationId;
   if(sender?.tab?.id)crmCaptureTabs.set(phone,sender.tab.id);
   try{
+    const existing=await existingWhatsAppTab();
+    if(!existing?.id)return {ok:false,extensionVersion,code:"tab_not_found",error:"Abra o WhatsApp Web para recuperar os áudios."};
     const opened=await ensureConversationOpened({...request,phone,request_id:operationId},{active:true,operationId});
     if(!opened.ok)return {...opened,extensionVersion};
     const result=await chrome.tabs.sendMessage(opened.tabId,{type:"criare-recover-audios",request:{...request,phone,request_id:operationId}});
-    return {...result,extensionVersion,tabUrl:opened.tabUrl||"",detectedTitle:result?.title||opened.loadedState?.title||""};
+    return {...result,extensionVersion,reusedTabId:existing.id,tabUrl:opened.tabUrl||"",detectedTitle:result?.title||opened.loadedState?.title||""};
   }catch(error){return {ok:false,extensionVersion,error:error.message||"Não foi possível recuperar os áudios da conversa correta."};}
   finally{if(activeConversationOperation===operationId)activeConversationOperation=null;}
 }

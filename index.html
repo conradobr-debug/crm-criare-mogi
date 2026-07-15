@@ -872,6 +872,7 @@
             <button class="ghost" id="btnViewFullAnalysis" type="button" hidden>Ver análise completa</button>
             <button class="primary" id="btnAnalyzeAutomatic" type="button">Analisar automaticamente</button>
             <button class="ghost" id="btnTranscribeAudios" type="button" disabled>Transcrever áudios pendentes</button>
+            <button class="ghost" id="btnCopyAudioDiagnostics" type="button">Copiar diagnóstico dos áudios</button>
             <button class="ghost" id="btnCopyConversationManual" type="button">Copiar conversa para meu GPT</button>
             <button class="ghost" id="btnOpenCustomGpt" type="button">Abrir meu GPT</button>
             <button class="ghost" id="btnImportCustomGpt" type="button">Importar resultado do GPT</button>
@@ -1253,7 +1254,7 @@ function openWhatsAppFor(record=null){
   const webUrl=`https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
   window.open(webUrl,"_blank","noopener,noreferrer");
 }
-const WHATSAPP_EXTENSION_VERSION = "2.1.9";
+const WHATSAPP_EXTENSION_VERSION = "2.1.10";
 const WHATSAPP_BATCH_AUDIO_ENABLED = false;
 const WHATSAPP_BATCH_APPROVAL_KEY = "crm_whatsapp_full_batch_unlocked";
 const WHATSAPP_BATCH_FLOW_VERSION = "capture-flow-2.1.8";
@@ -1357,7 +1358,8 @@ function requestWhatsAppAudioRecovery(record){
     const phone=whatsappNumber(record?.phone);if(!phone)return resolve({ok:false,error:"Telefone inválido ou sem DDD."});
     const requestId=crypto.randomUUID();const timer=setTimeout(()=>{whatsappAudioRecoveryWaiters.delete(requestId);resolve({ok:false,requestId,error:"A recuperação dos áudios ultrapassou o tempo de segurança."});},150000);
     whatsappAudioRecoveryWaiters.set(requestId,{resolve,timer});
-    document.documentElement.dataset.criareWhatsAppAudioRecoveryRequest=JSON.stringify({requestId,requestedAt:nowISO(),phone,customerName:`${record?.first_name||""} ${record?.last_name||""}`.trim()});
+    const audioTargets=(record?.whatsapp_message_entries||[]).map(normalizeCapturedEntry).filter(entry=>/\[(?:Áudio sem transcrição|Transcrição de áudio)\]/.test(entry.text));
+    document.documentElement.dataset.criareWhatsAppAudioRecoveryRequest=JSON.stringify({requestId,requestedAt:nowISO(),phone,customerName:`${record?.first_name||""} ${record?.last_name||""}`.trim(),audioTargets});
     document.dispatchEvent(new CustomEvent("criare-whatsapp-recover-audios"));
   });
 }
@@ -1516,14 +1518,15 @@ function audioStats(record){
   const structured=entries.filter(entry=>entry.type==="Áudio"||entry.hasVoiceMessage||entry.audioMeta);
   const markers=(String(record?.whatsapp_transcript||"").match(/\[Áudio sem transcrição\]|\[Transcrição de áudio\]/g)||[]).length;
   const legacy=Math.max(0,markers-structured.length);let status={};try{status=JSON.parse(localStorage.getItem(`criare_audio_recovery_${record?.id}`)||"{}")||{};}catch(error){}
-  const stats={total:structured.length+legacy,structured:structured.length,legacy,completed:0,pending:legacy,error:0,unavailable:Math.min(Number(status.legacy_unavailable||0),legacy)};
+  const diagnostics=Array.isArray(status.diagnostics)?status.diagnostics:[];const count=state=>diagnostics.filter(item=>item.status===state).length;
+  const stats={total:structured.length+legacy,structured:structured.length,legacy,completed:0,pending:legacy,error:0,unavailable:count("indisponivel"),located:diagnostics.filter(item=>item.found_in_dom).length,waitingDownload:count("aguardando_download"),ready:count("pronto_para_transcrever"),manual:count("requer_download_manual")};
   stats.pending=Math.max(0,stats.pending-stats.unavailable);
   for(const entry of structured){const state=String(entry.audioMeta?.transcriptionStatus||"").toLowerCase();if(entry.audioTranscribed||state==="completed")stats.completed+=1;else if(state==="unavailable"){stats.unavailable+=1;}else if(state==="error"){stats.error+=1;}else stats.pending+=1;}
   return stats;
 }
 function renderAudioTranscriptionStatus(record){
   const stats=audioStats(record);const status=$("whatsappAudioStatus");const button=$("btnTranscribeAudios");
-  if(status)status.textContent=`Áudios: ${stats.total} encontrados • ${stats.structured} estruturados • ${stats.legacy} legados a recuperar • ${stats.completed} transcritos • ${stats.pending} pendentes • ${stats.unavailable} indisponíveis • ${stats.error} com erro.`;
+  if(status)status.textContent=`Áudios: ${stats.total} encontrados • ${stats.structured} estruturados • ${stats.located} localizados no DOM • ${stats.waitingDownload} aguardando download • ${stats.ready} prontos para transcrever • ${stats.completed} transcritos • ${stats.manual} requerem download manual • ${stats.unavailable} indisponíveis • ${stats.error} com erro.`;
   if(button){button.disabled=!stats.pending&&!stats.error&&!stats.legacy;button.textContent=(stats.pending||stats.error||stats.legacy)?`Transcrever áudios pendentes (${stats.total-stats.completed})`:"Transcrever áudios pendentes";}
   return stats;
 }
@@ -4483,13 +4486,15 @@ $("btnTranscribeAudios").addEventListener("click",async()=>{
   const before=audioStats(record);const button=$("btnTranscribeAudios");button.disabled=true;button.textContent="Recuperando áudios da conversa correta…";
   $("whatsappSyncStatus").textContent=`${before.total} áudios identificados no histórico. ${before.structured} possuem dados estruturados e ${before.legacy} precisam ser recuperados do WhatsApp Web.`;
   try{
-    await requireCurrentWhatsAppExtension();const result=await requestWhatsAppAudioRecovery(record);if(!result.ok)throw new Error(result.error||"Não foi possível recuperar os áudios da conversa correta.");
-    const saved=await saveRecoveredAudioEntries(record,result.entries||[]);const recovered=Number(result.entries?.length||0);const unavailable=Math.max(0,before.legacy-recovered);localStorage.setItem(`criare_audio_recovery_${record.id}`,JSON.stringify({legacy_unavailable:unavailable,checked_at:nowISO()}));
-    const after=audioStats(saved);if(unavailable)$("whatsappSyncStatus").textContent=`${unavailable} áudios antigos foram identificados no histórico, mas não estão disponíveis para recuperação no WhatsApp Web.`;else $("whatsappSyncStatus").textContent=`${recovered} áudios recuperados da conversa correta. ${after.pending} pendentes de transcrição.`;
+    const slots=(record.whatsapp_message_entries||[]).map(normalizeCapturedEntry).filter(entry=>/\[(?:Áudio sem transcrição|Transcrição de áudio)\]/.test(entry.text));
+    await requireCurrentWhatsAppExtension();const result=await requestWhatsAppAudioRecovery({...record,whatsapp_message_entries:slots});if(!result.ok)throw new Error(result.error||"Não foi possível recuperar os áudios da conversa correta.");
+    const saved=await saveRecoveredAudioEntries(record,result.entries||[]);const recovered=Number(result.entries?.length||0);const diagnostics=Array.isArray(result.diagnostics)?result.diagnostics:[];localStorage.setItem(`criare_audio_recovery_${record.id}`,JSON.stringify({diagnostics,checked_at:nowISO()}));
+    const after=audioStats(saved);if(after.unavailable)$("whatsappSyncStatus").textContent=`${after.unavailable} áudios antigos foram identificados no histórico, mas não estão disponíveis para recuperação no WhatsApp Web.`;else $("whatsappSyncStatus").textContent=`${recovered} áudios recuperados da conversa correta. ${after.pending} pendentes de transcrição.`;
     renderCapturedWhatsAppTimeline(saved);updateCapturedWhatsAppIndicators(saved);render();toast($("whatsappSyncStatus").textContent,{duration:8000});
   }catch(error){$("whatsappSyncStatus").textContent=error.message||"Não foi possível recuperar os áudios.";toast($("whatsappSyncStatus").textContent,{error:true,duration:12000});}
   finally{renderAudioTranscriptionStatus(records.find(item=>item.id===recordId)||record);}
 });
+$("btnCopyAudioDiagnostics").addEventListener("click",async()=>{const record=records.find(item=>item.id===$("id").value);const diagnostics=JSON.parse(localStorage.getItem(`criare_audio_recovery_${record?.id}`)||"{}").diagnostics||[];const text=diagnostics.length?JSON.stringify(diagnostics,null,2):"Nenhum diagnóstico de áudio disponível.";try{await navigator.clipboard.writeText(text);toast("Diagnóstico dos áudios copiado.");}catch(error){toast("Não foi possível copiar o diagnóstico dos áudios.",{error:true});}});
 $("btnAnalyzeAutomatic").addEventListener("click",async()=>{
   const recordId=$("id").value;const button=$("btnAnalyzeAutomatic");if(!recordId)return toast("Salve o cliente antes de analisar.");
   const record=records.find(item=>item.id===recordId);if(!record)return toast("Lead não localizado.");

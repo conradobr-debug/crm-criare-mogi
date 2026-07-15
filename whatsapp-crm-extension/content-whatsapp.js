@@ -522,21 +522,27 @@ async function extractLoadedMessages(request={}){
   return payload;
 }
 
+function audioDownloadButton(node){return node.querySelector('[data-testid*="download" i],button[aria-label*="download" i],[aria-label*="baixar" i]');}
+function audioPlayControl(node){return node.querySelector('[data-testid*="audio" i],[aria-label*="reproduzir" i],[aria-label*="play" i],audio');}
 async function recoverAudioEntries(request={}){
   const main=activeMain();if(!main)throw new Error("O painel da conversa não foi carregado para recuperar áudios.");
-  await waitForMessagesToSettle(main,{timeoutMs:8000,minWaitMs:600});
-  const history=await collectAvailableHistory(main,{timeoutMs:90000});
-  const entries=history.entries.filter(entry=>entry.hasVoiceMessage||entry.type==="Áudio");
-  const nodes=voiceMessageNodes(main);const byId=new Map(entries.map(entry=>[entry.id,entry]));
-  for(const [position,node] of nodes.entries()){
-    const detail=node.querySelector("[data-pre-plain-text]");const prefix=cleanText(detail?.getAttribute("data-pre-plain-text"))||"";
-    const id=audioEntryId(node,prefix,position);const entry=byId.get(id);if(!entry)continue;
-    let meta=await extractAudioFile(node,id);if(meta.extractionStatus==="extracted")meta=await transcribeLocally(meta);
-    const transcript=cleanText(meta.transcription||"");
-    entry.audioMeta=publicAudioMeta(meta);entry.audioTranscribed=Boolean(transcript);entry.hasVoiceMessage=true;entry.type="Áudio";
-    if(transcript)entry.text=entry.text.replace("[Áudio sem transcrição]",`[Transcrição de áudio] ${transcript}`);
-  }
-  return {ok:true,title:activeChatTitle(),entries,availableInDom:entries.length,reachedStart:history.reachedStart,loadedHistoryComplete:history.loadedStartReached&&!history.limited};
+  const targets=Array.isArray(request.audioTargets)?request.audioTargets:[];const found=new Map();const diagnostics=new Map(targets.map((target,index)=>[target.id||`legacy:${index}`,{message_id:target.message_id||target.id||"",position:target.chronological_position??index,sender:target.sender||"",date:target.date||"",time:target.time||"",duration:target.duration||null,found_in_dom:false,play_found:false,download_found:false,url_found:false,file_obtained:false,size:0,status:"aguardando_dom",reason:""}]));
+  const inspect=async()=>{
+    for(const [position,node] of voiceMessageNodes(main).entries()){
+      const detail=node.querySelector("[data-pre-plain-text]");const prefix=cleanText(detail?.getAttribute("data-pre-plain-text"))||"";const id=audioEntryId(node,prefix,position);const target=targets.find(item=>item.id===id)||targets.find(item=>!found.has(item.id)&&item.sender===prefixParts(prefix).sender&&item.time===prefixParts(prefix).time&&Number(item.duration||0)===Number(audioDuration(node)||0));if(!target||found.has(target.id))continue;
+      const diagnostic=diagnostics.get(target.id)||{};diagnostic.found_in_dom=true;diagnostic.play_found=Boolean(audioPlayControl(node));diagnostic.download_found=Boolean(audioDownloadButton(node));diagnostic.url_found=Boolean(audioSource(node));diagnostic.status="localizado";
+      if(!audioSource(node)&&audioDownloadButton(node)){diagnostic.status="aguardando_download";audioDownloadButton(node).click();await sleep(1200);diagnostic.url_found=Boolean(audioSource(node));}
+      let meta=await extractAudioFile(node,target.id);if(meta.extractionStatus==="unavailable"&&diagnostic.download_found){meta={...meta,transcriptionStatus:"pending",extractionStatus:"manual_download",error:"Áudio localizado, mas requer download manual."};diagnostic.status="requer_download_manual";}
+      else if(meta.extractionStatus==="extracted"){diagnostic.status="pronto_para_transcrever";meta=await transcribeLocally(meta);diagnostic.status=meta.transcription?"transcrito":(meta.transcriptionStatus==="pending"?"pronto_para_transcrever":"erro");}
+      else if(meta.extractionStatus==="unavailable"){diagnostic.status="indisponivel";}
+      diagnostic.file_obtained=Boolean(meta.sourceAvailable);diagnostic.size=Number(meta.sizeBytes||0);diagnostic.reason=meta.error||"";found.set(target.id,{...target,audioMeta:publicAudioMeta(meta),audioTranscribed:Boolean(meta.transcription),hasVoiceMessage:true,type:"Áudio",text:meta.transcription?String(target.text||"").replace("[Áudio sem transcrição]",`[Transcrição de áudio] ${cleanText(meta.transcription)}`):target.text});
+    }
+  };
+  const scroller=messageScrollContainer(main);let passes=0;let stable=0;let previous="";if(scroller)scroller.scrollTop=scroller.scrollHeight;
+  while(scroller&&passes<220&&stable<2){await inspect();const signature=windowSignature(main);const before=scroller.scrollTop;scroller.scrollTop=Math.max(0,before-Math.max(scroller.clientHeight*.8,650));scroller.dispatchEvent(new Event("scroll",{bubbles:true}));await sleep(550);await waitForMessagesToSettle(main,{timeoutMs:3500,minWaitMs:350});stable=before<=2&&signature===previous?stable+1:0;previous=signature;passes+=1;}
+  await inspect();for(const [id,diagnostic] of diagnostics){if(!found.has(id)){diagnostic.status="indisponivel";diagnostic.reason="Mensagem não localizada após percorrer o histórico disponível no WhatsApp Web.";}}
+  if(scroller){scroller.scrollTop=scroller.scrollHeight;scroller.dispatchEvent(new Event("scroll",{bubbles:true}));}
+  return {ok:true,title:activeChatTitle(),entries:[...found.values()],diagnostics:[...diagnostics.values()],availableInDom:[...diagnostics.values()].filter(item=>item.found_in_dom).length};
 }
 
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
