@@ -28,6 +28,14 @@ test("atualiza mensagem editada sem duplicar o ID",()=>{
   assert.match(merged.entries[0].text,/terça/);
 });
 
+test("áudios idênticos com identidade própria não são colapsados",()=>{
+  const audios=Array.from({length:8},(_,index)=>({id:`audio:crislane:${index}`,text:"[Áudio sem transcrição]",type:"Áudio",duration:12,sender:"Crislaine",chronological_position:index}));
+  const first=core.mergeEntries([],audios);
+  const repeated=core.mergeEntries(first.entries,audios);
+  assert.equal(first.entries.length,8);
+  assert.equal(repeated.entries.length,8);
+});
+
 test("reconstrói prefixo de mídia que continua a mensagem anterior",()=>{
   const prefix = core.continuationPrefix("[15:16, 06/07/2026] Leticia Bougo: ","15:17","");
   assert.equal(prefix,"[15:17, 06/07/2026] Leticia Bougo: ");
@@ -49,8 +57,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.8"/);
-  assert.equal(manifest.version,"2.1.8");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.9"/);
+  assert.equal(manifest.version,"2.1.9");
   assert(crm.includes("https://web.whatsapp.com/send/?phone=${number}"));
   assert(!crm.includes("whatsapp://"));
   assert.match(crm,/id="btnCaptureOpenWhatsApp"[^>]*>Capturar conversa aberta/);
@@ -79,7 +87,11 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/criare-whatsapp-readiness/);
   assert.match(content,/const connectedWithoutChat = ready && !qrCodeDetected && conversationListDetected;/);
   assert.match(content,/criare-open-conversation-fallback/);
+  assert.match(content,/function audioEntryId/);
+  assert.match(content,/criare-recover-audios/);
   assert.match(background,/criare-open-conversation-fallback/);
+  assert.match(background,/criare-recover-whatsapp-audios/);
+  assert.match(contentCrm,/criare-whatsapp-recover-audios/);
   assert.match(background,/timeoutMs:14000/);
   assert.match(content,/if\(!request\?\.disableAudio\)/);
   assert.match(crm,/whatsappAnalysisIsStale/);

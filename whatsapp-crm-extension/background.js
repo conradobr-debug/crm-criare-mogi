@@ -237,6 +237,21 @@ async function captureOpenWhatsAppChat(request,sender){
   }
 }
 
+async function recoverCustomerAudios(request,sender){
+  const phone=validPhone(request?.phone);const extensionVersion=chrome.runtime.getManifest().version;
+  if(!phone)return {ok:false,extensionVersion,code:"invalid_phone",error:"Telefone inválido ou incompleto."};
+  if(activeConversationOperation)return {ok:false,extensionVersion,code:"operation_in_progress",error:"Já existe uma navegação ou captura em andamento."};
+  const operationId=request?.request_id||crypto.randomUUID();activeConversationOperation=operationId;
+  if(sender?.tab?.id)crmCaptureTabs.set(phone,sender.tab.id);
+  try{
+    const opened=await ensureConversationOpened({...request,phone,request_id:operationId},{active:true,operationId});
+    if(!opened.ok)return {...opened,extensionVersion};
+    const result=await chrome.tabs.sendMessage(opened.tabId,{type:"criare-recover-audios",request:{...request,phone,request_id:operationId}});
+    return {...result,extensionVersion,tabUrl:opened.tabUrl||"",detectedTitle:result?.title||opened.loadedState?.title||""};
+  }catch(error){return {ok:false,extensionVersion,error:error.message||"Não foi possível recuperar os áudios da conversa correta."};}
+  finally{if(activeConversationOperation===operationId)activeConversationOperation=null;}
+}
+
 async function preflightWhatsApp(request,sender){
   const extensionVersion = chrome.runtime.getManifest().version;
   const tabs = await chrome.tabs.query({url:"https://web.whatsapp.com/*"});
@@ -268,6 +283,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
     "criare-open-whatsapp-chat":openCustomerChat,
     "criare-capture-active-whatsapp":captureCustomerChat,
     "criare-capture-open-whatsapp":captureOpenWhatsAppChat,
+    "criare-recover-whatsapp-audios":recoverCustomerAudios,
     "criare-preflight-whatsapp":preflightWhatsApp,
     "criare-audio-transcription-complete":forwardAudioTranscription,
     "criare-sync-whatsapp-record":syncCustomerChat

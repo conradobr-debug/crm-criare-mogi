@@ -1253,7 +1253,7 @@ function openWhatsAppFor(record=null){
   const webUrl=`https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
   window.open(webUrl,"_blank","noopener,noreferrer");
 }
-const WHATSAPP_EXTENSION_VERSION = "2.1.8";
+const WHATSAPP_EXTENSION_VERSION = "2.1.9";
 const WHATSAPP_BATCH_AUDIO_ENABLED = false;
 const WHATSAPP_BATCH_APPROVAL_KEY = "crm_whatsapp_full_batch_unlocked";
 const WHATSAPP_BATCH_FLOW_VERSION = "capture-flow-2.1.8";
@@ -1264,6 +1264,7 @@ const whatsappAutoSyncWaiters = new Map();
 const whatsappOpenCaptureWaiters = new Map();
 const whatsappExtensionPingWaiters = new Map();
 const whatsappPreflightWaiters = new Map();
+const whatsappAudioRecoveryWaiters = new Map();
 
 document.addEventListener("criare-whatsapp-auto-sync-result",()=>{
   let result;
@@ -1294,6 +1295,12 @@ document.addEventListener("criare-whatsapp-preflight-result",()=>{
   delete document.documentElement.dataset.criareWhatsAppPreflightResult;
   const waiter=whatsappPreflightWaiters.get(result.requestId);if(!waiter)return;
   clearTimeout(waiter.timer);whatsappPreflightWaiters.delete(result.requestId);waiter.resolve(result);
+});
+document.addEventListener("criare-whatsapp-audio-recovery-result",()=>{
+  let result;try{result=JSON.parse(document.documentElement.dataset.criareWhatsAppAudioRecoveryResult||"{}");}catch(error){result={ok:false,error:"A extensão devolveu uma recuperação de áudio inválida."};}
+  delete document.documentElement.dataset.criareWhatsAppAudioRecoveryResult;
+  const waiter=whatsappAudioRecoveryWaiters.get(result.requestId);if(!waiter)return;
+  clearTimeout(waiter.timer);whatsappAudioRecoveryWaiters.delete(result.requestId);waiter.resolve(result);
 });
 document.addEventListener("criare-whatsapp-audio-transcription-update",async()=>{
   let payload;try{payload=JSON.parse(document.documentElement.dataset.criareWhatsAppAudioTranscriptionUpdate||"{}");}catch(error){payload={};}
@@ -1343,6 +1350,15 @@ function requestWhatsAppPreflight(){
     whatsappPreflightWaiters.set(requestId,{resolve,timer});
     document.documentElement.dataset.criareWhatsAppPreflightRequest=JSON.stringify({requestId,requestedAt:nowISO()});
     document.dispatchEvent(new CustomEvent("criare-whatsapp-preflight"));
+  });
+}
+function requestWhatsAppAudioRecovery(record){
+  return new Promise(resolve=>{
+    const phone=whatsappNumber(record?.phone);if(!phone)return resolve({ok:false,error:"Telefone inválido ou sem DDD."});
+    const requestId=crypto.randomUUID();const timer=setTimeout(()=>{whatsappAudioRecoveryWaiters.delete(requestId);resolve({ok:false,requestId,error:"A recuperação dos áudios ultrapassou o tempo de segurança."});},150000);
+    whatsappAudioRecoveryWaiters.set(requestId,{resolve,timer});
+    document.documentElement.dataset.criareWhatsAppAudioRecoveryRequest=JSON.stringify({requestId,requestedAt:nowISO(),phone,customerName:`${record?.first_name||""} ${record?.last_name||""}`.trim()});
+    document.dispatchEvent(new CustomEvent("criare-whatsapp-recover-audios"));
   });
 }
 async function openAndCaptureLeadConversation(record,{openOnly=false,batch=false}={}){
@@ -1496,19 +1512,31 @@ function updateCapturedWhatsAppIndicators(record){
   renderWhatsAppSectionSummary(record);
 }
 function audioStats(record){
-  const stats={total:0,completed:0,pending:0,error:0};
-  for(const entry of Array.isArray(record?.whatsapp_message_entries)?record.whatsapp_message_entries:[]){
-    if(entry.type!=="Áudio"&&!entry.hasVoiceMessage&&!entry.audioMeta)continue;
-    stats.total+=1;const status=String(entry.audioMeta?.transcriptionStatus||"").toLowerCase();
-    if(entry.audioTranscribed||status==="completed")stats.completed+=1;else if(status==="error"||status==="unavailable")stats.error+=1;else stats.pending+=1;
-  }
+  const entries=Array.isArray(record?.whatsapp_message_entries)?record.whatsapp_message_entries:[];
+  const structured=entries.filter(entry=>entry.type==="Áudio"||entry.hasVoiceMessage||entry.audioMeta);
+  const markers=(String(record?.whatsapp_transcript||"").match(/\[Áudio sem transcrição\]|\[Transcrição de áudio\]/g)||[]).length;
+  const legacy=Math.max(0,markers-structured.length);let status={};try{status=JSON.parse(localStorage.getItem(`criare_audio_recovery_${record?.id}`)||"{}")||{};}catch(error){}
+  const stats={total:structured.length+legacy,structured:structured.length,legacy,completed:0,pending:legacy,error:0,unavailable:Math.min(Number(status.legacy_unavailable||0),legacy)};
+  stats.pending=Math.max(0,stats.pending-stats.unavailable);
+  for(const entry of structured){const state=String(entry.audioMeta?.transcriptionStatus||"").toLowerCase();if(entry.audioTranscribed||state==="completed")stats.completed+=1;else if(state==="unavailable"){stats.unavailable+=1;}else if(state==="error"){stats.error+=1;}else stats.pending+=1;}
   return stats;
 }
 function renderAudioTranscriptionStatus(record){
   const stats=audioStats(record);const status=$("whatsappAudioStatus");const button=$("btnTranscribeAudios");
-  if(status)status.textContent=`Áudios: ${stats.total} encontrados • ${stats.completed} transcritos • ${stats.pending} pendentes • ${stats.error} com erro.`;
-  if(button){button.disabled=!stats.pending&&!stats.error;button.textContent=(stats.pending||stats.error)?`Transcrever áudios pendentes (${stats.pending+stats.error})`:"Transcrever áudios pendentes";}
+  if(status)status.textContent=`Áudios: ${stats.total} encontrados • ${stats.structured} estruturados • ${stats.legacy} legados a recuperar • ${stats.completed} transcritos • ${stats.pending} pendentes • ${stats.unavailable} indisponíveis • ${stats.error} com erro.`;
+  if(button){button.disabled=!stats.pending&&!stats.error&&!stats.legacy;button.textContent=(stats.pending||stats.error||stats.legacy)?`Transcrever áudios pendentes (${stats.total-stats.completed})`:"Transcrever áudios pendentes";}
   return stats;
+}
+function mergeRecoveredAudioEntries(record,recovered){
+  const entries=(record.whatsapp_message_entries||[]).map(normalizeCapturedEntry).filter(Boolean);const slots=entries.map((entry,index)=>({entry,index})).filter(({entry})=>/\[(?:Áudio sem transcrição|Transcrição de áudio)\]/.test(entry.text));let changedTranscript=false;
+  recovered.forEach((audio,index)=>{const slot=slots[index];if(!slot)return;const existing=slot.entry;const transcript=String(audio.audioMeta?.transcription||"").trim();const text=transcript&&/\[Áudio sem transcrição\]/.test(existing.text)?existing.text.replace("[Áudio sem transcrição]",`[Transcrição de áudio] ${transcript}`):existing.text;changedTranscript||=text!==existing.text;entries[slot.index]={...existing,...audio,id:audio.id||existing.id,text,audioMeta:audio.audioMeta||existing.audioMeta,audioTranscribed:Boolean(transcript)||Boolean(existing.audioTranscribed),hasVoiceMessage:true,type:"Áudio"};});
+  return {entries,changedTranscript};
+}
+async function saveRecoveredAudioEntries(record,recovered){
+  const merged=mergeRecoveredAudioEntries(record,recovered);if(!recovered.length)return record;
+  const patch={whatsapp_message_entries:merged.entries,whatsapp_transcript:merged.entries.map(entry=>entry.text).join("\n"),whatsapp_transcript_updated_at:nowISO()};
+  if(merged.changedTranscript)patch.whatsapp_analysis_status=record.whatsapp_analysis_updated_at?"stale":(record.whatsapp_analysis_status||"never");
+  const {data,error}=await sb.from(TBL_RECORDS).update(patch).eq("id",record.id).select("*").single();if(error)throw error;const index=records.findIndex(item=>item.id===data.id);if(index>=0)records[index]=data;return data;
 }
 async function saveWhatsAppAudioTranscription(payload){
   const phone=whatsappNumber(payload?.phone);const record=records.find(item=>whatsappNumber(item.phone)===phone);if(!record||!payload?.entry?.id)return;
@@ -4452,9 +4480,14 @@ $("btnCopyCaptureError").addEventListener("click",async()=>{
 });
 $("btnTranscribeAudios").addEventListener("click",async()=>{
   const recordId=$("id").value;const record=records.find(item=>item.id===recordId);if(!record)return toast("Salve o lead antes de transcrever áudios.");
-  const button=$("btnTranscribeAudios");button.disabled=true;button.textContent="Reabrindo conversa para transcrever…";
-  try{await captureFreeWhatsAppConversation(record,{openOnly:true});toast("Conversa capturada. Os áudios foram colocados na fila local de transcrição.",{duration:7000});}
-  catch(error){showCaptureFailure(record,error);toast(captureFailureMessage(record,error),{error:true,duration:12000});}
+  const before=audioStats(record);const button=$("btnTranscribeAudios");button.disabled=true;button.textContent="Recuperando áudios da conversa correta…";
+  $("whatsappSyncStatus").textContent=`${before.total} áudios identificados no histórico. ${before.structured} possuem dados estruturados e ${before.legacy} precisam ser recuperados do WhatsApp Web.`;
+  try{
+    await requireCurrentWhatsAppExtension();const result=await requestWhatsAppAudioRecovery(record);if(!result.ok)throw new Error(result.error||"Não foi possível recuperar os áudios da conversa correta.");
+    const saved=await saveRecoveredAudioEntries(record,result.entries||[]);const recovered=Number(result.entries?.length||0);const unavailable=Math.max(0,before.legacy-recovered);localStorage.setItem(`criare_audio_recovery_${record.id}`,JSON.stringify({legacy_unavailable:unavailable,checked_at:nowISO()}));
+    const after=audioStats(saved);if(unavailable)$("whatsappSyncStatus").textContent=`${unavailable} áudios antigos foram identificados no histórico, mas não estão disponíveis para recuperação no WhatsApp Web.`;else $("whatsappSyncStatus").textContent=`${recovered} áudios recuperados da conversa correta. ${after.pending} pendentes de transcrição.`;
+    renderCapturedWhatsAppTimeline(saved);updateCapturedWhatsAppIndicators(saved);render();toast($("whatsappSyncStatus").textContent,{duration:8000});
+  }catch(error){$("whatsappSyncStatus").textContent=error.message||"Não foi possível recuperar os áudios.";toast($("whatsappSyncStatus").textContent,{error:true,duration:12000});}
   finally{renderAudioTranscriptionStatus(records.find(item=>item.id===recordId)||record);}
 });
 $("btnAnalyzeAutomatic").addEventListener("click",async()=>{

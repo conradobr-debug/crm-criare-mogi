@@ -38,6 +38,15 @@ document.addEventListener("criare-whatsapp-open-capture",()=>{
   });
 });
 
+document.addEventListener("criare-whatsapp-recover-audios",()=>{
+  const request = readRequest("criareWhatsAppAudioRecoveryRequest");
+  chrome.runtime.sendMessage({type:"criare-recover-whatsapp-audios",request},result=>{
+    returnResult("criareWhatsAppAudioRecoveryResult","criare-whatsapp-audio-recovery-result",chrome.runtime.lastError
+      ? {ok:false,requestId:request.requestId,error:"A extensão Criare precisa ser atualizada e recarregada."}
+      : {...(result||{ok:false}),requestId:request.requestId});
+  });
+});
+
 document.addEventListener("criare-whatsapp-extension-ping",()=>{
   const request = readRequest("criareWhatsAppExtensionPingRequest");
   chrome.runtime.sendMessage({type:"criare-extension-status"},result=>{

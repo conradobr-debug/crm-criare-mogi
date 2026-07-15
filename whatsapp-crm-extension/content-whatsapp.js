@@ -351,10 +351,17 @@ function explicitAuthor(node){
   return cleanText(label).replace(/:\s*$/, "");
 }
 
-function messageBody(node,audioState=new Map()){
+function messageDirection(node){return /message-out|outgoing|outbound/i.test(`${node.className||""} ${node.closest?.("[class]")?.className||""}`)?"outbound":"inbound";}
+function prefixParts(prefix){const match=cleanText(prefix).match(/^\[([^,\]]+),\s*([^\]]+)\]\s*([^:]+):/);return {time:cleanText(match?.[1]||""),date:cleanText(match?.[2]||""),sender:cleanText(match?.[3]||"")};}
+function audioEntryId(node,prefix,position){
+  const original=messageId(node);if(original)return `wa:${original}`;
+  const parts=prefixParts(prefix);const duration=audioDuration(node)||"sem-duracao";
+  return `audio:${messageHash(`${parts.sender}|${parts.date}|${parts.time}|${duration}|${position}|${messageDirection(node)}`)}`;
+}
+function messageBody(node,audioState=new Map(),audioId=""){
   const type = mediaType(node);
   if(type === "Áudio"){
-    const id=messageId(node)||`fp:${messageHash(cleanText(node.innerText||"audio"))}`;const audio=audioState.get(id)||audioMeta(id);
+    const id=audioId||audioEntryId(node,"",0);const audio=audioState.get(id)||audioMeta(id);
     return {body:audio.transcription?`[Transcrição de áudio] ${audio.transcription}`:"[Áudio sem transcrição]",type,audioTranscribed:Boolean(audio.transcription),audioMeta:publicAudioMeta(audio)};
   }
   const detail = node.querySelector("[data-pre-plain-text]");
@@ -381,12 +388,13 @@ function readVisibleMessageWindow(main,audioState=new Map()){
   const occurrences = new Map();
   const entries = [];
   let previousPrefix = "";
-  for(const node of messageNodes(main)){
+  for(const [position,node] of messageNodes(main).entries()){
     const detail = node.querySelector("[data-pre-plain-text]");
     let prefix = cleanText(detail?.getAttribute("data-pre-plain-text"));
     if(!prefix) prefix = continuationPrefix(previousPrefix, visibleTime(node), explicitAuthor(node));
     previousPrefix = prefix || previousPrefix;
-    const message = messageBody(node,audioState);
+    const type=mediaType(node);const entryId=type==="Áudio"?audioEntryId(node,prefix,position):"";
+    const message = messageBody(node,audioState,entryId);
     const text = cleanText(`${prefix}${prefix && !prefix.endsWith(" ") ? " " : ""}${message.body}`);
     if(!text) continue;
     const stableId = messageId(node);
@@ -394,12 +402,19 @@ function readVisibleMessageWindow(main,audioState=new Map()){
     const occurrence = occurrences.get(fingerprint) || 0;
     occurrences.set(fingerprint, occurrence + 1);
     entries.push({
-      id:stableId ? `wa:${stableId}` : `fp:${fingerprint}:${occurrence}`,
+      id:type==="Áudio"?entryId:(stableId ? `wa:${stableId}` : `fp:${fingerprint}:${occurrence}`),
       text,
       type:message.type,
       hasVoiceMessage:message.type === "Áudio",
       audioTranscribed:message.audioTranscribed,
       audioMeta:message.audioMeta||null,
+      message_id:stableId||null,
+      sender:prefixParts(prefix).sender||null,
+      direction:messageDirection(node),
+      date:prefixParts(prefix).date||null,
+      time:prefixParts(prefix).time||null,
+      duration:message.type==="Áudio"?audioDuration(node):null,
+      chronological_position:position,
       capturedAt:new Date().toISOString()
     });
   }
@@ -466,8 +481,8 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
 
 async function processAudioQueue(main,request,history){
   const voices=voiceMessageNodes(main);if(!voices.length)return;
-  for(const node of voices){
-    const id=messageId(node)||`fp:${messageHash(cleanText(node.innerText||"audio"))}`;const entry=history.entries.find(item=>item.id===`wa:${id}`||item.id===id||item.text.includes("[Áudio"));if(!entry)continue;
+  for(const [position,node] of voices.entries()){
+    const detail=node.querySelector("[data-pre-plain-text]");const prefix=cleanText(detail?.getAttribute("data-pre-plain-text"))||"";const id=audioEntryId(node,prefix,position);const entry=history.entries.find(item=>item.id===id);if(!entry)continue;
     let meta=await extractAudioFile(node,id);if(meta.extractionStatus==="extracted")meta=await transcribeLocally(meta);
     const transcript=cleanText(meta.transcription||"");const text=transcript?entry.text.replace("[Áudio sem transcrição]",`[Transcrição de áudio] ${transcript}`):entry.text;
     chrome.runtime.sendMessage({type:"criare-audio-transcription-complete",request:{phone:request?.phone||"",customerName:request?.customerName||""},entry:{...entry,text,audioMeta:publicAudioMeta(meta),audioTranscribed:Boolean(transcript),hasVoiceMessage:true}}).catch(()=>{});
@@ -491,7 +506,7 @@ async function extractLoadedMessages(request={}){
   const audioTranscribed = history.entries.filter(entry=>entry.audioTranscribed).length;
   const payload={
     transcript:history.entries.map(entry=>entry.text).join("\n"),
-    entries:history.entries.map(({id,text,type,capturedAt,hasVoiceMessage,audioTranscribed,audioMeta})=>({id,text,type,capturedAt,hasVoiceMessage,audioTranscribed,audioMeta})),
+    entries:history.entries.map(({id,text,type,capturedAt,hasVoiceMessage,audioTranscribed,audioMeta,message_id,sender,direction,date,time,duration,chronological_position})=>({id,text,type,capturedAt,hasVoiceMessage,audioTranscribed,audioMeta,message_id,sender,direction,date,time,duration,chronological_position})),
     count:history.entries.length,audioCount,audioTranscribed,
     audioExtensionDetected:false,
     olderHistoryRequested:olderHistory.requested,
@@ -505,6 +520,23 @@ async function extractLoadedMessages(request={}){
   // A fila em lote precisa concluir texto e gravação sem depender de áudio local.
   if(!request?.disableAudio) queueMicrotask(()=>processAudioQueue(main,request,history).catch(()=>{}));
   return payload;
+}
+
+async function recoverAudioEntries(request={}){
+  const main=activeMain();if(!main)throw new Error("O painel da conversa não foi carregado para recuperar áudios.");
+  await waitForMessagesToSettle(main,{timeoutMs:8000,minWaitMs:600});
+  const history=await collectAvailableHistory(main,{timeoutMs:90000});
+  const entries=history.entries.filter(entry=>entry.hasVoiceMessage||entry.type==="Áudio");
+  const nodes=voiceMessageNodes(main);const byId=new Map(entries.map(entry=>[entry.id,entry]));
+  for(const [position,node] of nodes.entries()){
+    const detail=node.querySelector("[data-pre-plain-text]");const prefix=cleanText(detail?.getAttribute("data-pre-plain-text"))||"";
+    const id=audioEntryId(node,prefix,position);const entry=byId.get(id);if(!entry)continue;
+    let meta=await extractAudioFile(node,id);if(meta.extractionStatus==="extracted")meta=await transcribeLocally(meta);
+    const transcript=cleanText(meta.transcription||"");
+    entry.audioMeta=publicAudioMeta(meta);entry.audioTranscribed=Boolean(transcript);entry.hasVoiceMessage=true;entry.type="Áudio";
+    if(transcript)entry.text=entry.text.replace("[Áudio sem transcrição]",`[Transcrição de áudio] ${transcript}`);
+  }
+  return {ok:true,title:activeChatTitle(),entries,availableInDom:entries.length,reachedStart:history.reachedStart,loadedHistoryComplete:history.loadedStartReached&&!history.limited};
 }
 
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
@@ -534,6 +566,10 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
     openConversationFromSidebar(message.request || {})
       .then(result=>sendResponse({contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...result}))
       .catch(error=>sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,code:"sidebar_open_failed",error:error.message||"Não foi possível abrir o contato pela lista lateral."}));
+    return true;
+  }
+  if(message?.type === "criare-recover-audios"){
+    recoverAudioEntries(message.request||{}).then(result=>sendResponse({contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...result})).catch(error=>sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,error:error.message||"Não foi possível recuperar os áudios."}));
     return true;
   }
   if(message?.type !== "criare-extract-active-chat") return false;
