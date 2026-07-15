@@ -1661,9 +1661,9 @@ async function runWhatsAppBatch(){
     const record=state.queue[state.position];const leadPosition=state.position+1;updateWhatsAppBatchPanel(`Lead atual: ${whatsappBatchName(record)} • posição ${leadPosition} de ${state.queue.length}`);
     if(!whatsappNumber(record.phone)){
       state.stats.ignored+=1;
-      state.errors.push(`Ignorado — telefone inválido • ${whatsappBatchName(record)} • recebido: ${String(record.phone||"não informado")}`);
+      state.errors.push(`Ignorado — telefone inválido ou sem DDD • ${whatsappBatchName(record)}\nTelefone cadastrado: ${String(record.phone||"não informado")}\nAção recomendada: corrigir o telefone no cadastro.`);
       state.position+=1;
-      updateWhatsAppBatchPanel(`Ignorado — telefone inválido: ${whatsappBatchName(record)}. Continuando a fila.`);
+      updateWhatsAppBatchPanel(`Ignorado — telefone inválido ou sem DDD: ${whatsappBatchName(record)}. Continuando a fila.`);
       await waitWhatsAppBatch(900);
       continue;
     }
@@ -1682,14 +1682,21 @@ async function runWhatsAppBatch(){
   updateWhatsAppBatchPanel(state.systemPaused?"Atualização pausada por falha sistêmica.":state.cancelled?"Atualização cancelada.":`Atualização concluída • ${state.stats.updated} conversas atualizadas • ${state.stats.newMessages} com mensagens novas • ${state.stats.stale} análises desatualizadas • ${state.stats.errors} falhas.`);
   state.cancelled=false;
 }
-function whatsappBatchTestCandidates(){const {queue}=whatsappBatchCandidates();const find=name=>queue.find(record=>whatsappBatchName(record).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().includes(name));const first=find("nathalia"),second=find("melissa"),third=queue.find(record=>record!==first&&record!==second&&Number(record.whatsapp_sync_message_count||0)===0);return [first,second,third].filter(Boolean);}
+function whatsappBatchTestCandidates(){
+  const {queue:valid}=whatsappBatchCandidates();
+  const normalizedName=record=>whatsappBatchName(record).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+  const invalid=records.find(record=>!isSpecifier(record)&&record.pipeline==="lead"&&record.stage!=="Perdido"&&normalizedName(record)==="fjenkw jkenfjkenk"&&String(record.phone||"").replace(/\D/g,"")==="943948739");
+  const first=valid.find(record=>normalizedName(record).includes("nathalia"))||valid[0];
+  const third=valid.find(record=>record?.id!==first?.id&&normalizedName(record).includes("melissa"))||valid.find(record=>record?.id!==first?.id);
+  return [first,invalid,third].filter(Boolean);
+}
 async function startWhatsAppBatch({mode="full"}={}){
   if(whatsappBatchState.running)return;
   if(mode==="full"&&!whatsappBatchState.fullBatchUnlocked)return toast("O lote completo permanece bloqueado até o teste controlado passar.",{error:true,duration:12000});
   const preflight=await runWhatsAppBatchPreflight();if(!preflight.extension||!preflight.whatsappWeb||!preflight.contentScript||!preflight.supabaseAuth||!preflight.database||!preflight.schema)return updateWhatsAppBatchPanel("Lote bloqueado: corrija a pré-verificação antes de iniciar.");
-  const candidates=whatsappBatchCandidates();const queue=mode==="test"?whatsappBatchTestCandidates():candidates.queue;if(mode==="test"&&queue.length!==3)return updateWhatsAppBatchPanel("Teste bloqueado: Nathalia, Melissa e um lead novo com telefone válido são necessários.");
+  const candidates=whatsappBatchCandidates();const queue=mode==="test"?whatsappBatchTestCandidates():candidates.queue;if(mode==="test"&&queue.length!==3)return updateWhatsAppBatchPanel("Teste bloqueado: são necessários dois leads válidos e o lead fjenkw jkenfjkenk com telefone 943948739.");
   Object.assign(whatsappBatchState,{running:true,paused:false,cancelled:false,systemPaused:false,mode,queue,position:0,stats:{updated:0,newMessages:0,stale:0,ignored:mode==="test"?0:candidates.ignored,errors:0},errors:[],resume:null,systemFailure:{type:"",count:0}});
-  updateWhatsAppBatchPanel(`Preparando ${mode==="test"?"teste controlado":"fila sequencial"} com ${queue.length} leads válidos.`);runWhatsAppBatch().catch(error=>{whatsappBatchState.running=false;whatsappBatchState.stats.errors+=1;whatsappBatchState.errors.push(error.message||"Falha no lote.");updateWhatsAppBatchPanel("Atualização interrompida com erro.");});
+  updateWhatsAppBatchPanel(mode==="test"?"Preparando teste controlado: lead válido, fjenkw jkenfjkenk (inválido), lead válido.":`Preparando fila sequencial com ${queue.length} leads válidos.`);runWhatsAppBatch().catch(error=>{whatsappBatchState.running=false;whatsappBatchState.stats.errors+=1;whatsappBatchState.errors.push(error.message||"Falha no lote.");updateWhatsAppBatchPanel("Atualização interrompida com erro.");});
 }
 async function analyzeSavedWhatsAppConversation(record){
   const saved=normalizeLegacyWhatsAppRecord(record);
