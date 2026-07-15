@@ -1254,7 +1254,7 @@ function openWhatsAppFor(record=null){
   const webUrl=`https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
   window.open(webUrl,"_blank","noopener,noreferrer");
 }
-const WHATSAPP_EXTENSION_VERSION = "2.1.10";
+const WHATSAPP_EXTENSION_VERSION = "2.1.11";
 const WHATSAPP_BATCH_AUDIO_ENABLED = false;
 const WHATSAPP_BATCH_APPROVAL_KEY = "crm_whatsapp_full_batch_unlocked";
 const WHATSAPP_BATCH_FLOW_VERSION = "capture-flow-2.1.8";
@@ -1358,7 +1358,7 @@ function requestWhatsAppAudioRecovery(record){
     const phone=whatsappNumber(record?.phone);if(!phone)return resolve({ok:false,error:"Telefone inválido ou sem DDD."});
     const requestId=crypto.randomUUID();const timer=setTimeout(()=>{whatsappAudioRecoveryWaiters.delete(requestId);resolve({ok:false,requestId,error:"A recuperação dos áudios ultrapassou o tempo de segurança."});},150000);
     whatsappAudioRecoveryWaiters.set(requestId,{resolve,timer});
-    const audioTargets=(record?.whatsapp_message_entries||[]).map(normalizeCapturedEntry).filter(entry=>/\[(?:Áudio sem transcrição|Transcrição de áudio)\]/.test(entry.text));
+    const audioTargets=(record?.whatsapp_message_entries||[]).map(normalizeCapturedEntry).filter(entry=>entry.type==="Áudio"||entry.hasVoiceMessage||entry.audioMeta||/\[(?:Áudio sem transcrição|Transcrição de áudio)\]/.test(entry.text));
     document.documentElement.dataset.criareWhatsAppAudioRecoveryRequest=JSON.stringify({requestId,requestedAt:nowISO(),phone,customerName:`${record?.first_name||""} ${record?.last_name||""}`.trim(),audioTargets});
     document.dispatchEvent(new CustomEvent("criare-whatsapp-recover-audios"));
   });
@@ -4486,7 +4486,7 @@ $("btnTranscribeAudios").addEventListener("click",async()=>{
   const before=audioStats(record);const button=$("btnTranscribeAudios");button.disabled=true;button.textContent="Recuperando áudios da conversa correta…";
   $("whatsappSyncStatus").textContent=`${before.total} áudios identificados no histórico. ${before.structured} possuem dados estruturados e ${before.legacy} precisam ser recuperados do WhatsApp Web.`;
   try{
-    const slots=(record.whatsapp_message_entries||[]).map(normalizeCapturedEntry).filter(entry=>/\[(?:Áudio sem transcrição|Transcrição de áudio)\]/.test(entry.text));
+    const slots=(record.whatsapp_message_entries||[]).map(normalizeCapturedEntry).filter(entry=>entry.type==="Áudio"||entry.hasVoiceMessage||entry.audioMeta||/\[(?:Áudio sem transcrição|Transcrição de áudio)\]/.test(entry.text));
     await requireCurrentWhatsAppExtension();const result=await requestWhatsAppAudioRecovery({...record,whatsapp_message_entries:slots});if(!result.ok)throw new Error(result.error||"Não foi possível recuperar os áudios da conversa correta.");
     const saved=await saveRecoveredAudioEntries(record,result.entries||[]);const recovered=Number(result.entries?.length||0);const diagnostics=Array.isArray(result.diagnostics)?result.diagnostics:[];localStorage.setItem(`criare_audio_recovery_${record.id}`,JSON.stringify({diagnostics,checked_at:nowISO()}));
     const after=audioStats(saved);if(after.unavailable)$("whatsappSyncStatus").textContent=`${after.unavailable} áudios antigos foram identificados no histórico, mas não estão disponíveis para recuperação no WhatsApp Web.`;else $("whatsappSyncStatus").textContent=`${recovered} áudios recuperados da conversa correta. ${after.pending} pendentes de transcrição.`;

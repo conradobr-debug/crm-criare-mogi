@@ -11,7 +11,22 @@ const AUDIO_MAX_BYTES = 15 * 1024 * 1024;
 function voiceMessageNodes(main=activeMain()){return messageNodes(main).filter(node=>node.querySelector('[aria-label*="mensagem de voz" i],[aria-label*="voice message" i],[data-testid*="audio" i],audio'));}
 function audioElement(node){return node.querySelector("audio")||null;}
 function audioSource(node){const audio=audioElement(node);const candidates=[audio?.currentSrc,audio?.src,audio?.getAttribute("src"),node.querySelector("a[download],a[href*='blob:'],[data-url],[data-download-url]")?.getAttribute("href"),node.querySelector("[data-url],[data-download-url]")?.getAttribute("data-url")];return candidates.map(value=>String(value||"").trim()).find(value=>/^(blob:|data:|https?:)/i.test(value))||"";}
-function audioDuration(node){const raw=Number(audioElement(node)?.duration);if(Number.isFinite(raw)&&raw>0)return Math.round(raw);const match=cleanText(node.innerText||"").match(/(?:^|\s)(\d{1,2}):(\d{2})(?:\s|$)/);return match?Number(match[1])*60+Number(match[2]):null;}
+function audioDurationText(node){
+  // O horário da mensagem fica fora do player. Só aceitamos nós-folha que
+  // pertencem ao controle de áudio; nunca usamos o texto completo da bolha.
+  const players=[...node.querySelectorAll('[data-testid*="audio" i],[aria-label*="mensagem de voz" i],[aria-label*="voice message" i],audio')];
+  const sources=[];
+  for(const player of players){
+    sources.push({value:player.getAttribute?.("aria-label")||"",aria:true});
+    for(const child of player.querySelectorAll?.("span,div")||[]){
+      if(child.children.length||child.closest("[data-pre-plain-text]")||child.closest("time"))continue;
+      sources.push({value:child.textContent||"",aria:false});
+    }
+  }
+  for(const source of sources){const text=cleanText(source.value||"");const match=source.aria?text.match(/(?:mensagem de voz|voice message|duraç[aã]o|duration)[^\d]*(\d{1,2}):(\d{2})/i):text.match(/^(\d{1,2}):(\d{2})$/);if(match&&Number(match[1])<10)return `${match[1]}:${match[2]}`;}
+  return "";
+}
+function audioDuration(node){const raw=Number(audioElement(node)?.duration);if(Number.isFinite(raw)&&raw>0)return Math.round(raw);const value=audioDurationText(node).match(/^(\d{1,2}):(\d{2})$/);return value?Number(value[1])*60+Number(value[2]):null;}
 function audioMeta(id,patch={}){return {messageId:id||null,durationSeconds:null,mimeType:null,sizeBytes:null,sha256:null,sourceAvailable:false,extractionStatus:"pending",transcriptionStatus:"pending",transcription:"",error:"",...patch};}
 function publicAudioMeta(meta){if(!meta)return null;const {buffer,...safe}=meta;return safe;}
 async function sha256Hex(buffer){const digest=await crypto.subtle.digest("SHA-256",buffer);return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,"0")).join("");}
@@ -524,23 +539,27 @@ async function extractLoadedMessages(request={}){
 
 function audioDownloadButton(node){return node.querySelector('[data-testid*="download" i],button[aria-label*="download" i],[aria-label*="baixar" i]');}
 function audioPlayControl(node){return node.querySelector('[data-testid*="audio" i],[aria-label*="reproduzir" i],[aria-label*="play" i],audio');}
+async function waitForAudioMedia(node,{timeoutMs=9000}={}){const deadline=Date.now()+timeoutMs;while(Date.now()<deadline){const source=audioSource(node);if(source)return source;await sleep(450);}return "";}
+async function waitForDownloadState(node,{timeoutMs=9000}={}){const deadline=Date.now()+timeoutMs;let buttonRemoved=false;while(Date.now()<deadline){buttonRemoved=buttonRemoved||!audioDownloadButton(node);const source=audioSource(node);if(source)return {source,buttonRemoved};await sleep(450);}return {source:"",buttonRemoved};}
 async function recoverAudioEntries(request={}){
   const main=activeMain();if(!main)throw new Error("O painel da conversa não foi carregado para recuperar áudios.");
-  const targets=Array.isArray(request.audioTargets)?request.audioTargets:[];const found=new Map();const diagnostics=new Map(targets.map((target,index)=>[target.id||`legacy:${index}`,{message_id:target.message_id||target.id||"",position:target.chronological_position??index,sender:target.sender||"",date:target.date||"",time:target.time||"",duration:target.duration||null,found_in_dom:false,play_found:false,download_found:false,url_found:false,file_obtained:false,size:0,status:"aguardando_dom",reason:""}]));
+  const targets=Array.isArray(request.audioTargets)?request.audioTargets:[];const targetKey=(target,index)=>target.id||target.message_id||`legacy:${index}`;const validDuration=value=>Number.isFinite(Number(value))&&Number(value)>0&&Number(value)<600?Number(value):null;const found=new Map();const diagnostics=new Map(targets.map((target,index)=>{const key=targetKey(target,index);return [key,{message_id:key,position:target.chronological_position??index,sender:target.sender||"",date:target.date||"",message_time:target.time||"",duration_text:target.duration_text||"",duration_seconds:validDuration(target.duration),found_in_dom:false,play_found:false,download_found:false,download_clicked:false,download_completed:false,url_found:false,file_obtained:false,mime_type:"",size:0,status:"aguardando_dom",reason:""}];}));
   const inspect=async()=>{
     for(const [position,node] of voiceMessageNodes(main).entries()){
-      const detail=node.querySelector("[data-pre-plain-text]");const prefix=cleanText(detail?.getAttribute("data-pre-plain-text"))||"";const id=audioEntryId(node,prefix,position);const target=targets.find(item=>item.id===id)||targets.find(item=>!found.has(item.id)&&item.sender===prefixParts(prefix).sender&&item.time===prefixParts(prefix).time&&Number(item.duration||0)===Number(audioDuration(node)||0));if(!target||found.has(target.id))continue;
-      const diagnostic=diagnostics.get(target.id)||{};diagnostic.found_in_dom=true;diagnostic.play_found=Boolean(audioPlayControl(node));diagnostic.download_found=Boolean(audioDownloadButton(node));diagnostic.url_found=Boolean(audioSource(node));diagnostic.status="localizado";
-      if(!audioSource(node)&&audioDownloadButton(node)){diagnostic.status="aguardando_download";audioDownloadButton(node).click();await sleep(1200);diagnostic.url_found=Boolean(audioSource(node));}
-      let meta=await extractAudioFile(node,target.id);if(meta.extractionStatus==="unavailable"&&diagnostic.download_found){meta={...meta,transcriptionStatus:"pending",extractionStatus:"manual_download",error:"Áudio localizado, mas requer download manual."};diagnostic.status="requer_download_manual";}
+      const detail=node.querySelector("[data-pre-plain-text]");const prefix=cleanText(detail?.getAttribute("data-pre-plain-text"))||"";const id=audioEntryId(node,prefix,position);const target=targets.find((item,index)=>targetKey(item,index)===id)||targets.find((item,index)=>{const key=targetKey(item,index);return !found.has(key)&&item.sender===prefixParts(prefix).sender&&item.time===prefixParts(prefix).time&&Number(item.duration||0)===Number(audioDuration(node)||0);});if(!target)continue;
+      const key=targetKey(target,targets.indexOf(target));if(found.has(key))continue;
+      const diagnostic=diagnostics.get(key)||{};const parts=prefixParts(prefix);const playerDuration=audioDuration(node);diagnostic.found_in_dom=true;diagnostic.sender=parts.sender||diagnostic.sender;diagnostic.date=parts.date||diagnostic.date;diagnostic.message_time=parts.time||diagnostic.message_time;diagnostic.duration_text=audioDurationText(node)||diagnostic.duration_text;diagnostic.duration_seconds=playerDuration||diagnostic.duration_seconds;diagnostic.play_found=Boolean(audioPlayControl(node));diagnostic.download_found=Boolean(audioDownloadButton(node));diagnostic.url_found=Boolean(audioSource(node));diagnostic.status="localizado";
+      if(!audioSource(node)&&diagnostic.download_found){diagnostic.status="download_solicitado";diagnostic.download_clicked=true;audioDownloadButton(node).click();const downloaded=await waitForDownloadState(node);diagnostic.download_completed=Boolean(downloaded.source);diagnostic.download_button_removed=downloaded.buttonRemoved;diagnostic.url_found=Boolean(downloaded.source);if(!downloaded.source){diagnostic.status="requer_download_manual";diagnostic.reason="O botão de download foi acionado, mas o WhatsApp não expôs a mídia automaticamente.";}}
+      else if(!audioSource(node)){diagnostic.status="aguardando_midia";const source=await waitForAudioMedia(node,{timeoutMs:3500});diagnostic.url_found=Boolean(source);}
+      let meta=await extractAudioFile(node,key);if(meta.extractionStatus==="unavailable"&&diagnostic.download_found&&!diagnostic.download_completed){meta={...meta,transcriptionStatus:"pending",extractionStatus:"manual_download",error:diagnostic.reason||"Áudio localizado, mas requer download manual."};diagnostic.status="requer_download_manual";}
       else if(meta.extractionStatus==="extracted"){diagnostic.status="pronto_para_transcrever";meta=await transcribeLocally(meta);diagnostic.status=meta.transcription?"transcrito":(meta.transcriptionStatus==="pending"?"pronto_para_transcrever":"erro");}
       else if(meta.extractionStatus==="unavailable"){diagnostic.status="indisponivel";}
-      diagnostic.file_obtained=Boolean(meta.sourceAvailable);diagnostic.size=Number(meta.sizeBytes||0);diagnostic.reason=meta.error||"";found.set(target.id,{...target,audioMeta:publicAudioMeta(meta),audioTranscribed:Boolean(meta.transcription),hasVoiceMessage:true,type:"Áudio",text:meta.transcription?String(target.text||"").replace("[Áudio sem transcrição]",`[Transcrição de áudio] ${cleanText(meta.transcription)}`):target.text});
+      diagnostic.file_obtained=Boolean(meta.sourceAvailable);diagnostic.mime_type=meta.mimeType||"";diagnostic.size=Number(meta.sizeBytes||0);diagnostic.reason=meta.error||diagnostic.reason||"";found.set(key,{...target,audioMeta:publicAudioMeta(meta),audioTranscribed:Boolean(meta.transcription),hasVoiceMessage:true,type:"Áudio",text:meta.transcription?String(target.text||"").replace("[Áudio sem transcrição]",`[Transcrição de áudio] ${cleanText(meta.transcription)}`):target.text});
     }
   };
   const scroller=messageScrollContainer(main);let passes=0;let stable=0;let previous="";if(scroller)scroller.scrollTop=scroller.scrollHeight;
   while(scroller&&passes<220&&stable<2){await inspect();const signature=windowSignature(main);const before=scroller.scrollTop;scroller.scrollTop=Math.max(0,before-Math.max(scroller.clientHeight*.8,650));scroller.dispatchEvent(new Event("scroll",{bubbles:true}));await sleep(550);await waitForMessagesToSettle(main,{timeoutMs:3500,minWaitMs:350});stable=before<=2&&signature===previous?stable+1:0;previous=signature;passes+=1;}
-  await inspect();for(const [id,diagnostic] of diagnostics){if(!found.has(id)){diagnostic.status="indisponivel";diagnostic.reason="Mensagem não localizada após percorrer o histórico disponível no WhatsApp Web.";}}
+  await inspect();for(const [id,diagnostic] of diagnostics){if(!found.has(id)){diagnostic.status="nao_localizado_no_dom";diagnostic.reason="Mensagem não localizada após percorrer o histórico disponível no WhatsApp Web.";}}
   if(scroller){scroller.scrollTop=scroller.scrollHeight;scroller.dispatchEvent(new Event("scroll",{bubbles:true}));}
   return {ok:true,title:activeChatTitle(),entries:[...found.values()],diagnostics:[...diagnostics.values()],availableInDom:[...diagnostics.values()].filter(item=>item.found_in_dom).length};
 }
