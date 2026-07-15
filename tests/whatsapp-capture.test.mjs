@@ -63,6 +63,10 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(crm,/runWhatsAppBatchPreflight/);
   assert.match(crm,/fjenkw jkenfjkenk/);
   assert.match(crm,/Ignorado — telefone inválido ou sem DDD/);
+  assert.match(crm,/crm_whatsapp_full_batch_unlocked/);
+  assert.match(crm,/saveWhatsAppBatchApproval/);
+  assert.match(crm,/Iniciando atualização…/);
+  assert.match(crm,/Executando pré-verificação/);
   assert.match(crm,/WHATSAPP_BATCH_AUDIO_ENABLED = false/);
   assert.match(crm,/openAndCaptureLeadConversation/);
   assert.match(crm,/writeWhatsAppCapturePatch/);
