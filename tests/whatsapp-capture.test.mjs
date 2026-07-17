@@ -12,7 +12,7 @@ const matcherSource = await readFile(new URL("audio-import-matcher.js", root), "
 const matcherContext = {globalThis:{}};
 vm.runInNewContext(matcherSource, matcherContext);
 const matcher = matcherContext.globalThis.CriareAudioImportMatcher;
-assert.equal(matcher.version,"2.1.18");
+assert.equal(matcher.version,"2.1.19");
 
 test("preserva mensagens repetidas quando os IDs do WhatsApp são diferentes",()=>{
   const merged = core.mergeEntries([], [
@@ -39,6 +39,13 @@ test("áudios idênticos com identidade própria não são colapsados",()=>{
   const repeated=core.mergeEntries(first.entries,audios);
   assert.equal(first.entries.length,8);
   assert.equal(repeated.entries.length,8);
+});
+
+test("converte somente a duração textual interna do player",()=>{
+  assert.equal(core.playerDurationSeconds("0:38"),38);
+  assert.equal(core.playerDurationSeconds("0:17"),17);
+  assert.equal(core.playerDurationSeconds("0:27"),27);
+  assert.equal(core.playerDurationSeconds("10:26 da mensagem"),null);
 });
 
 test("associa três arquivos entre todos os áudios e ignora mídia indisponível",()=>{
@@ -71,14 +78,15 @@ test("associa os dois arquivos reais da Crislaine e elimina o candidato sem meta
     {id:"legacy-empty",message_id:"LEGACY",type:"Áudio",hasVoiceMessage:true,text:"[Áudio sem transcrição]",audioMeta:{extractionStatus:"pending"},chronological_position:3}
   ]);
   const files=[
-    {name:"WhatsApp Ptt 2026-03-04 at 10.26.07.ogg",duration:38},
+    {name:"WhatsApp Ptt 2026-03-04 at 10.26.07.ogg",duration:39},
     {name:"WhatsApp Ptt 2026-03-04 at 10.26.27.ogg",duration:17}
   ];
   const results=files.map((file,index)=>matcher.compareFile(file,inventory,{fileIndex:index,fileCount:files.length}));
   assert.deepEqual(results.map(result=>result.ranked[0].id),["audio-in-38","audio-in-17"]);
+  assert.equal(new Set(results.map(result=>result.ranked[0].id)).size,2);
   assert.equal(inventory.find(item=>item.id==="audio-out-1024").exclusion_reason,"media_unavailable");
   assert.equal(inventory.find(item=>item.id==="legacy-empty").exclusion_reason,"metadados_essenciais_ausentes");
-  assert(results.every(result=>result.ranked[0].score===100));
+  assert.deepEqual(results.map(result=>result.ranked[0].score),[98,100]);
 });
 
 test("limita candidatos incompletos e ignora durações legadas inválidas",()=>{
@@ -96,6 +104,13 @@ test("limita candidatos incompletos e ignora durações legadas inválidas",()=>
   assert.equal(result.ranked.find(item=>item.id==="legacy-624").duration_valid,false);
   assert.equal(result.ranked.find(item=>item.id==="legacy-628").duration_valid,false);
   assert.equal(result.ranked.find(item=>item.id==="legacy-944").duration_valid,false);
+});
+
+test("duração confirmada no player substitui valor legado derivado do horário",()=>{
+  const inventory=matcher.buildInventory([{id:"audio-17",type:"Áudio",sender:"Crislaine",direction:"inbound",date:"04/03/2026",time:"10:26",duration:624,duration_seconds:17,duration_source:"whatsapp_player",text:"[Áudio sem transcrição]"}]);
+  assert.equal(inventory[0].duration,17);
+  assert.equal(inventory[0].duration_source,"whatsapp_player");
+  assert.equal(inventory[0].duration_valid,true);
 });
 
 test("reconstrói prefixo de mídia que continua a mensagem anterior",()=>{
@@ -119,8 +134,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.17"/);
-  assert.equal(manifest.version,"2.1.17");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.19"/);
+  assert.equal(manifest.version,"2.1.19");
   assert(!manifest.permissions.includes("downloads"));
   assert(!manifest.permissions.includes("debugger"));
   assert(crm.includes("https://web.whatsapp.com/send/?phone=${number}"));
@@ -155,6 +170,11 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/criare-recover-audios/);
   assert.match(content,/menu_sem_opcao_baixar/);
   assert.match(content,/function audioDurationText/);
+  assert.match(content,/playerDurationSeconds\(durationText\)/);
+  assert.match(content,/duration_source:playerDuration\?"whatsapp_player"/);
+  assert.match(content,/if\(request\.metadataOnly\)/);
+  assert.match(crm,/audio\.id&&item\.entry\.id===audio\.id/);
+  assert.match(crm,/requestWhatsAppAudioRecovery\(record,\{metadataOnly:true\}\)/);
   assert.match(content,/download_clicked/);
   assert.match(content,/nao_localizado_no_dom/);
   assert.match(content,/downloadAudioFromContextMenu/);

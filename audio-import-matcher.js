@@ -1,7 +1,7 @@
 (function(global){
   "use strict";
 
-  const VERSION = "2.1.18";
+  const VERSION = "2.1.19";
   const UNAVAILABLE_STATES = ["media_unavailable","legacy_unavailable","nao_localizado_no_dom","arquivo_inexistente"];
 
   function plain(value){
@@ -24,12 +24,14 @@
   }
 
   function durationInfo(entry){
+    const confirmed = entry?.duration_source === "whatsapp_player" ? Number(entry?.duration_seconds || entry?.duration || entry?.audioMeta?.durationSeconds || 0) : 0;
+    if(Number.isFinite(confirmed) && confirmed > 0 && confirmed < 600) return {duration:confirmed,duration_valid:true,duration_source:"whatsapp_player"};
     const direct = Number(entry?.duration || 0);
     const audioMeta = Number(entry?.audioMeta?.durationSeconds || 0);
     const value = direct > 0 ? direct : audioMeta;
     if(!Number.isFinite(value) || value <= 0) return {duration:null,duration_valid:false,duration_source:"missing"};
     if(value > 600) return {duration:value,duration_valid:false,duration_source:"legacy_invalid"};
-    return {duration:value,duration_valid:true,duration_source:direct > 0 ? "message_duration" : "audio_meta"};
+    return {duration:value,duration_valid:true,duration_source:entry?.duration_source || (direct > 0 ? "message_duration" : "audio_meta")};
   }
 
   function isAudio(entry){

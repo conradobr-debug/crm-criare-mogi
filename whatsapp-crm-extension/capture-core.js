@@ -49,6 +49,11 @@
     return `[${time}, ${date}] ${author}: `;
   }
 
+  function playerDurationSeconds(value){
+    const match=String(value||"").match(/^(\d+):(\d{2})(?::(\d{2}))?$/);
+    return match ? (match[3] ? Number(match[1])*3600+Number(match[2])*60+Number(match[3]) : Number(match[1])*60+Number(match[2])) : null;
+  }
+
   function normalizeEntry(entry){
     if(!entry) return null;
     if(typeof entry === "string"){
@@ -131,6 +136,7 @@
     messageHash,
     parsePrefix,
     continuationPrefix,
+    playerDurationSeconds,
     normalizeEntry,
     mergeEntries,
     audioUnavailable,
