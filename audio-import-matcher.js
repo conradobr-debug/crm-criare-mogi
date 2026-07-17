@@ -1,12 +1,13 @@
 (function(global){
   "use strict";
 
-  const VERSION = "2.1.20";
+  const VERSION = "2.1.21";
   const UNAVAILABLE_STATES = ["media_unavailable","legacy_unavailable","nao_localizado_no_dom","arquivo_inexistente"];
 
   function plain(value){
     return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
   }
+  function canonicalMessageId(value){return String(value||"").trim().replace(/^(?:wa:)+/i,"");}
 
   function directionOf(entry){
     const sender=plain(entry?.sender);
@@ -47,12 +48,12 @@
       const reason = unavailableReason(entry);
       const candidate = {
         entry,
-        message_id:String(entry?.message_id || entry?.id || "").trim(),
+        message_id:canonicalMessageId(entry?.message_id || entry?.id),
         id:String(entry?.id || entry?.message_id || "").trim(),
         sender:String(entry?.sender || "").trim(),
         direction:directionOf(entry),
         date:String(entry?.date || "").trim(),
-        time:String(entry?.time || "").trim(),
+        time:String(entry?.message_time || entry?.time || "").trim(),
         status:reason || String(entry?.audioMeta?.extractionStatus || entry?.status || "pending"),
         media_status:reason || String(entry?.media_status || entry?.audioMeta?.extractionStatus || "pending"),
         position:Number.isFinite(Number(entry?.chronological_position)) ? Number(entry.chronological_position) : index,
@@ -66,7 +67,7 @@
       if(candidate.eligible && !hasAnyMetadata){candidate.eligible=false;candidate.exclusion_reason="metadados_essenciais_ausentes";}
       return candidate;
     });
-    const byMessageId=new Map();for(const candidate of canonical){const previous=byMessageId.get(candidate.message_id);if(!previous||(!previous.duration_valid&&candidate.duration_valid))byMessageId.set(candidate.message_id,candidate);}
+    const quality=candidate=>(candidate.duration_valid?20:0)+(candidate.eligible?10:0)+(candidate.sender?2:0)+(candidate.date?2:0)+(candidate.time?2:0)+(candidate.direction!=="unknown"?1:0);const byMessageId=new Map();for(const candidate of canonical){const previous=byMessageId.get(candidate.message_id);if(!previous||quality(candidate)>quality(previous))byMessageId.set(candidate.message_id,candidate);}
     return [...byMessageId.values()];
   }
 
