@@ -1,7 +1,7 @@
 (function(global){
   "use strict";
 
-  const VERSION = "2.1.19";
+  const VERSION = "2.1.20";
   const UNAVAILABLE_STATES = ["media_unavailable","legacy_unavailable","nao_localizado_no_dom","arquivo_inexistente"];
 
   function plain(value){
@@ -9,6 +9,8 @@
   }
 
   function directionOf(entry){
+    const sender=plain(entry?.sender);
+    if(sender==="voce"||sender.includes("loja")||sender.includes("criare")) return "outgoing";
     const raw = plain(entry?.direction);
     if(/inbound|incoming|received|recebido/.test(raw)) return "incoming";
     if(/outbound|outgoing|sent|enviado/.test(raw)) return "outgoing";
@@ -24,14 +26,15 @@
   }
 
   function durationInfo(entry){
-    const confirmed = entry?.duration_source === "whatsapp_player" ? Number(entry?.duration_seconds || entry?.duration || entry?.audioMeta?.durationSeconds || 0) : 0;
-    if(Number.isFinite(confirmed) && confirmed > 0 && confirmed < 600) return {duration:confirmed,duration_valid:true,duration_source:"whatsapp_player"};
+    const source=String(entry?.duration_source||entry?.audioMeta?.durationSource||"");
+    const confirmedSource=["whatsapp_player","confirmed","imported_file"].includes(source);
+    const confirmed = confirmedSource ? Number(entry?.duration_seconds || entry?.duration || entry?.audioMeta?.durationSeconds || 0) : 0;
+    if(Number.isFinite(confirmed) && confirmed > 0 && confirmed < 600) return {duration:confirmed,duration_valid:true,duration_source:source};
     const direct = Number(entry?.duration || 0);
     const audioMeta = Number(entry?.audioMeta?.durationSeconds || 0);
     const value = direct > 0 ? direct : audioMeta;
     if(!Number.isFinite(value) || value <= 0) return {duration:null,duration_valid:false,duration_source:"missing"};
-    if(value > 600) return {duration:value,duration_valid:false,duration_source:"legacy_invalid"};
-    return {duration:value,duration_valid:true,duration_source:entry?.duration_source || (direct > 0 ? "message_duration" : "audio_meta")};
+    return {duration:null,duration_valid:false,duration_source:value>=600?"legacy_invalid":"unconfirmed",legacy_duration:value};
   }
 
   function isAudio(entry){
@@ -39,7 +42,7 @@
   }
 
   function buildInventory(entries){
-    return (Array.isArray(entries) ? entries : []).filter(isAudio).map((entry,index)=>{
+    const canonical=(Array.isArray(entries) ? entries : []).filter(isAudio).map((entry,index)=>{
       const duration = durationInfo(entry);
       const reason = unavailableReason(entry);
       const candidate = {
@@ -51,15 +54,20 @@
         date:String(entry?.date || "").trim(),
         time:String(entry?.time || "").trim(),
         status:reason || String(entry?.audioMeta?.extractionStatus || entry?.status || "pending"),
+        media_status:reason || String(entry?.media_status || entry?.audioMeta?.extractionStatus || "pending"),
         position:Number.isFinite(Number(entry?.chronological_position)) ? Number(entry.chronological_position) : index,
         ...duration,
         eligible:!reason,
         exclusion_reason:reason
       };
       const hasAnyMetadata=Boolean(candidate.sender || candidate.date || candidate.time || candidate.duration_valid || candidate.direction !== "unknown");
+      if(!candidate.message_id){candidate.eligible=false;candidate.exclusion_reason="message_id_ausente";}
+      if(candidate.duration_source==="legacy_invalid"){candidate.eligible=false;candidate.exclusion_reason="duracao_legada_invalida";}
       if(candidate.eligible && !hasAnyMetadata){candidate.eligible=false;candidate.exclusion_reason="metadados_essenciais_ausentes";}
       return candidate;
     });
+    const byMessageId=new Map();for(const candidate of canonical){const previous=byMessageId.get(candidate.message_id);if(!previous||(!previous.duration_valid&&candidate.duration_valid))byMessageId.set(candidate.message_id,candidate);}
+    return [...byMessageId.values()];
   }
 
   function fileMetadata(file){
