@@ -8,6 +8,11 @@ const coreSource = await readFile(new URL("whatsapp-crm-extension/capture-core.j
 const context = {globalThis:{}};
 vm.runInNewContext(coreSource, context);
 const core = context.globalThis.CriareWhatsAppCaptureCore;
+const matcherSource = await readFile(new URL("audio-import-matcher.js", root), "utf8");
+const matcherContext = {globalThis:{}};
+vm.runInNewContext(matcherSource, matcherContext);
+const matcher = matcherContext.globalThis.CriareAudioImportMatcher;
+assert.equal(matcher.version,"2.1.18");
 
 test("preserva mensagens repetidas quando os IDs do WhatsApp são diferentes",()=>{
   const merged = core.mergeEntries([], [
@@ -56,6 +61,41 @@ test("associa três arquivos entre todos os áudios e ignora mídia indisponíve
   assert.deepEqual(matches.map(result=>result[0].id),["a4","a5","a6"]);
   assert(matches.every(result=>result[0].score>95));
   assert(matches.every(result=>result.every(candidate=>candidate.id!=="a3")));
+});
+
+test("associa os dois arquivos reais da Crislaine e elimina o candidato sem metadados",()=>{
+  const inventory=matcher.buildInventory([
+    {id:"audio-out-1024",message_id:"A525",type:"Áudio",hasVoiceMessage:true,sender:"Você",direction:"outbound",date:"04/03/2026",time:"10:24",duration:22,text:"[Áudio sem transcrição] Mensagem de mídia indisponível",audioMeta:{extractionStatus:"media_unavailable"},chronological_position:0},
+    {id:"audio-in-38",message_id:"ACF7",type:"Áudio",hasVoiceMessage:true,sender:"Crislaine",direction:"inbound",date:"04/03/2026",time:"10:26",duration:38,text:"[Áudio sem transcrição]",chronological_position:1},
+    {id:"audio-in-17",message_id:"B7D2",type:"Áudio",hasVoiceMessage:true,sender:"Crislaine",direction:"inbound",date:"04/03/2026",time:"10:26",duration:17,text:"[Áudio sem transcrição]",chronological_position:2},
+    {id:"legacy-empty",message_id:"LEGACY",type:"Áudio",hasVoiceMessage:true,text:"[Áudio sem transcrição]",audioMeta:{extractionStatus:"pending"},chronological_position:3}
+  ]);
+  const files=[
+    {name:"WhatsApp Ptt 2026-03-04 at 10.26.07.ogg",duration:38},
+    {name:"WhatsApp Ptt 2026-03-04 at 10.26.27.ogg",duration:17}
+  ];
+  const results=files.map((file,index)=>matcher.compareFile(file,inventory,{fileIndex:index,fileCount:files.length}));
+  assert.deepEqual(results.map(result=>result.ranked[0].id),["audio-in-38","audio-in-17"]);
+  assert.equal(inventory.find(item=>item.id==="audio-out-1024").exclusion_reason,"media_unavailable");
+  assert.equal(inventory.find(item=>item.id==="legacy-empty").exclusion_reason,"metadados_essenciais_ausentes");
+  assert(results.every(result=>result.ranked[0].score===100));
+});
+
+test("limita candidatos incompletos e ignora durações legadas inválidas",()=>{
+  const inventory=matcher.buildInventory([
+    {id:"complete",type:"Áudio",sender:"Crislaine",direction:"inbound",date:"04/03/2026",time:"10:26",duration:17,text:"[Áudio sem transcrição]",chronological_position:0},
+    {id:"missing-sender",type:"Áudio",direction:"inbound",date:"04/03/2026",time:"10:26",duration:17,text:"[Áudio sem transcrição]",chronological_position:1},
+    {id:"legacy-624",type:"Áudio",sender:"Crislaine",direction:"inbound",date:"04/03/2026",time:"10:26",duration:624,text:"[Áudio sem transcrição]",chronological_position:2},
+    {id:"legacy-628",type:"Áudio",sender:"Crislaine",direction:"inbound",date:"04/03/2026",time:"10:27",duration:628,text:"[Áudio sem transcrição]",chronological_position:3},
+    {id:"legacy-944",type:"Áudio",sender:"Crislaine",direction:"inbound",date:"04/03/2026",time:"10:28",duration:944,text:"[Áudio sem transcrição]",chronological_position:4}
+  ]);
+  const result=matcher.compareFile({name:"WhatsApp Ptt 2026-03-04 at 10.26.27.ogg",duration:17},inventory,{fileIndex:0,fileCount:1});
+  assert.equal(result.ranked[0].id,"complete");
+  assert.equal(result.ranked.find(item=>item.id==="missing-sender").confidence_cap,60);
+  assert.equal(result.ranked.find(item=>item.id==="legacy-624").duration_source,"legacy_invalid");
+  assert.equal(result.ranked.find(item=>item.id==="legacy-624").duration_valid,false);
+  assert.equal(result.ranked.find(item=>item.id==="legacy-628").duration_valid,false);
+  assert.equal(result.ranked.find(item=>item.id==="legacy-944").duration_valid,false);
 });
 
 test("reconstrói prefixo de mídia que continua a mensagem anterior",()=>{
