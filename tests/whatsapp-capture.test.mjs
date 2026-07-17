@@ -9,10 +9,10 @@ const context = {globalThis:{}};
 vm.runInNewContext(coreSource, context);
 const core = context.globalThis.CriareWhatsAppCaptureCore;
 const matcherSource = await readFile(new URL("audio-import-matcher.js", root), "utf8");
-const matcherContext = {globalThis:{}};
+const matcherContext = {globalThis:{CriareWhatsAppCaptureCore:core}};
 vm.runInNewContext(matcherSource, matcherContext);
 const matcher = matcherContext.globalThis.CriareAudioImportMatcher;
-assert.equal(matcher.version,"2.1.21");
+assert.equal(matcher.version,"2.1.22");
 
 test("preserva mensagens repetidas quando os IDs do WhatsApp são diferentes",()=>{
   const merged = core.mergeEntries([], [
@@ -31,6 +31,32 @@ test("atualiza mensagem editada sem duplicar o ID",()=>{
   assert.equal(merged.entries.length,1);
   assert.equal(merged.updatedCount,1);
   assert.match(merged.entries[0].text,/terça/);
+});
+
+test("normaliza prefixo wa e preserva o identificador completo",()=>{
+  assert.equal(core.normalizeWhatsAppMessageId(" wa:acf748cbdc45c89656b816fbcc3ec5d0 "),"ACF748CBDC45C89656B816FBCC3EC5D0");
+});
+
+test("metadado confirmado do player não é rebaixado por captura posterior",()=>{
+  const stored={id:"wa:ACF748CBDC45C89656B816FBCC3EC5D0",message_id:"wa:ACF748CBDC45C89656B816FBCC3EC5D0",type:"Áudio",text:"[Áudio sem transcrição]",duration_seconds:17,duration_text:"0:17",duration_source:"whatsapp_player",duration_valid:true,audioMeta:{durationSeconds:17,durationSource:"whatsapp_player"}};
+  const incoming={id:"wa:ACF748CBDC45C89656B816FBCC3EC5D0",message_id:"ACF748CBDC45C89656B816FBCC3EC5D0",type:"Áudio",text:"[Áudio sem transcrição]",duration_seconds:626,duration_source:"legacy_invalid",duration_valid:false,audioMeta:{durationSeconds:626,durationSource:"legacy_invalid"}};
+  const merged=core.mergeEntries([stored],[incoming]);
+  assert.equal(merged.entries.length,1);
+  assert.equal(merged.entries[0].message_id,"ACF748CBDC45C89656B816FBCC3EC5D0");
+  assert.equal(merged.entries[0].duration_seconds,17);
+  assert.equal(merged.entries[0].duration_text,"0:17");
+  assert.equal(merged.entries[0].duration_source,"whatsapp_player");
+  assert.equal(merged.entries[0].audioMeta.durationSeconds,17);
+});
+
+test("metadado confirmado do player substitui legado no mesmo message_id",()=>{
+  const merged=core.mergeEntries(
+    [{id:"wa:AC5A327CB215EB7B5EF11FB5A20E248B",type:"Áudio",text:"[Áudio sem transcrição]",duration_seconds:624,duration_source:"legacy_invalid",duration_valid:false}],
+    [{id:"AC5A327CB215EB7B5EF11FB5A20E248B",message_id:"AC5A327CB215EB7B5EF11FB5A20E248B",type:"Áudio",text:"[Áudio sem transcrição]",duration_seconds:38,duration_text:"0:38",duration_source:"whatsapp_player",duration_valid:true,audioMeta:{durationSeconds:38,durationSource:"whatsapp_player"}}]
+  );
+  assert.equal(merged.entries.length,1);
+  assert.equal(merged.entries[0].duration_seconds,38);
+  assert.equal(merged.entries[0].duration_source,"whatsapp_player");
 });
 
 test("áudios idênticos com identidade própria não são colapsados",()=>{
@@ -155,8 +181,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.21"/);
-  assert.equal(manifest.version,"2.1.21");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.22"/);
+  assert.equal(manifest.version,"2.1.22");
   assert(!manifest.permissions.includes("downloads"));
   assert(!manifest.permissions.includes("debugger"));
   assert(crm.includes("https://web.whatsapp.com/send/?phone=${number}"));
@@ -193,14 +219,16 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/function audioDurationText/);
   assert.match(content,/playerDurationSeconds\(durationText\)/);
   assert.match(content,/duration_source:playerDuration\?"whatsapp_player"/);
-  assert.match(content,/function canonicalMessageId/);
+  assert.match(content,/normalizeWhatsAppMessageId/);
   assert.match(content,/targetMessageId\(item\)===domMessageId/);
   assert.match(content,/if\(request\.metadataOnly\)/);
-  assert.match(crm,/canonicalId\(item\.entry\.message_id\|\|item\.entry\.id\)===recoveredMessageId/);
+  assert.match(crm,/normalizeWhatsAppMessageId\(item\.entry\.message_id\|\|item\.entry\.id\)===recoveredMessageId/);
   assert.doesNotMatch(crm,/const structural=slots\.filter/);
   assert.match(crm,/select\("\*"\)\.eq\("id",record\.id\)\.single\(\)/);
   assert.match(crm,/O WhatsApp respondeu, mas não devolveu nenhuma duração válida dos players/);
   assert.match(crm,/const saved=await refreshImportedAudioMetadata\(record\);openAudioImport\(saved\)/);
+  assert.match(crm,/id="btnRefreshAudioMetadata"[^>]*>Atualizar metadados dos áudios/);
+  assert.match(crm,/CriareWhatsAppCaptureCore\.mergeEntryMetadata/);
   assert.match(crm,/requestWhatsAppAudioRecovery\(record,\{metadataOnly:true\}\)/);
   assert.match(content,/download_clicked/);
   assert.match(content,/nao_localizado_no_dom/);

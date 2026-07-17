@@ -1,13 +1,13 @@
 (function(global){
   "use strict";
 
-  const VERSION = "2.1.21";
+  const VERSION = "2.1.22";
   const UNAVAILABLE_STATES = ["media_unavailable","legacy_unavailable","nao_localizado_no_dom","arquivo_inexistente"];
 
   function plain(value){
     return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
   }
-  function canonicalMessageId(value){return String(value||"").trim().replace(/^(?:wa:)+/i,"");}
+  const normalizeWhatsAppMessageId=value=>global.CriareWhatsAppCaptureCore.normalizeWhatsAppMessageId(value);
 
   function directionOf(entry){
     const sender=plain(entry?.sender);
@@ -48,7 +48,7 @@
       const reason = unavailableReason(entry);
       const candidate = {
         entry,
-        message_id:canonicalMessageId(entry?.message_id || entry?.id),
+        message_id:normalizeWhatsAppMessageId(entry?.message_id || entry?.id),
         id:String(entry?.id || entry?.message_id || "").trim(),
         sender:String(entry?.sender || "").trim(),
         direction:directionOf(entry),
@@ -67,7 +67,7 @@
       if(candidate.eligible && !hasAnyMetadata){candidate.eligible=false;candidate.exclusion_reason="metadados_essenciais_ausentes";}
       return candidate;
     });
-    const quality=candidate=>(candidate.duration_valid?20:0)+(candidate.eligible?10:0)+(candidate.sender?2:0)+(candidate.date?2:0)+(candidate.time?2:0)+(candidate.direction!=="unknown"?1:0);const byMessageId=new Map();for(const candidate of canonical){const previous=byMessageId.get(candidate.message_id);if(!previous||quality(candidate)>quality(previous))byMessageId.set(candidate.message_id,candidate);}
+    const quality=candidate=>(global.CriareWhatsAppCaptureCore.audioDurationPriority(candidate.entry)*100)+(candidate.duration_valid?20:0)+(candidate.eligible?10:0)+(candidate.sender?2:0)+(candidate.date?2:0)+(candidate.time?2:0)+(candidate.direction!=="unknown"?1:0);const byMessageId=new Map();for(const candidate of canonical){const previous=byMessageId.get(candidate.message_id);if(!previous||quality(candidate)>quality(previous))byMessageId.set(candidate.message_id,candidate);}
     return [...byMessageId.values()];
   }
 

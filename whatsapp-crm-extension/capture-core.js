@@ -19,6 +19,42 @@
       .trim();
   }
 
+  function normalizeWhatsAppMessageId(value){
+    return cleanText(value).replace(/^(?:wa:)+/i,"").toUpperCase();
+  }
+
+  function audioDurationSource(entry){
+    return cleanText(entry?.duration_source||entry?.audioMeta?.durationSource||"").toLowerCase();
+  }
+
+  function audioDurationPriority(entry){
+    const source=audioDurationSource(entry);
+    if(source==="whatsapp_player")return 5;
+    if(source==="imported_file"||source==="confirmed")return 4;
+    if(source==="audio_meta"||source==="message_duration")return 3;
+    if(source==="unconfirmed")return 2;
+    if(source==="legacy_invalid")return 1;
+    const audioMetaDuration=Number(entry?.audioMeta?.durationSeconds||0);
+    if(Number.isFinite(audioMetaDuration)&&audioMetaDuration>0&&audioMetaDuration<600)return 3;
+    return 0;
+  }
+
+  function isAudioEntry(entry){
+    return entry?.type==="Áudio"||entry?.hasVoiceMessage||Boolean(entry?.audioMeta)||/\[(?:Áudio sem transcrição|Transcrição de áudio)\]/i.test(String(entry?.text||""));
+  }
+
+  function mergeEntryMetadata(stored,incoming){
+    const canonical=normalizeWhatsAppMessageId(incoming?.message_id||incoming?.id||stored?.message_id||stored?.id);
+    if(!isAudioEntry(stored)&&!isAudioEntry(incoming))return {...stored,...incoming,...(canonical?{message_id:canonical}:{})};
+    const merged={...stored,...incoming,audioMeta:{...(stored?.audioMeta||{}),...(incoming?.audioMeta||{})}};
+    const storedPriority=audioDurationPriority(stored),incomingPriority=audioDurationPriority(incoming);const durationWinner=incomingPriority>storedPriority?incoming:stored;
+    for(const key of ["duration","duration_text","duration_seconds","duration_source","duration_valid"]){if(durationWinner?.[key]!==undefined)merged[key]=durationWinner[key];else delete merged[key];}
+    merged.audioMeta.durationSeconds=durationWinner?.audioMeta?.durationSeconds??durationWinner?.duration_seconds??durationWinner?.duration??null;merged.audioMeta.durationSource=audioDurationSource(durationWinner)||"missing";
+    if(stored?.audioTranscribed||stored?.audioMeta?.transcription){merged.text=stored.text;merged.audioTranscribed=true;merged.audioMeta.transcription=stored.audioMeta?.transcription||"";merged.audioMeta.transcriptionStatus=stored.audioMeta?.transcriptionStatus||"completed";}
+    if(canonical)merged.message_id=canonical;
+    return merged;
+  }
+
   function messageHash(value){
     let hash = 2166136261;
     const text = String(value || "");
@@ -65,6 +101,7 @@
     return {
       ...entry,
       id:cleanText(entry.id) || null,
+      message_id:normalizeWhatsAppMessageId(entry.message_id||entry.id)||null,
       text,
       capturedAt:cleanText(entry.capturedAt) || null
     };
@@ -75,22 +112,23 @@
     const incoming = (Array.isArray(incomingEntries) ? incomingEntries : []).map(normalizeEntry).filter(Boolean);
     const merged = stored.map(entry=>({...entry}));
     const indexById = new Map();
-    merged.forEach((entry,index)=>{ if(entry.id) indexById.set(entry.id,index); });
+    merged.forEach((entry,index)=>{const key=normalizeWhatsAppMessageId(entry.message_id||entry.id);if(key)indexById.set(key,index);});
     let addedCount = 0;
     let updatedCount = 0;
 
     for(const entry of incoming){
-      if(entry.id && indexById.has(entry.id)){
-        const index = indexById.get(entry.id);
-        if(merged[index].text !== entry.text){
-          merged[index] = {...merged[index], ...entry};
+      const entryKey=normalizeWhatsAppMessageId(entry.message_id||entry.id);
+      if(entryKey && indexById.has(entryKey)){
+        const index = indexById.get(entryKey);const next=mergeEntryMetadata(merged[index],entry);
+        if(JSON.stringify(merged[index])!==JSON.stringify(next)){
+          merged[index] = next;
           updatedCount += 1;
         }
         continue;
       }
       if(!entry.id && merged.some(saved=>saved.text === entry.text)) continue;
       merged.push({...entry});
-      if(entry.id) indexById.set(entry.id, merged.length - 1);
+      if(entryKey) indexById.set(entryKey, merged.length - 1);
       addedCount += 1;
     }
 
@@ -133,6 +171,9 @@
   const api = {
     cleanText,
     normalizedUiText,
+    normalizeWhatsAppMessageId,
+    audioDurationPriority,
+    mergeEntryMetadata,
     messageHash,
     parsePrefix,
     continuationPrefix,
