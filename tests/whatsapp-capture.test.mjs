@@ -36,6 +36,28 @@ test("áudios idênticos com identidade própria não são colapsados",()=>{
   assert.equal(repeated.entries.length,8);
 });
 
+test("associa três arquivos entre todos os áudios e ignora mídia indisponível",()=>{
+  const audios=[
+    {id:"a1",date:"03/03/2026",time:"15:44",duration:62,sender:"Você",chronological_position:0},
+    {id:"a2",date:"03/03/2026",time:"17:21",duration:21,sender:"Crislaine",chronological_position:1},
+    {id:"a3",date:"04/03/2026",time:"10:24",duration:100,sender:"Você",text:"Mensagem de mídia indisponível",audioMeta:{extractionStatus:"media_unavailable"},chronological_position:2},
+    {id:"a4",date:"04/03/2026",time:"10:26",duration:38,sender:"Crislaine",chronological_position:3},
+    {id:"a5",date:"04/03/2026",time:"10:27",duration:17,sender:"Crislaine",chronological_position:4},
+    {id:"a6",date:"04/03/2026",time:"10:28",duration:38,sender:"Você",chronological_position:5},
+    {id:"a7",date:"04/03/2026",time:"10:30",duration:27,sender:"Crislaine",chronological_position:6},
+    {id:"a8",date:"05/03/2026",time:"09:00",duration:25,sender:"Você",chronological_position:7}
+  ];
+  const files=[
+    {name:"WhatsApp Ptt 2026-03-04 at 10.26.05.ogg",duration:38},
+    {name:"WhatsApp Ptt 2026-03-04 at 10.27.10.ogg",duration:17},
+    {name:"WhatsApp Ptt 2026-03-04 at 10.28.15.ogg",duration:38}
+  ];
+  const matches=files.map((file,index)=>core.audioMatchCandidates(file,audios,{fileIndex:index,fileCount:files.length}));
+  assert.deepEqual(matches.map(result=>result[0].id),["a4","a5","a6"]);
+  assert(matches.every(result=>result[0].score>95));
+  assert(matches.every(result=>result.every(candidate=>candidate.id!=="a3")));
+});
+
 test("reconstrói prefixo de mídia que continua a mensagem anterior",()=>{
   const prefix = core.continuationPrefix("[15:16, 06/07/2026] Leticia Bougo: ","15:17","");
   assert.equal(prefix,"[15:17, 06/07/2026] Leticia Bougo: ");
@@ -57,8 +79,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.16"/);
-  assert.equal(manifest.version,"2.1.16");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.1\.17"/);
+  assert.equal(manifest.version,"2.1.17");
   assert(!manifest.permissions.includes("downloads"));
   assert(!manifest.permissions.includes("debugger"));
   assert(crm.includes("https://web.whatsapp.com/send/?phone=${number}"));

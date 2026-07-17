@@ -94,6 +94,37 @@
     return {entries, addedCount, updatedCount, limited};
   }
 
+  function audioUnavailable(entry){
+    const state=[entry?.media_status,entry?.audioMeta?.extractionStatus,entry?.audioMeta?.transcriptionStatus,entry?.audioMeta?.error,entry?.text].map(normalizedUiText).join(" ");
+    return /media_unavailable|legacy_unavailable|nao_localizado_no_dom|arquivo_inexistente|mensagem de midia indisponivel/.test(state);
+  }
+
+  function audioFileTimestamp(name){
+    const match=String(name||"").match(/(\d{4})[-_.](\d{2})[-_.](\d{2}).*?(\d{1,2})[.:_-](\d{2})(?:[.:_-](\d{2}))?/i);
+    if(!match)return null;
+    return Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3]),Number(match[4]),Number(match[5]),Number(match[6]||0));
+  }
+
+  function audioMessageTimestamp(entry){
+    const date=String(entry?.date||"").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);const time=String(entry?.time||"").match(/(\d{1,2}):(\d{2})/);
+    if(!date||!time)return null;
+    return Date.UTC(Number(date[3]),Number(date[2])-1,Number(date[1]),Number(time[1]),Number(time[2]),0);
+  }
+
+  function audioMatchCandidates(file,candidates,{fileIndex=0,fileCount=1}={}){
+    const eligible=(Array.isArray(candidates)?candidates:[]).filter(entry=>!audioUnavailable(entry)).sort((a,b)=>Number(a.chronological_position||0)-Number(b.chronological_position||0));
+    const fileTime=Number(file?.timestamp||audioFileTimestamp(file?.name));const fileDuration=Number(file?.duration||0);const fileName=normalizedUiText(file?.name||"");const fileSender=normalizedUiText(file?.sender||"");
+    return eligible.map((entry,index)=>{
+      const signals=[];let weighted=0,totalWeight=0;const messageTime=audioMessageTimestamp(entry);
+      if(Number.isFinite(fileTime)&&Number.isFinite(messageTime)){const diff=Math.abs(fileTime-messageTime)/1000;const quality=Math.max(0,1-diff/(12*60*60));weighted+=40*quality;totalWeight+=40;if(quality>=.8)signals.push("horário compatível");}
+      const expected=Number(entry?.duration||entry?.audioMeta?.durationSeconds||0);if(fileDuration>0&&expected>0){const diff=Math.abs(fileDuration-expected);const quality=Math.max(0,1-diff/20);weighted+=35*quality;totalWeight+=35;if(quality>=.8)signals.push("duração compatível");}
+      const sender=normalizedUiText(entry?.sender||"");const senderKnown=Boolean(fileSender||sender&&fileName.includes(sender));if(senderKnown&&sender){const quality=(fileSender===sender||fileName.includes(sender))?1:0;weighted+=15*quality;totalWeight+=15;if(quality)signals.push("remetente compatível");}
+      if(fileCount>1&&eligible.length>1){const expectedRank=Math.round((fileIndex/(fileCount-1))*(eligible.length-1));const quality=Math.max(0,1-Math.abs(index-expectedRank)/Math.max(1,eligible.length-1));weighted+=10*quality;totalWeight+=10;if(quality>=.8)signals.push("sequência cronológica compatível");}
+      const score=totalWeight?Math.round((weighted/totalWeight)*100):0;
+      return {id:entry.id,message_id:entry.message_id||entry.id,score,signals,entry};
+    }).sort((a,b)=>b.score-a.score||Number(a.entry.chronological_position||0)-Number(b.entry.chronological_position||0));
+  }
+
   const api = {
     cleanText,
     normalizedUiText,
@@ -101,7 +132,10 @@
     parsePrefix,
     continuationPrefix,
     normalizeEntry,
-    mergeEntries
+    mergeEntries,
+    audioUnavailable,
+    audioFileTimestamp,
+    audioMatchCandidates
   };
   global.CriareWhatsAppCaptureCore = api;
   if(typeof module !== "undefined" && module.exports) module.exports = api;
