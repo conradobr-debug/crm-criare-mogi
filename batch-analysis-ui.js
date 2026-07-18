@@ -3,7 +3,7 @@
   if(window.__criareBatchAnalysisUiLoaded)return;
   window.__criareBatchAnalysisUiLoaded=true;
 
-  const CRM_BATCH_VERSION="2.3.2";
+  const CRM_BATCH_VERSION="2.5.0";
   const engine=window.CriareBatchAnalysis;
   const state={candidates:[],selected:new Set(),cancelled:false,lastBatch:null,importPayload:null,importFile:null,validation:null,importResults:[],importMachine:engine.createImportStateMachine(),importPhase:"idle",actualWrites:0};
   const statusLabels={ready_to_import:"Pronta",invalid_schema:"Schema incompatível",duplicate:"Duplicada — não importada",duplicate_conflict:"Conflito de duplicidade",lead_not_found:"Lead não encontrado",invalid_analysis:"Análise inválida",stale_conversation:"Conversa alterada",already_imported:"Já importada",imported:"Importada",save_error:"Erro ao salvar"};
@@ -23,7 +23,9 @@
     const legacy=getLegacyNextActionAt(record);
     return legacy?[{starts_at:legacy.toISOString(),kind:record.next_action_kind||"Follow-up",details:record.next_action_details||null,status:"scheduled"}]:[];
   }
-  function contextFor(record){return {full_name:fullName(record),seller:profileNameById(record.owner_id),workspace_id:record.workspace_id||session?.user?.app_metadata?.workspace_id||null,commitments:commitmentsFor(record)};}
+  function contextFor(record){return {full_name:fullName(record),seller:profileNameById(record.owner_id),workspace_id:record.workspace_id||session?.user?.app_metadata?.workspace_id||null,commitments:commitmentsFor(record),identity_status:typeof phoneIdentityState==="function"?phoneIdentityState(record).code:"ready"};}
+  function selectedCompleteness(){const selected=state.candidates.filter(record=>state.selected.has(String(record.id)));return selected.map(record=>({record,summary:window.CriareConversationCompleteness.calculate(record,{identity_status:typeof phoneIdentityState==="function"?phoneIdentityState(record).code:"ready"})}));}
+  function refreshCompletenessWarning(){const chosen=selectedCompleteness(),incomplete=chosen.filter(item=>item.summary.conversation_completeness_status!=="complete"),withPending=chosen.filter(item=>item.summary.pending_audio_count>0),pending=withPending.reduce((sum,item)=>sum+item.summary.pending_audio_count,0),box=$("batchCompletenessChoice");if(!box)return;box.hidden=!incomplete.length;$("batchCompletenessWarning").textContent=`${withPending.length} dos ${chosen.length} leads selecionados possuem áudios sem transcrição (${pending} áudio(s)). ${incomplete.length} conversa(s) têm alguma pendência factual.`;if(!incomplete.length)box.querySelectorAll("input").forEach(input=>input.checked=false);}
   function filterCandidates(){
     const scope=$("batchExportScope").value,owner=$("batchExportOwner").value,stage=$("batchExportStage").value,from=$("batchExportDateFrom").value,to=$("batchExportDateTo").value;
     const includeClosed=$("batchExportClosed").checked,includeLost=$("batchExportLost").checked;
@@ -55,9 +57,10 @@
     $("batchExportLeadPicker").innerHTML=state.candidates.length?state.candidates.map(record=>{const date=lastMessageDate(record);return `<label class="batchLeadRow"><input type="checkbox" data-batch-lead="${escapeHtml(record.id)}" ${state.selected.has(String(record.id))?"checked":""}/><b>${escapeHtml(fullName(record))}</b><span>${escapeHtml(profileNameById(record.owner_id))}</span><span>${escapeHtml(record.stage||"—")}</span><small>${date?escapeHtml(fmtBRDateTime(date.toISOString())):"Sem data"}</small></label>`;}).join(""):'<div class="empty">Nenhuma conversa corresponde aos filtros.</div>';
     setPanel("batchExportPanel","batchExportCount","batchExportStatus",`${state.selected.size} conversa(s) selecionada(s)`,state.candidates.length?"Confira a seleção ou gere o pacote.":"Ajuste os filtros para localizar conversas capturadas.");
     $("btnGenerateBatchZip").disabled=!state.selected.size;
+    refreshCompletenessWarning();
   }
-  async function buildSelectedBatch(){
-    const selected=state.candidates.filter(record=>state.selected.has(String(record.id)));
+  async function buildSelectedBatch(selection=null){
+    const selected=selection||state.candidates.filter(record=>state.selected.has(String(record.id)));
     if(!selected.length)throw new Error("Selecione ao menos uma conversa.");
     return engine.buildBatch(selected,contextFor);
   }
@@ -66,7 +69,9 @@
     state.cancelled=false;button.disabled=true;button.textContent="Preparando…";
     setPanel("batchExportPanel","batchExportCount","batchExportStatus",`Preparando ${state.selected.size} conversa(s)`,"Montando mensagens canônicas e hashes determinísticos.");
     try{
-      const batch=await buildSelectedBatch();if(state.cancelled)return;
+      const chosen=selectedCompleteness(),incomplete=chosen.filter(item=>item.summary.conversation_completeness_status!=="complete");let selected=chosen.map(item=>item.record);
+      if(incomplete.length){const action=document.querySelector('input[name="batchCompletenessAction"]:checked')?.value;if(!action)throw new Error("Escolha exportar todos, exportar somente conversas completas ou revisar as incompletas primeiro.");if(action==="review"){window.setTab?.("completeness");$("batchExportModal").close();return;}if(action==="complete")selected=chosen.filter(item=>item.summary.conversation_completeness_status==="complete").map(item=>item.record);if(!selected.length)throw new Error("Nenhuma conversa completa permaneceu na seleção.");}
+      const batch=await buildSelectedBatch(selected);if(state.cancelled)return;
       state.lastBatch=batch;
       const zip=engine.zipFiles(engine.packageFiles(batch)),input=engine.inputFilename(batch.batch_id),output=engine.outputFilename(batch.batch_id);downloadBlob(new Blob([zip],{type:"application/zip"}),input);setPanel("batchExportPanel","batchExportCount","batchExportStatus",`Arquivo criado: ${input}`,`Próximo passo: envie este ZIP ao GPT personalizado. Não tente importá-lo no CRM. Depois, o GPT deverá devolver: ${output}`,"success");
     }catch(error){setPanel("batchExportPanel","batchExportCount","batchExportStatus","Não foi possível gerar o pacote",error.message||String(error),"error");}
@@ -138,8 +143,9 @@
   if(window.__criareBatchAnalysisStaticListenersRegistered)return;
   window.__criareBatchAnalysisStaticListenersRegistered=true;
   ["batchExportScope","batchExportOwner","batchExportStage","batchExportDateFrom","batchExportDateTo","batchExportClosed","batchExportLost"].forEach(id=>$(id).addEventListener("change",()=>refreshExportPicker(true)));
-  $("batchExportLeadPicker").addEventListener("change",event=>{const input=event.target.closest("[data-batch-lead]");if(!input)return;input.checked?state.selected.add(input.dataset.batchLead):state.selected.delete(input.dataset.batchLead);setPanel("batchExportPanel","batchExportCount","batchExportStatus",`${state.selected.size} conversa(s) selecionada(s)`,"Confira a seleção ou gere o pacote.");$("btnGenerateBatchZip").disabled=!state.selected.size;});
+  $("batchExportLeadPicker").addEventListener("change",event=>{const input=event.target.closest("[data-batch-lead]");if(!input)return;input.checked?state.selected.add(input.dataset.batchLead):state.selected.delete(input.dataset.batchLead);setPanel("batchExportPanel","batchExportCount","batchExportStatus",`${state.selected.size} conversa(s) selecionada(s)`,"Confira a seleção ou gere o pacote.");$("btnGenerateBatchZip").disabled=!state.selected.size;refreshCompletenessWarning();});
   $("btnGenerateBatchZip").addEventListener("click",exportBatch);
+  window.CriareBatchAnalysisUI={openForRecords(ids=[]){populateExportFilters();refreshExportPicker(true);if(ids.length)state.selected=new Set(ids.map(String));refreshExportPicker(false);$("batchExportModal").showModal();}};
   $("btnCancelBatchExport").addEventListener("click",()=>{state.cancelled=true;$("batchExportModal").close();});$("btnCloseBatchExport").addEventListener("click",()=>$("batchExportModal").close());
   $("btnCloseBatchImport").addEventListener("click",()=>$("batchImportModal").close());$("btnChooseBatchImport").addEventListener("click",()=>$("batchImportFile").click());
   $("batchImportFile").addEventListener("change",event=>{const file=event.target.files?.[0];if(file)handleImportFile(file);event.target.value="";});

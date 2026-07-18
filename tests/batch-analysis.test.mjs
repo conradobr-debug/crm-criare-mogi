@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import test from "node:test";
 
+await import("../conversation-completeness.js");
 await import("../batch-analysis.js");
 const batch=globalThis.CriareBatchAnalysis;
 
@@ -57,6 +58,15 @@ test("marca explicitamente áudio sem transcrição",()=>{
   const messages=batch.canonicalMessages(audioLead);
   assert.equal(messages[1].text,"[Áudio sem transcrição]");
   assert.equal(messages[1].audio_status,"not_transcribed");
+});
+
+test("exporta metadados factuais de completude sem alterar o hash",async()=>{
+  const before=await batch.conversationHash(audioLead),exported=await batch.exportLead(audioLead,{}),after=await batch.conversationHash(audioLead);
+  assert.equal(exported.conversation_completeness_status,"pending_audio");assert.equal(exported.pending_audio_count,1);assert.equal(exported.unavailable_audio_count,0);assert.equal(exported.capture_may_be_incomplete,false);assert.equal(before,after);
+});
+
+test("instruções proíbem inferir conteúdo de áudio ausente",async()=>{
+  const payload=await batch.buildBatch([audioLead]),text=batch.instructions(payload);assert.match(text,/análise pode estar incompleta/i);assert.match(text,/Nunca deduza o conteúdo de áudios/i);assert.match(text,/null ou unknown/i);
 });
 
 test("não exporta diagnósticos, DOM, blobs, temporários ou RD bruto isolado",async()=>{
