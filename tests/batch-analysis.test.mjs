@@ -133,7 +133,7 @@ test("JSON de entrada selecionado no importador é classificado e rejeitado clar
 });
 
 test("ZIP de entrada selecionado no importador é classificado e rejeitado claramente",()=>{
-  const classification=batch.classifyImportPayload(null,{filename:"01-ENVIAR-AO-GPT_criare-lote_20260718-0745-A7F3.zip",type:"application/zip"});assert.equal(classification.code,"input_package");
+  const classification=batch.classifyImportPayload(null,{filename:"01-ENVIAR-AO-GPT_criare-lote_20260718-0745-A7F3.zip",type:"application/zip"});assert.equal(classification.code,"input_package");assert.equal(classification.batch_id,"20260718-0745-A7F3");
 });
 
 test("resultado 1.1 válido é reconhecido pelo conteúdo",async()=>{
