@@ -247,6 +247,7 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(crm,/id="audioImportDirectionMode"/);
   assert.match(crm,/CriareAudioImportMatcher\.matchFiles/);
   assert.match(crm,/LOCAL_AUDIO_TRANSCRIBER_HEALTH_URL/);
+  assert.match(crm,/function normalizeImportedTranscript/);
   assert.match(crm,/transcription_status:"transcribed"/);
   assert.match(crm,/whatsapp_analysis_status:"stale"/);
   assert.match(crm,/LOCAL_AUDIO_TRANSCRIBER_URL/);
