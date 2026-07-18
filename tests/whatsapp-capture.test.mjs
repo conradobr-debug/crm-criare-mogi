@@ -193,8 +193,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.0"/);
-  assert.equal(manifest.version,"2.3.0");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.1"/);
+  assert.equal(manifest.version,"2.3.1");
   assert(!manifest.permissions.includes("downloads"));
   assert(!manifest.permissions.includes("debugger"));
   assert.doesNotMatch(background,/"criare-(?:start-audio-download-watch|wait-audio-download|dispatch-real-mouse-move)"/);
@@ -301,4 +301,17 @@ test("o painel do lead mantém seções fechadas e o Chefe Duro visível",async(
   assert.match(crm,/Chefe Duro — Próxima condução/);
   assert.match(crm,/setLeadSectionOpen\("appointmentSection",false\)/);
   assert.match(crm,/Análise ainda não executada\./);
+});
+
+test("ponte do CRM trata contexto invalidado e evita listeners duplicados",async()=>{
+  const bridge=await readFile(new URL("../whatsapp-crm-extension/content-crm.js",import.meta.url),"utf8");
+  assert.match(bridge,/__criareWhatsAppCrmBridgeRegistered/);assert.match(bridge,/sendRuntimeMessage/);assert.match(bridge,/extension_context_invalidated/);assert.match(bridge,/reconnectRequired/);assert.match(bridge,/try\{/);assert.doesNotMatch(bridge,/chrome\.runtime\.sendMessage\([^\n]+,[^\n]+=>/);
+});
+
+test("central usa E.164 canônico, busca local e painel persistente",async()=>{
+  const crm=await readFile(new URL("../index.html",import.meta.url),"utf8");assert.match(crm,/normalized\?\.normalized_e164/);assert.doesNotMatch(crm,/escapeHtml\(identity\.normalized\|\|/);assert.match(crm,/Buscar cliente ou telefone/);assert.match(crm,/matchesSearch/);assert.match(crm,/Completude da conversa/);assert.match(crm,/conversationCompletenessPanel[^]*leadSectionBody/);
+});
+
+test("preflight oferece reconexão, lista estruturada e não duplica mensagem final",async()=>{
+  const crm=await readFile(new URL("../index.html",import.meta.url),"utf8");assert.match(crm,/btnReconnectExtension/);assert.match(crm,/batchPreflightHtml/);assert.match(crm,/Pré-verificação concluída\./);assert.doesNotMatch(crm,/updateWhatsAppBatchPanel\(batchPreflightLabel\(result\)\)/);
 });

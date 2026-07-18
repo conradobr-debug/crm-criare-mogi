@@ -4,7 +4,7 @@
   const SCHEMA_VERSION="1.1";
   const SUPPORTED_SCHEMA_VERSIONS=new Set(["1.0","1.1"]);
   const PROMPT_VERSION="criare-batch-v1";
-  const MODULE_VERSION="2.5.0";
+  const MODULE_VERSION="2.5.1";
   const FIT=new Set(["high","medium","low","unknown"]);
   const WAITING=new Set(["seller","customer","none","unknown"]);
   const RISK=new Set(["low","medium","high","critical"]);

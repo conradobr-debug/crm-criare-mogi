@@ -26,5 +26,12 @@ assert.equal(engine.calculate(record([text()]),{identity_status:"phone_duplicate
 assert.equal(engine.sortRows([{summary:engine.calculate(record([text()]))},{summary:engine.calculate(record([audio("A")],{whatsapp_analysis_status:"never"}))}])[0].summary.pending_audio_count,1);
 assert.equal(engine.calculate(record([audio("A",{media_status:"media_unavailable"})])).conversation_completeness_status,"unavailable_audio");
 assert.equal(engine.calculate(record([audio("A",{transcription_status:"failed"})])).conversation_completeness_status,"pending_audio");
-assert.equal(engine.version,"2.5.0");
+const readyAudio=(id,duration)=>audio(id,{}, {sender:"Cliente",direction:"incoming",date:"01/07/2026",message_time:"10:00",duration_seconds:duration,duration_valid:true});
+const fivePending=engine.calculate(record([readyAudio("A",10),readyAudio("B",11),readyAudio("C",12),readyAudio("D",13),audio("E",{}, {sender:"Cliente",direction:"incoming",date:"01/07/2026",message_time:"10:01",duration_valid:false})]));
+assert.equal(fivePending.pending_audio_count,5);assert.equal(fivePending.ready_for_import_count,4);assert.equal(fivePending.metadata_pending_audio_count,1);assert.match(fivePending.completeness_reasons.join(" "),/aguardando atualização de metadados/);
+assert.equal(engine.calculate(record([text()]),{identity_status:"conversation_linked"}).conversation_completeness_status,"complete");
+assert.equal(engine.matchesSearch({first_name:"Crislaine",last_name:"Silvia"},["+5519999999999","(19) 99999-9999"],"crislaine"),true);
+assert.equal(engine.matchesSearch({first_name:"Crislaine"},["+5519999999999"],"+5519"),true);
+assert.equal(engine.matchesSearch({first_name:"Crislaine"},["+5519999999999"],"Luiza"),false);
+assert.equal(engine.version,"2.5.1");
 console.log("conversation completeness tests: ok");

@@ -69,6 +69,10 @@ test("instruções proíbem inferir conteúdo de áudio ausente",async()=>{
   const payload=await batch.buildBatch([audioLead]),text=batch.instructions(payload);assert.match(text,/análise pode estar incompleta/i);assert.match(text,/Nunca deduza o conteúdo de áudios/i);assert.match(text,/null ou unknown/i);
 });
 
+test("aviso de exportação mostra contagem factual e preserva três escolhas",async()=>{
+  const ui=await readFile(new URL("../batch-analysis-ui.js",import.meta.url),"utf8"),crm=await readFile(new URL("../index.html",import.meta.url),"utf8");assert.match(ui,/possuem áudios sem transcrição/);assert.match(ui,/metadados de áudio não confirmados/);assert.match(ui,/captura potencialmente incompleta/);assert.match(ui,/não possuem pendências conhecidas/);assert.equal((crm.match(/name="batchCompletenessAction"/g)||[]).length,3);
+});
+
 test("não exporta diagnósticos, DOM, blobs, temporários ou RD bruto isolado",async()=>{
   const exported=await batch.exportLead(audioLead,{});const serialized=JSON.stringify(exported);
   assert.equal(exported.crm_observations,null);

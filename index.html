@@ -554,7 +554,7 @@
     <div class="whatsappBatchStats">
       <span id="whatsappBatchPosition">0/0</span><span id="whatsappBatchUpdated">Atualizados: 0</span><span id="whatsappBatchNew">Com novidades: 0</span><span id="whatsappBatchStale">Análises desatualizadas: 0</span><span id="whatsappBatchNoConversation">Sem conversa: 0</span><span id="whatsappBatchIgnored">Ignorados: 0</span><span id="whatsappBatchErrorsCount">Erros: 0</span>
     </div>
-    <div class="whatsappBatchActions"><button class="ghost" id="btnWhatsAppBatchPreflight" type="button">Executar diagnóstico novamente</button><button class="ghost" id="btnWhatsAppBatchPause" type="button">Pausar</button><button class="ghost" id="btnWhatsAppBatchContinue" type="button" hidden>Continuar</button><button class="ghost" id="btnWhatsAppBatchCancel" type="button">Cancelar</button><button class="ghost" id="btnWhatsAppBatchRetrySave" type="button" hidden>Tentar salvar novamente</button><button class="ghost" id="btnWhatsAppBatchCopyErrors" type="button">Copiar relatório de falhas</button><button class="ghost" id="btnWhatsAppBatchExportErrors" type="button">Exportar falhas</button><button class="ghost" id="btnWhatsAppBatchFilterStale" type="button">Mostrar análises desatualizadas</button></div>
+    <div class="whatsappBatchActions"><button class="primary" id="btnReconnectExtension" type="button" hidden>Reconectar extensão</button><button class="ghost" id="btnWhatsAppBatchPreflight" type="button">Executar diagnóstico novamente</button><button class="ghost" id="btnWhatsAppBatchPause" type="button">Pausar</button><button class="ghost" id="btnWhatsAppBatchContinue" type="button" hidden>Continuar</button><button class="ghost" id="btnWhatsAppBatchCancel" type="button">Cancelar</button><button class="ghost" id="btnWhatsAppBatchRetrySave" type="button" hidden>Tentar salvar novamente</button><button class="ghost" id="btnWhatsAppBatchCopyErrors" type="button">Copiar relatório de falhas</button><button class="ghost" id="btnWhatsAppBatchExportErrors" type="button">Exportar falhas</button><button class="ghost" id="btnWhatsAppBatchFilterStale" type="button">Mostrar análises desatualizadas</button></div>
     <div class="whatsappBatchErrors" id="whatsappBatchErrors" hidden></div>
     <div class="whatsappBatchMeta" id="whatsappBatchNoConversationReport" hidden></div>
   </div>
@@ -857,6 +857,7 @@
               <button class="ghost analyzeConversationAction" id="btnCaptureOpenWhatsApp" type="button">Capturar conversa aberta</button>
             </div>
           </div>
+          <div class="conversationCompletenessPanel" id="conversationCompletenessPanel" role="status"></div>
           <div class="leadSectionBody" id="whatsappFields" data-section-body hidden>
           <div class="whatsappWorkspace">
           <div class="whatsappOfficialIndicators">
@@ -883,7 +884,6 @@
             <button class="ghost" id="btnImportReadyAnalysis" type="button">Importar análise pronta</button>
           </div>
           <div class="whatsappSummaryMeta" id="whatsappSyncStatus">A extensão verificará o telefone, carregará o histórico disponível e impedirá uma análise parcial.</div>
-          <div class="conversationCompletenessPanel" id="conversationCompletenessPanel" role="status"></div>
           <div class="whatsappSummaryMeta" id="whatsappAudioStatus">Áudios: 0 encontrados • 0 transcritos • 0 pendentes • 0 com erro.</div>
           <div class="whatsappCaptureError" id="whatsappCaptureError" hidden>
             <div class="whatsappCaptureErrorHd"><strong>Falha ao capturar conversa</strong><button class="ghost" id="btnCloseCaptureError" type="button">Fechar aviso</button></div>
@@ -1133,11 +1133,11 @@
 <!-- Supabase via CDN -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="whatsapp-data-service.js"></script>
-<script src="whatsapp-crm-extension/phone-identity.js?v=2.5.0"></script>
+<script src="whatsapp-crm-extension/phone-identity.js?v=2.5.1"></script>
 <script src="whatsapp-crm-extension/capture-core.js"></script>
 <script src="audio-import-matcher.js"></script>
-<script src="conversation-completeness.js?v=2.5.0"></script>
-<script src="batch-analysis.js?v=2.5.0"></script>
+<script src="conversation-completeness.js?v=2.5.1"></script>
+<script src="batch-analysis.js?v=2.5.1"></script>
 
 <script>
 /*
@@ -1331,6 +1331,7 @@ function phoneIdentityState(record,{value=null,excludeId=null}={}){
   if(duplicates.length)return {code:"phone_duplicate",label:"Telefone duplicado",detail:`Este telefone já está vinculado ao lead “${[duplicates[0].first_name,duplicates[0].last_name].filter(Boolean).join(" ")}”.`,normalized,duplicates,captured,ready:false};
   return {code:captured?"conversation_linked":"whatsapp_ready",label:captured?"Conversa vinculada":"Pronto para sincronizar",detail:captured?"As próximas capturas serão confirmadas por este telefone.":"Conversa ainda não capturada.",normalized,duplicates,captured,ready:true};
 }
+function canonicalPhoneDisplay(record,state=null){const identity=state||phoneIdentityState(record);return identity?.normalized?.normalized_e164||globalThis.CriarePhoneIdentity.normalizePhone(record?.phone).normalized_e164||String(record?.phone||"").trim()||"—";}
 function renderPhoneIdentityStatus(record=null){
   const box=$("phoneIdentityStatus");if(!box)return null;const state=phoneIdentityState(record,{value:$("phone").value,excludeId:record?.id||$("id").value||null});
   const raw=String($("phone").value||"").trim()||"—";const canonical=state.normalized.normalized_e164||"—";
@@ -1347,7 +1348,7 @@ function openWhatsAppFor(record=null){
   const webUrl=`https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
   window.open(webUrl,"_blank","noopener,noreferrer");
 }
-const WHATSAPP_EXTENSION_VERSION = "2.3.0";
+const WHATSAPP_EXTENSION_VERSION = "2.3.1";
 const WHATSAPP_BATCH_AUDIO_ENABLED = false;
 const WHATSAPP_BATCH_APPROVAL_KEY = "crm_whatsapp_full_batch_unlocked";
 const WHATSAPP_BATCH_FLOW_VERSION = "capture-flow-2.1.8";
@@ -1404,7 +1405,7 @@ document.addEventListener("criare-whatsapp-audio-transcription-update",async()=>
 function checkWhatsAppExtension(){
   return new Promise(resolve=>{
     const requestId=crypto.randomUUID();
-    const timer=setTimeout(()=>{whatsappExtensionPingWaiters.delete(requestId);resolve({ok:false,error:`Instale ou atualize a extensão Criare ${WHATSAPP_EXTENSION_VERSION} e recarregue esta página.`});},2600);
+    const timer=setTimeout(()=>{whatsappExtensionPingWaiters.delete(requestId);resolve({ok:false,code:"crm_content_script_no_response",reconnectRequired:true,error:`A ponte do CRM com a extensão não respondeu. Clique em “Reconectar extensão”.`});},4000);
     whatsappExtensionPingWaiters.set(requestId,{resolve,timer});
     document.documentElement.dataset.criareWhatsAppExtensionPingRequest=JSON.stringify({requestId});
     document.dispatchEvent(new CustomEvent("criare-whatsapp-extension-ping"));
@@ -1412,7 +1413,7 @@ function checkWhatsAppExtension(){
 }
 async function requireCurrentWhatsAppExtension(){
   const result=await checkWhatsAppExtension();
-  if(!result.ok){const error=new Error(result.error||`Instale a extensão Criare ${WHATSAPP_EXTENSION_VERSION}.`);error.extensionVersion=result.extensionVersion||"não respondida";throw error;}
+  if(!result.ok){const error=new Error(result.error||`Instale a extensão Criare ${WHATSAPP_EXTENSION_VERSION}.`);error.extensionVersion=result.extensionVersion||"não respondida";error.code=result.code||"extension_unavailable";error.reconnectRequired=Boolean(result.reconnectRequired);throw error;}
   if(result.extensionVersion!==WHATSAPP_EXTENSION_VERSION){const error=new Error(`A extensão instalada é a versão ${result.extensionVersion||"desconhecida"}. Instale a versão ${WHATSAPP_EXTENSION_VERSION} e recarregue CRM e WhatsApp Web.`);error.extensionVersion=result.extensionVersion||"desconhecida";throw error;}
   return result;
 }
@@ -1606,7 +1607,8 @@ function renderConversationCompletenessPanel(record){
   const panel=$("conversationCompletenessPanel");if(!panel)return;
   if(!record?.id){panel.innerHTML="Salve o lead para acompanhar a completude da conversa.";panel.className="conversationCompletenessPanel";return;}
   const summary=conversationCompleteness(record);panel.className=`conversationCompletenessPanel ${summary.conversation_completeness_status}`;
-  panel.innerHTML=`<strong>${escapeHtml(summary.completeness_reasons[0])}</strong><span>${summary.total_messages} mensagens • ${summary.total_audio_messages} áudios • ${summary.transcribed_audio_count} transcritos • ${summary.pending_audio_count} pendentes • ${summary.unavailable_audio_count} indisponíveis</span><span>Última sincronização: ${summary.last_sync_at?escapeHtml(fmtBRDateTime(summary.last_sync_at)):"nunca"} • Análise: ${escapeHtml(completenessLabel(summary.analysis_status))}</span>`;
+  const title=summary.pending_audio_count?"Atenção: existem áudios sem transcrição.":summary.conversation_completeness_status==="verification_required"?"Verificação necessária.":summary.conversation_status==="not_captured"?"A conversa ainda não foi capturada.":"Conversa sem áudios pendentes.";
+  panel.innerHTML=`<b>Completude da conversa</b><strong>${escapeHtml(title)}</strong><span>${summary.total_messages} mensagens • ${summary.total_audio_messages} áudios • ${summary.transcribed_audio_count} transcritos • ${summary.pending_audio_count} pendentes • ${summary.ready_for_import_count} prontos para importar • ${summary.metadata_pending_audio_count} aguardando metadados • ${summary.unavailable_audio_count} indisponíveis</span><span>Última sincronização: ${summary.last_sync_at?escapeHtml(fmtBRDateTime(summary.last_sync_at)):"nunca"} • Conversa: ${escapeHtml(completenessLabel(summary.conversation_completeness_status))} • Análise: ${escapeHtml(completenessLabel(summary.analysis_status))}</span><ul>${summary.completeness_reasons.map(reason=>`<li>${escapeHtml(reason)}</li>`).join("")}</ul>`;
 }
 function audioStats(record){
   const entries=Array.isArray(record?.whatsapp_message_entries)?record.whatsapp_message_entries:[];
@@ -1746,12 +1748,19 @@ function batchPreflightLabel(preflight){
   const technical = details ? `\nWhatsApp técnico • URL: ${details.tabUrl||"—"} • Título: ${details.title||"—"} • readyState: ${details.readyState||"—"} • QR Code: ${details.qrCodeDetected?"sim":"não"} • Lista lateral: ${details.conversationListCount||0} • Busca: ${details.searchDetected?"sim":"não"} • Painel: ${details.panelDetected?"sim":"não"} • Composer: ${details.composerDetected?"sim":"não"} • Classificação: ${details.state||"—"}` : "";
   return `Pré-verificação do WhatsApp • Extensão: ${check("extension")} (${preflight.extensionVersion||"—"}) • Background: ${check("background")} • Aba: ${check("tab")} • Content script: ${check("contentScript")} • WhatsApp Web: ${check("whatsapp")} — ${whatsappText} • Supabase Auth: ${check("supabaseAuth")} • Banco: ${check("database")} • Schema necessário: ${check("schema")}${preflight.compatibilityMode?" (modo compatível)":""}${technical}`;
 }
+function batchPreflightHtml(preflight){
+  if(!preflight)return "Pré-verificação pendente.";
+  const label=status=>({verifying:"verificando",ok:"OK",error:"erro",warning:"aviso",not_applicable:"não aplicável",blocked:"bloqueado por etapa anterior",not_tested:"não testado"})[status]||status;
+  const row=(title,key)=>{const check=preflight.checks?.[key]||{status:"not_tested",message:"Não executado."};return `<div class="preflightRow ${escapeHtml(check.status)}"><b>${escapeHtml(title)}</b><span>${escapeHtml(label(check.status))}</span><small>${escapeHtml(check.message||"")}</small></div>`;};
+  return `<div class="preflightGrid">${row("Extensão","extension")}${row("Background","background")}${row("CRM","crm")}${row("WhatsApp Web","whatsapp")}${row("Supabase","supabaseAuth")}${row("Banco","database")}${row("Schema","schema")}</div>`;
+}
 async function runWhatsAppBatchPreflight(){
-  const checks=Object.fromEntries(["extension","background","tab","contentScript","whatsapp","supabaseAuth","database","schema"].map(key=>[key,{status:"not_tested",message:"Não testado."}]));
+  const checks=Object.fromEntries(["extension","background","crm","tab","contentScript","whatsapp","supabaseAuth","database","schema"].map(key=>[key,{status:"verifying",message:"Verificando…"}]));
   const result={extension:false,extensionVersion:"—",whatsappWeb:false,contentScript:false,supabaseAuth:false,database:false,schema:false,compatibilityMode:false,checks,whatsappDetails:null};
+  whatsappBatchState.preflight=result;updateWhatsAppBatchPanel("Executando pré-verificação.");
   try{
-    const extension=await requireCurrentWhatsAppExtension();result.extension=true;result.extensionVersion=extension.extensionVersion||WHATSAPP_EXTENSION_VERSION;checks.extension={status:"ok",message:"Extensão disponível."};
-  }catch(error){checks.extension={status:"error",message:error.message||"Extensão indisponível."};}
+    const extension=await requireCurrentWhatsAppExtension();result.extension=true;result.extensionVersion=extension.extensionVersion||WHATSAPP_EXTENSION_VERSION;checks.extension={status:"ok",message:`Runtime ${result.extensionVersion} respondeu.`};checks.background={status:"ok",message:"Service worker respondeu ao ping."};checks.crm={status:"ok",message:"Ponte do CRM respondeu sem duplicar listeners."};
+  }catch(error){result.reconnectRequired=Boolean(error.reconnectRequired)||/context|ponte|content script/i.test(error.message||"");checks.extension={status:"error",message:error.message||"Extensão indisponível."};checks.background={status:"blocked",message:"Não foi possível consultar porque a ponte do CRM falhou."};checks.crm={status:"error",message:error.message||"Ponte do CRM indisponível."};}
   if(result.extension){
     const whatsapp=await requestWhatsAppPreflight();
     result.whatsappDetails={tabUrl:whatsapp.tabUrl||"",title:whatsapp.detectedTitle||"",readyState:whatsapp.readyState||"",qrCodeDetected:Boolean(whatsapp.qrCodeDetected),conversationListCount:Number(whatsapp.signals?.conversationList||0),searchDetected:Boolean(whatsapp.signals?.search),panelDetected:Boolean(whatsapp.panelDetected),composerDetected:Boolean(whatsapp.composerDetected),state:whatsapp.whatsappState||""};
@@ -1762,7 +1771,7 @@ async function runWhatsAppBatchPreflight(){
     result.whatsappWeb=Boolean(whatsapp.ok&&whatsapp.whatsappLoggedIn);
     const stateMessages={tab_not_found:"Aba não encontrada.",content_script_no_response:"Content script sem resposta.",loading:"WhatsApp Web carregando.",login_required:"Login necessário / QR Code detectado.",connected_without_open_chat:"Conectado, nenhuma conversa aberta.",connected_with_open_chat:"Conectado, conversa aberta.",interface_unrecognized:"Interface não reconhecida."};
     checks.whatsapp={status:result.whatsappWeb?"ok":(whatsapp.whatsappState==="loading"?"warning":"error"),message:stateMessages[whatsapp.whatsappState]||whatsapp.error||"WhatsApp Web não reconhecido."};
-  }
+  }else{checks.tab={status:"blocked",message:"Bloqueado pela falha da extensão."};checks.contentScript={status:"blocked",message:"Bloqueado pela falha da extensão."};checks.whatsapp={status:"blocked",message:"Não testado porque a ponte do CRM não respondeu."};}
   try{
     const {data:authData,error:authError}=await withTimeout(sb.auth.getSession(),BOOT_QUERY_TIMEOUT_MS,"preflight Supabase Auth");
     if(authError||!authData?.session?.user) throw authError||new Error("Sessão Supabase inválida.");
@@ -1778,7 +1787,7 @@ async function runWhatsAppBatchPreflight(){
     if(optional.error){if(isSchemaCompatibilityError(optional.error)){result.compatibilityMode=true;}else throw optional.error;}
     result.schema=true;checks.schema={status:result.compatibilityMode?"warning":"ok",message:result.compatibilityMode?"Schema em modo compatível.":"Schema necessário disponível."};
   }catch(error){checks.schema={status:"error",message:databaseErrorDetails(error).message};}
-  whatsappBatchState.preflight=result;updateWhatsAppBatchPanel(batchPreflightLabel(result));return result;
+  whatsappBatchState.preflight=result;updateWhatsAppBatchPanel("Pré-verificação concluída.");return result;
 }
 function whatsappBatchApproval(){
   try{
@@ -1806,12 +1815,13 @@ function updateWhatsAppBatchPanel(current="Aguardando início."){
   $("whatsappBatchIgnored").textContent=`Ignorados: ${state.stats.ignored}`;
   $("whatsappBatchErrorsCount").textContent=`Erros: ${state.stats.errors}`;
   $("whatsappBatchCurrent").textContent=current;
-  $("whatsappBatchPreflight").textContent=batchPreflightLabel(state.preflight);
+  $("whatsappBatchPreflight").innerHTML=batchPreflightHtml(state.preflight);
   $("whatsappBatchLastRun").textContent=state.startedAt?`Início da atualização: ${fmtBRDateTime(state.startedAt)}`:`Última atualização geral: ${state.lastRunAt?fmtBRDateTime(state.lastRunAt):"nunca"}`;
   $("btnWhatsAppBatchPause").hidden=!state.running||state.paused;$("btnWhatsAppBatchContinue").hidden=!state.running||!state.paused;$("btnWhatsAppBatchCancel").disabled=!state.running;
   $("btnWhatsAppBatchRetrySave").hidden=!pendingWhatsAppCaptureSaves.size;
   $("btnWhatsAppBatch").disabled=Boolean(state.running||state.starting);
   $("btnWhatsAppBatch").textContent=state.starting?"Iniciando atualização…":state.running?"Atualizando conversas…":"Atualizar conversas do WhatsApp";
+  $("btnReconnectExtension").hidden=!state.preflight?.reconnectRequired;
   const errorBox=$("whatsappBatchErrors");errorBox.textContent=state.errors.join("\n\n");errorBox.hidden=!state.errors.length;
   const noConversationBox=$("whatsappBatchNoConversationReport");noConversationBox.textContent=state.noConversationReports.join("\n\n");noConversationBox.hidden=!state.noConversationReports.length;
   $("btnWhatsAppBatchFilterStale").textContent=whatsappBatchStaleFilter?"Mostrar todos os leads":"Mostrar análises desatualizadas";
@@ -1917,12 +1927,13 @@ function updateOfficialWhatsAppIndicators(record,conversation){
   $("whatsappSyncStatus").textContent=`${conversation.crm_whatsapp_accounts?.verified_name||'Conta WhatsApp Criare'}${conversation.crm_whatsapp_accounts?.coexistence_enabled?' • Coexistence ativo':''}.${conversation.analysis_error?` Última análise: ${conversation.analysis_error}`:''}`;
 }
 
-const completenessFilters={scope:"issues",owner:"",stage:"",lifecycle:"active",lastMessageFrom:"",lastSyncFrom:"",page:1};
+const completenessFilters={scope:"issues",search:"",owner:"",stage:"",lifecycle:"active",lastMessageFrom:"",lastSyncFrom:"",page:1};
 let pendingAudioDetailsRecordId="";
 let pendingAudioSelectedIds=new Set();
 let completenessSyncSelection=null;
 function completenessRows(){
   const rows=records.filter(record=>!isSpecifier(record)).map(record=>({record,summary:conversationCompleteness(record)})).filter(({record,summary})=>{
+    const identity=phoneIdentityState(record);if(!window.CriareConversationCompleteness.matchesSearch(record,[canonicalPhoneDisplay(record,identity),identity.normalized?.display_format,record.phone],completenessFilters.search))return false;
     if(!window.CriareConversationCompleteness.matchesFilter(summary,completenessFilters.scope))return false;
     if(completenessFilters.owner&&String(record.owner_id||"")!==completenessFilters.owner)return false;
     if(completenessFilters.stage&&record.stage!==completenessFilters.stage)return false;
@@ -1938,12 +1949,13 @@ function completenessRows(){
 function renderCompleteness(){
   const all=completenessRows(),shown=all.slice(0,completenessFilters.page*50),failedIds=[...whatsappBatchState.queueStatuses].filter(([,status])=>["capture_error","not_found","verification_required"].includes(status)).map(([id])=>id),owners=profiles.map(profile=>`<option value="${escapeHtml(profile.id)}" ${completenessFilters.owner===profile.id?"selected":""}>${escapeHtml(profile.display_name||profile.email||profile.id)}</option>`).join(""),stages=[...new Set(records.filter(record=>!isSpecifier(record)).map(record=>record.stage).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
   renderKPIs(records.filter(record=>!isSpecifier(record)&&record.pipeline==="lead"&&record.stage!=="Perdido"));
-  const rows=shown.map(({record,summary})=>{const identity=phoneIdentityState(record);return `<tr data-completeness-lead="${escapeHtml(record.id)}"><td><b>${escapeHtml(fullName(record))}</b><br><small>${escapeHtml(profileNameById(record.owner_id))}</small></td><td>${escapeHtml(identity.normalized||record.phone||"—")}</td><td>${escapeHtml(record.stage||"—")}</td><td>${summary.last_message_at?escapeHtml(fmtBRDateTime(summary.last_message_at)):"—"}</td><td>${summary.last_sync_at?escapeHtml(fmtBRDateTime(summary.last_sync_at)):"—"}</td><td>${summary.total_messages}</td><td>${summary.total_audio_messages}</td><td>${summary.transcribed_audio_count}</td><td>${summary.pending_audio_count}</td><td>${summary.unavailable_audio_count}</td><td><span class="completenessBadge ${escapeHtml(summary.conversation_completeness_status)}">${escapeHtml(completenessLabel(summary.conversation_completeness_status))}</span></td><td>${escapeHtml(completenessLabel(summary.analysis_status))}</td><td><div class="completenessActions"><button class="ghost" data-completeness-action="open">Abrir lead</button>${identity.ready?`<button class="ghost" data-completeness-action="whatsapp">WhatsApp</button><button class="ghost" data-completeness-action="capture">${summary.conversation_status==="not_captured"?"Capturar":"Atualizar"}</button>`:""}${summary.total_audio_messages?`<button class="ghost" data-completeness-action="metadata">Metadados</button><button class="ghost" data-completeness-action="audios">Ver áudios</button><button class="ghost" data-completeness-action="import">Importar áudios</button>`:""}${summary.analysis_status!=="current"&&summary.total_messages?`<button class="ghost" data-completeness-action="reanalyze">Reanalisar</button>`:""}<button class="ghost" data-completeness-action="export">Exportar</button></div></td></tr>`;}).join("");
-  return `<section class="completenessCenter"><div class="sectionHd"><div><h2>Completude das conversas</h2><span>Áudios pendentes e qualidade factual do histórico</span></div><div class="completenessActions"><button class="primary" id="btnCompletenessSync" type="button">Sincronizar conversas dos leads (${all.filter(item=>phoneIdentityState(item.record).ready).length})</button>${failedIds.length?`<button class="ghost" id="btnCompletenessRetry" type="button">Tentar novamente falhas (${failedIds.length})</button>`:""}</div></div><div class="completenessFilterGrid"><label>Visão<select data-completeness-filter="scope"><option value="issues">Pendências e incompletas</option><option value="all">Todos os leads</option><option value="pending">Áudios pendentes</option><option value="not_captured">Não capturadas</option><option value="incomplete">Potencialmente incompletas</option><option value="outdated">Análises desatualizadas/ausentes</option></select></label><label>Vendedor<select data-completeness-filter="owner"><option value="">Todos</option>${owners}</select></label><label>Etapa<select data-completeness-filter="stage"><option value="">Todas</option>${stages.map(stage=>`<option ${completenessFilters.stage===stage?"selected":""}>${escapeHtml(stage)}</option>`).join("")}</select></label><label>Situação<select data-completeness-filter="lifecycle"><option value="active">Ativos</option><option value="all">Todos</option><option value="closed">Fechados</option><option value="lost">Perdidos</option></select></label><label>Última mensagem desde<input data-completeness-filter="lastMessageFrom" type="date" value="${escapeHtml(completenessFilters.lastMessageFrom)}"></label><label>Última sincronização desde<input data-completeness-filter="lastSyncFrom" type="date" value="${escapeHtml(completenessFilters.lastSyncFrom)}"></label></div><div class="completenessSummary">${all.length} lead(s) no filtro • cálculo derivado, sem carregar arquivos de áudio.</div><div class="completenessTableWrap"><table class="completenessTable"><thead><tr><th>Cliente</th><th>Telefone</th><th>Etapa</th><th>Última mensagem</th><th>Última sincronização</th><th>Mensagens</th><th>Áudios</th><th>Transcritos</th><th>Pendentes</th><th>Indisponíveis</th><th>Situação da conversa</th><th>Situação da análise</th><th>Ações</th></tr></thead><tbody>${rows||'<tr><td colspan="13">Nenhum lead corresponde aos filtros.</td></tr>'}</tbody></table></div>${shown.length<all.length?'<button class="ghost" id="btnCompletenessMore" type="button">Carregar mais</button>':""}</section>`;
+  const rows=shown.map(({record,summary})=>{const identity=phoneIdentityState(record);return `<tr data-completeness-lead="${escapeHtml(record.id)}"><td><b>${escapeHtml(fullName(record))}</b><br><small>${escapeHtml(profileNameById(record.owner_id))}</small></td><td>${escapeHtml(canonicalPhoneDisplay(record,identity))}</td><td>${escapeHtml(record.stage||"—")}</td><td>${summary.last_message_at?escapeHtml(fmtBRDateTime(summary.last_message_at)):"—"}</td><td>${summary.last_sync_at?escapeHtml(fmtBRDateTime(summary.last_sync_at)):"—"}</td><td>${summary.total_messages}</td><td>${summary.total_audio_messages}</td><td>${summary.transcribed_audio_count}</td><td>${summary.pending_audio_count}${summary.pending_audio_count?`<br><small>${summary.ready_for_import_count} prontos • ${summary.metadata_pending_audio_count} metadados</small>`:""}</td><td>${summary.unavailable_audio_count}</td><td><details class="completenessReason"><summary><span class="completenessBadge ${escapeHtml(summary.conversation_completeness_status)}">${escapeHtml(completenessLabel(summary.conversation_completeness_status))}</span></summary>${summary.completeness_reasons.map(reason=>`<small>${escapeHtml(reason)}</small>`).join("")}</details></td><td>${escapeHtml(completenessLabel(summary.analysis_status))}</td><td><div class="completenessActions"><button class="ghost" data-completeness-action="open">Abrir lead</button>${identity.ready?`<button class="ghost" data-completeness-action="whatsapp">WhatsApp</button><button class="ghost" data-completeness-action="capture">${summary.conversation_status==="not_captured"?"Capturar":"Atualizar"}</button>`:""}${summary.total_audio_messages?`<button class="ghost" data-completeness-action="metadata">Metadados</button><button class="ghost" data-completeness-action="audios">Ver áudios</button><button class="ghost" data-completeness-action="import">Importar áudios</button>`:""}${summary.analysis_status!=="current"&&summary.total_messages?`<button class="ghost" data-completeness-action="reanalyze">Reanalisar</button>`:""}<button class="ghost" data-completeness-action="export">Exportar</button></div></td></tr>`;}).join("");
+  return `<section class="completenessCenter"><div class="sectionHd"><div><h2>Completude das conversas</h2><span>Áudios pendentes e qualidade factual do histórico • a busca abaixo é exclusiva desta central</span></div><div class="completenessActions"><button class="primary" id="btnCompletenessSync" type="button">Sincronizar conversas dos leads (${all.filter(item=>phoneIdentityState(item.record).ready).length})</button>${failedIds.length?`<button class="ghost" id="btnCompletenessRetry" type="button">Tentar novamente falhas (${failedIds.length})</button>`:""}</div></div><div class="completenessFilterGrid"><label>Buscar cliente ou telefone<input data-completeness-filter="search" type="search" value="${escapeHtml(completenessFilters.search)}" placeholder="Nome, +5519… ou telefone formatado"></label><label>Visão<select data-completeness-filter="scope"><option value="issues">Pendências e incompletas</option><option value="all">Todos os leads</option><option value="pending">Áudios pendentes</option><option value="not_captured">Não capturadas</option><option value="incomplete">Potencialmente incompletas</option><option value="outdated">Análises desatualizadas/ausentes</option></select></label><label>Vendedor<select data-completeness-filter="owner"><option value="">Todos</option>${owners}</select></label><label>Etapa<select data-completeness-filter="stage"><option value="">Todas</option>${stages.map(stage=>`<option ${completenessFilters.stage===stage?"selected":""}>${escapeHtml(stage)}</option>`).join("")}</select></label><label>Situação<select data-completeness-filter="lifecycle"><option value="active">Ativos</option><option value="all">Todos</option><option value="closed">Fechados</option><option value="lost">Perdidos</option></select></label><label>Última mensagem desde<input data-completeness-filter="lastMessageFrom" type="date" value="${escapeHtml(completenessFilters.lastMessageFrom)}"></label><label>Última sincronização desde<input data-completeness-filter="lastSyncFrom" type="date" value="${escapeHtml(completenessFilters.lastSyncFrom)}"></label></div><div class="completenessSummary">${all.length} lead(s) no filtro • cálculo derivado, sem carregar arquivos de áudio.</div><div class="completenessTableWrap"><table class="completenessTable"><thead><tr><th>Cliente</th><th>Telefone</th><th>Etapa</th><th>Última mensagem</th><th>Última sincronização</th><th>Mensagens</th><th>Áudios</th><th>Transcritos</th><th>Pendentes</th><th>Indisponíveis</th><th>Situação da conversa</th><th>Situação da análise</th><th>Ações</th></tr></thead><tbody>${rows||'<tr><td colspan="13">Nenhum lead corresponde aos filtros.</td></tr>'}</tbody></table></div>${shown.length<all.length?'<button class="ghost" id="btnCompletenessMore" type="button">Carregar mais</button>':""}</section>`;
 }
 function openPendingAudioDetails(record){
-  const summary=conversationCompleteness(record);pendingAudioDetailsRecordId=record.id;$("pendingAudioLeadName").textContent=fullName(record);const pending=summary.audio_messages.filter(item=>item.audio_status!=="transcribed");pendingAudioSelectedIds=new Set(pending.map(item=>item.message_id).filter(Boolean));
-  $("pendingAudioDetailsList").innerHTML=pending.length?pending.map(item=>`<label class="pendingAudioItem"><span><input type="checkbox" data-pending-audio-id="${escapeHtml(item.message_id||"")}" ${item.message_id?"checked":"disabled"}> <b>${escapeHtml(item.date||"sem data")} • ${escapeHtml(item.message_time||item.time||"sem horário")}</b></span><span>${escapeHtml(item.direction||"direção não identificada")} • ${escapeHtml(item.sender||"remetente não identificado")} • ${escapeHtml(item.duration_text||(item.duration_seconds?`${item.duration_seconds}s`:"duração não lida"))}</span><small>ID ${escapeHtml(String(item.message_id||"").slice(-8))} • ${escapeHtml(item.duration_source||item.audioMeta?.durationSource||"metadado não confirmado")} • ${escapeHtml(item.media_status||item.audioMeta?.status||"mídia pendente")} • ${escapeHtml(item.audio_status)}</small></label>`).join(""):'<div class="empty">Nenhum áudio pendente neste lead.</div>';
+  const summary=conversationCompleteness(record);pendingAudioDetailsRecordId=record.id;$("pendingAudioLeadName").textContent=`${fullName(record)} • ${summary.pending_audio_count} pendentes: ${summary.ready_for_import_count} prontos para importar; ${summary.metadata_pending_audio_count} aguardando atualização de metadados.`;const pending=summary.audio_messages.filter(item=>item.audio_status!=="transcribed");pendingAudioSelectedIds=new Set(pending.filter(item=>item.import_readiness==="ready_for_import").map(item=>item.message_id).filter(Boolean));
+  const readinessLabel={ready_for_import:"Pronto para importar",metadata_update_required:"Atualizar metadados",media_unavailable:"Mídia indisponível",transcription_error:"Erro de transcrição",already_transcribed:"Já transcrito"};
+  $("pendingAudioDetailsList").innerHTML=pending.length?pending.map(item=>`<label class="pendingAudioItem"><span><input type="checkbox" data-pending-audio-id="${escapeHtml(item.message_id||"")}" ${pendingAudioSelectedIds.has(item.message_id)?"checked":""} ${item.import_readiness!=="ready_for_import"?"disabled":""}> <b>${escapeHtml(item.date||"sem data")} • ${escapeHtml(item.message_time||item.time||"sem horário")}</b></span><span>${escapeHtml(item.direction||"direção não identificada")} • ${escapeHtml(item.sender||"remetente não identificado")} • ${escapeHtml(item.duration_text||(item.duration_seconds?`${item.duration_seconds}s`:"duração não lida"))}</span><strong>${escapeHtml(readinessLabel[item.import_readiness]||item.import_readiness)}</strong><small>ID ${escapeHtml(String(item.message_id||"").slice(-8))} • ${escapeHtml(item.duration_source||item.audioMeta?.durationSource||"metadado não confirmado")} • ${escapeHtml(item.media_status||item.audioMeta?.status||"mídia pendente")} • ${escapeHtml(item.audio_status)}</small>${item.import_readiness==="metadata_update_required"?'<button class="ghost" type="button" data-pending-audio-refresh>Atualizar metadados</button>':""}</label>`).join(""):'<div class="empty">Nenhum áudio pendente neste lead.</div>';
   $("pendingAudioDetailsModal").showModal();
 }
 function startCompletenessSync(){const selected=completenessRows().map(item=>item.record).filter(record=>phoneIdentityState(record).ready);if(!selected.length)return toast("Nenhum lead válido e único no filtro atual.",{error:true});if(!confirm(`Sincronizar sequencialmente ${selected.length} lead(s) do filtro atual?`))return;completenessSyncSelection=new Set(selected.map(record=>record.id));startWhatsAppBatch({mode:"completeness"});}
@@ -3733,7 +3745,7 @@ function renderReports(){
             <div class="batchWorkflowStep batchWorkflowGpt"><b>2. ANALISAR NO GPT</b><span>Envie ao GPT somente o arquivo que começa com <strong>01-ENVIAR-AO-GPT</strong>.</span><button class="ghost" id="btnCopyBatchGptInstruction" type="button">Copiar instrução para o GPT</button></div>
             <div class="batchWorkflowStep batchWorkflowImport"><b>3. IMPORTAR RESULTADO</b><span>Importe no CRM somente o arquivo que começa com <strong>02-IMPORTAR-NO-CRM</strong>.</span><button class="primary" id="btnOpenBatchImport" type="button">3. Importar resultado da análise</button></div>
           </div>
-          <small>CRM 2.5.0 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
+          <small>CRM 2.5.1 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
         </div>
       </details>
       <div class="formNotice">${escapeHtml(reportPeriod)}</div>
@@ -4594,6 +4606,7 @@ document.querySelectorAll(".tab").forEach(el=>{
   });
 });
 $("board").addEventListener("change",event=>{const key=event.target.dataset.completenessFilter;if(!key)return;completenessFilters[key]=event.target.value;completenessFilters.page=1;render();});
+$("board").addEventListener("input",event=>{if(event.target.dataset.completenessFilter!=="search")return;completenessFilters.search=event.target.value;completenessFilters.page=1;render();requestAnimationFrame(()=>{const input=$("board").querySelector('[data-completeness-filter="search"]');if(input){input.focus();input.setSelectionRange(input.value.length,input.value.length);}});});
 $("board").addEventListener("click",event=>{
   if(event.target.closest("#btnCompletenessMore")){completenessFilters.page+=1;return render();}
   if(event.target.closest("#btnCompletenessSync"))return startCompletenessSync();
@@ -4611,6 +4624,7 @@ $("board").addEventListener("click",event=>{
 });
 $("btnClosePendingAudioDetails").addEventListener("click",()=>$("pendingAudioDetailsModal").close());
 $("pendingAudioDetailsList").addEventListener("change",event=>{const id=event.target.dataset.pendingAudioId;if(!id)return;event.target.checked?pendingAudioSelectedIds.add(id):pendingAudioSelectedIds.delete(id);});
+$("pendingAudioDetailsList").addEventListener("click",event=>{if(!event.target.closest("[data-pending-audio-refresh]"))return;event.preventDefault();const record=records.find(item=>item.id===pendingAudioDetailsRecordId);if(!record)return;$("pendingAudioDetailsModal").close();openAudioImport(record);$("btnRefreshAudioMetadata").click();});
 $("btnPendingAudioWhatsapp").addEventListener("click",()=>openWhatsAppFor(records.find(item=>item.id===pendingAudioDetailsRecordId)));
 $("btnPendingAudioImport").addEventListener("click",()=>{const record=records.find(item=>item.id===pendingAudioDetailsRecordId);if(!record||!pendingAudioSelectedIds.size)return toast("Selecione ao menos um áudio pendente.",{error:true});$("pendingAudioDetailsModal").close();openAudioImport(record);importedAudioState.inventory=importedAudioState.inventory.filter(item=>pendingAudioSelectedIds.has(normalizeWhatsAppMessageId(item.message_id||item.id)));importedAudioState.pending=importedAudioEntries(importedAudioState.inventory);renderImportedAudioReview();});
 
@@ -4991,6 +5005,7 @@ $("btnSyncWhatsAppAll").addEventListener("click", showOfficialWhatsAppOverview);
 $("btnWhatsAppBatch").addEventListener("click", ()=>startWhatsAppBatch({mode:"full"}));
 $("btnWhatsAppBatchTest").addEventListener("click", ()=>startWhatsAppBatch({mode:"test"}));
 $("btnWhatsAppBatchPreflight").addEventListener("click", ()=>runWhatsAppBatchPreflight());
+$("btnReconnectExtension").addEventListener("click",()=>{sessionStorage.setItem("criare_retry_extension_preflight","1");location.reload();});
 $("btnWhatsAppBatchPause").addEventListener("click",()=>{whatsappBatchState.paused=true;updateWhatsAppBatchPanel("Atualização pausada pelo usuário.");});
 $("btnWhatsAppBatchContinue").addEventListener("click",async()=>{if(whatsappBatchState.systemPaused){const preflight=await runWhatsAppBatchPreflight();if(!preflight.extension||!preflight.whatsappWeb||!preflight.contentScript||!preflight.supabaseAuth||!preflight.database||!preflight.schema)return updateWhatsAppBatchPanel("Continuação bloqueada pela pré-verificação.");whatsappBatchState.systemPaused=false;whatsappBatchState.systemFailure={type:"",count:0};}whatsappBatchState.paused=false;whatsappBatchState.resume?.();whatsappBatchState.resume=null;updateWhatsAppBatchPanel("Atualização retomada.");});
 $("btnWhatsAppBatchCancel").addEventListener("click",()=>{whatsappBatchState.cancelled=true;whatsappBatchState.paused=false;whatsappBatchState.resume?.();whatsappBatchState.resume=null;updateWhatsAppBatchPanel("Cancelando após concluir o lead atual…");});
@@ -5354,9 +5369,13 @@ if("serviceWorker" in navigator){
   }
   setTab("leads");
   await initSupabase();
+  if(sessionStorage.getItem("criare_retry_extension_preflight")==="1"){
+    sessionStorage.removeItem("criare_retry_extension_preflight");
+    setTimeout(()=>runWhatsAppBatchPreflight(),600);
+  }
 })();
 </script>
-<script src="batch-analysis-ui.js?v=2.5.0"></script>
+<script src="batch-analysis-ui.js?v=2.5.1"></script>
 <script src="partners.js"></script>
 </body>
 </html>
