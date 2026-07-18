@@ -344,10 +344,6 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
     "criare-capture-active-whatsapp":captureCustomerChat,
     "criare-capture-open-whatsapp":captureOpenWhatsAppChat,
     "criare-recover-whatsapp-audios":recoverCustomerAudios,
-    "criare-start-audio-download-watch":startAudioDownloadWatch,
-    "criare-wait-audio-download":waitForAudioDownload,
-    "criare-cancel-audio-download-watch":cancelAudioDownloadWatch,
-    "criare-dispatch-real-mouse-move":dispatchRealMouseMove,
     "criare-preflight-whatsapp":preflightWhatsApp,
     "criare-audio-transcription-complete":forwardAudioTranscription,
     "criare-sync-whatsapp-record":syncCustomerChat

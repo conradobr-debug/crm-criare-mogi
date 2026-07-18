@@ -25,7 +25,7 @@ def json_response(handler: BaseHTTPRequestHandler, status: int, body: dict) -> N
     handler.send_response(status)
     handler.send_header("Access-Control-Allow-Origin", "*")
     handler.send_header("Access-Control-Allow-Headers", "content-type")
-    handler.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+    handler.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(payload)))
     handler.end_headers()
@@ -51,7 +51,8 @@ def executable() -> Optional[str]:
 
 def model_path() -> Optional[str]:
     configured = os.environ.get("WHISPER_CPP_MODEL", "").strip()
-    candidates = [configured, str(ROOT / "models" / "ggml-small.bin"), str(ROOT / "models" / "ggml-base.bin")]
+    app_support = pathlib.Path.home() / "Library" / "Application Support" / "Criare Transcriber"
+    candidates = [configured, str(app_support / "ggml-small.bin"), str(app_support / "ggml-base.bin"), str(ROOT / "models" / "ggml-small.bin"), str(ROOT / "models" / "ggml-base.bin")]
     return next((candidate for candidate in candidates if candidate and pathlib.Path(candidate).exists()), None)
 
 
@@ -99,6 +100,20 @@ def transcribe(payload: dict) -> dict:
 
 
 class Handler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path != "/health":
+            json_response(self, 404, {"error": "Rota não encontrada."})
+            return
+        binary = executable()
+        model = model_path()
+        json_response(self, 200 if binary and model else 503, {
+            "ok": bool(binary and model),
+            "service": "Transcritor Criare",
+            "whisper_ready": bool(binary),
+            "model_ready": bool(model),
+            "status": "ready" if binary and model else "not_ready",
+        })
+
     def do_OPTIONS(self) -> None:  # noqa: N802
         json_response(self, 204, {})
 

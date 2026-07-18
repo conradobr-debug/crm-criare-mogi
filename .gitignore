@@ -1,1 +1,3 @@
 supabase/.temp/
+whatsapp-local-transcriber/.transcription-cache.json
+whatsapp-local-transcriber/__pycache__/

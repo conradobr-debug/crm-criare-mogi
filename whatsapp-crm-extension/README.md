@@ -7,7 +7,7 @@ manual do CRM.
 
 ## Instalação
 
-1. Extraia o arquivo `criare-whatsapp-extension-2.1.22.zip`.
+1. Extraia o arquivo `criare-whatsapp-extension-2.2.0.zip`.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação** e selecione a pasta extraída.
@@ -32,13 +32,13 @@ mesmo identificador. Imagem, vídeo, documento, localização, contato e figurin
 entram no histórico com marcador explícito. Áudio entra somente como
 `[Áudio sem transcrição]`.
 
-Áudios são capturados sem bloquear o histórico e entram em uma fila opcional de
-transcrição local. Se o Transcritor Criare estiver desligado, permanecem como
-`[Áudio sem transcrição]` pendentes.
+Áudios são capturados sem bloquear o histórico e permanecem como
+`[Áudio sem transcrição]` até o usuário iniciar o fluxo assistido no CRM.
 
 Para transcrever áudios, baixe os arquivos manualmente no WhatsApp Web e use o
 painel **Importar áudios baixados** no CRM. Os arquivos são lidos localmente,
-associados somente após confirmação e enviados apenas ao Transcritor Criare
+comparados globalmente sem reutilizar mensagens, associados somente após
+confirmação e enviados apenas ao Transcritor Criare
 local; não permanecem armazenados pela extensão.
 
 ## Limites e segurança
