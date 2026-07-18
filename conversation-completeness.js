@@ -30,6 +30,19 @@
     if(entry?.file_obtained===true||entry?.audioMeta?.fileObtained===true||/ready|pronto|import/i.test(state))return "pending_import";
     return "pending_download";
   }
+  function confirmedDuration(entry){
+    const source=clean(entry?.duration_source||entry?.audioMeta?.durationSource);
+    const confirmedSources=new Set(["whatsapp_player","confirmed","imported_file","audio_meta","message_duration"]);
+    const raw=Number(entry?.duration_seconds||entry?.duration||entry?.audioMeta?.durationSeconds||0);
+    if(entry?.duration_valid===true&&Number.isFinite(raw)&&raw>0&&raw<600)return raw;
+    if(confirmedSources.has(source)&&Number.isFinite(raw)&&raw>0&&raw<600)return raw;
+    const audioMeta=Number(entry?.audioMeta?.durationSeconds||0);
+    if(!source&&Number.isFinite(audioMeta)&&audioMeta>0&&audioMeta<600)return audioMeta;
+    return null;
+  }
+  function readyForAudioImport(entry){
+    return Boolean(normalizeId(entry?.message_id||entry?.id)&&confirmedDuration(entry)&&clean(entry?.sender)&&["incoming","outgoing"].includes(clean(entry?.direction).toLowerCase())&&clean(entry?.date)&&clean(entry?.message_time||entry?.time));
+  }
   function canonicalEntries(record){
     const structured=Array.isArray(record?.whatsapp_message_entries)?record.whatsapp_message_entries:[];const source=structured.length?structured:clean(record?.whatsapp_transcript).split(/\n+/).map(text=>({text})).filter(entry=>entry.text);
     const byId=new Map(),anonymous=[];
@@ -64,7 +77,7 @@
     const counts={transcribed:0,pending_download:0,pending_import:0,transcription_error:0,media_unavailable:0,verification_required:0};audios.forEach(item=>counts[item.audio_status]++);
     const analysis_status=analysisStatus(record,lastSync),pending=counts.pending_download+counts.pending_import+counts.verification_required;
     const pendingAudios=audios.filter(item=>["pending_download","pending_import","verification_required"].includes(item.audio_status));
-    const readyForImport=pendingAudios.filter(item=>normalizeId(item.message_id||item.id)&&item.duration_valid===true&&Number(item.duration_seconds||item.duration)>0&&clean(item.sender)&&["incoming","outgoing"].includes(clean(item.direction).toLowerCase())&&clean(item.date)&&clean(item.message_time||item.time));
+    const readyForImport=pendingAudios.filter(readyForAudioImport);
     const metadataPending=Math.max(0,pendingAudios.length-readyForImport.length);
     let conversation_completeness_status="complete";
     if(conversation_status==="verification_required")conversation_completeness_status="verification_required";
@@ -97,5 +110,5 @@
   function matchesSearch(record,phoneValues,query){const needle=clean(query).toLocaleLowerCase("pt-BR");if(!needle)return true;const name=clean([record?.first_name,record?.last_name].filter(Boolean).join(" "));return [name,...(Array.isArray(phoneValues)?phoneValues:[phoneValues])].map(value=>clean(value).toLocaleLowerCase("pt-BR")).some(value=>value.includes(needle));}
   function buildSyncQueue(records,identityFor=()=>({ready:true,code:"ready"})){return records.map(record=>{const identity=identityFor(record)||{};let status="waiting";if(identity.code==="phone_duplicate")status="phone_duplicate";else if(!identity.ready)status=identity.code==="phone_invalid"||identity.code==="phone_missing"?"phone_invalid":"verification_required";return {record,status,normalized_phone:identity.normalized||null};});}
 
-  global.CriareConversationCompleteness={version:VERSION,normalizeId,isAudio,audioStatus,canonicalEntries,calculate,priority,sortRows,matchesFilter,matchesSearch,buildSyncQueue};
+  global.CriareConversationCompleteness={version:VERSION,normalizeId,isAudio,audioStatus,confirmedDuration,readyForAudioImport,canonicalEntries,calculate,priority,sortRows,matchesFilter,matchesSearch,buildSyncQueue};
 })(typeof window!=="undefined"?window:globalThis);

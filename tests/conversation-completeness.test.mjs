@@ -29,6 +29,8 @@ assert.equal(engine.calculate(record([audio("A",{transcription_status:"failed"})
 const readyAudio=(id,duration)=>audio(id,{}, {sender:"Cliente",direction:"incoming",date:"01/07/2026",message_time:"10:00",duration_seconds:duration,duration_valid:true});
 const fivePending=engine.calculate(record([readyAudio("A",10),readyAudio("B",11),readyAudio("C",12),readyAudio("D",13),audio("E",{}, {sender:"Cliente",direction:"incoming",date:"01/07/2026",message_time:"10:01",duration_valid:false})]));
 assert.equal(fivePending.pending_audio_count,5);assert.equal(fivePending.ready_for_import_count,4);assert.equal(fivePending.metadata_pending_audio_count,1);assert.match(fivePending.completeness_reasons.join(" "),/aguardando atualização de metadados/);
+const importerCompatible=engine.calculate(record([audio("META",{}, {sender:"Cliente",direction:"incoming",date:"01/07/2026",message_time:"10:02",audioMeta:{durationSeconds:31}})]));
+assert.equal(importerCompatible.ready_for_import_count,1,"a central deve aceitar a mesma duração audio_meta já aceita pelo importador");
 assert.equal(engine.calculate(record([text()]),{identity_status:"conversation_linked"}).conversation_completeness_status,"complete");
 assert.equal(engine.matchesSearch({first_name:"Crislaine",last_name:"Silvia"},["+5519999999999","(19) 99999-9999"],"crislaine"),true);
 assert.equal(engine.matchesSearch({first_name:"Crislaine"},["+5519999999999"],"+5519"),true);
