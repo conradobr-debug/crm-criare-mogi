@@ -975,6 +975,37 @@
     <div class="modalFt"><div class="modalQuick"><button class="primary" id="btnConfirmAudioImport" type="button" disabled>Confirmar e transcrever selecionados</button></div></div>
   </dialog>
 
+  <dialog id="batchExportModal" class="batchAnalysisModal">
+    <div class="modalHd"><div><div class="modalTitle">Exportar conversas para análise</div><div class="modalSub">Gera um pacote local para o seu GPT, sem chamada automática de API.</div></div><button class="ghost" id="btnCloseBatchExport" type="button">Fechar</button></div>
+    <div class="modalBd">
+      <div class="batchFilterGrid">
+        <label>Conversas <select id="batchExportScope"><option value="pending" selected>Somente análises ausentes ou desatualizadas</option><option value="all">Todas com conversa capturada</option></select></label>
+        <label>Vendedor <select id="batchExportOwner"><option value="">Todos</option></select></label>
+        <label>Etapa <select id="batchExportStage"><option value="">Todas</option></select></label>
+        <label>Última mensagem — início <input id="batchExportDateFrom" type="date" /></label>
+        <label>Última mensagem — fim <input id="batchExportDateTo" type="date" /></label>
+        <label class="batchCheck"><input id="batchExportClosed" type="checkbox" /> Incluir fechados</label>
+        <label class="batchCheck"><input id="batchExportLost" type="checkbox" /> Incluir perdidos</label>
+      </div>
+      <div class="batchPersistentPanel" id="batchExportPanel" role="status"><strong id="batchExportCount">0 conversas selecionadas</strong><span id="batchExportStatus">Ajuste os filtros e confira os leads antes de exportar.</span></div>
+      <div class="batchLeadPicker" id="batchExportLeadPicker"></div>
+    </div>
+    <div class="modalFt"><button class="ghost" id="btnCancelBatchExport" type="button">Cancelar</button><button class="ghost" id="btnDownloadBatchJson" type="button">Baixar batch_input.json</button><button class="primary" id="btnGenerateBatchZip" type="button">Gerar ZIP para o GPT</button></div>
+  </dialog>
+
+  <dialog id="batchImportModal" class="batchAnalysisModal">
+    <div class="modalHd"><div><div class="modalTitle">Importar análises em lote</div><div class="modalSub">O CRM valida tudo antes de gravar e importa somente hashes exatos.</div></div><button class="ghost" id="btnCloseBatchImport" type="button">Fechar</button></div>
+    <div class="modalBd">
+      <div class="whatsappActions"><button class="ghost" id="btnChooseBatchImport" type="button">Selecionar JSON</button><input id="batchImportFile" type="file" accept="application/json,.json" hidden /></div>
+      <div class="batchDropZone" id="batchImportDropZone">Arraste o JSON de análises aqui</div>
+      <label>Ou cole o JSON<textarea id="batchImportPaste" rows="7" placeholder='{"schema_version":"1.0", ...}'></textarea></label>
+      <button class="ghost" id="btnPreviewBatchPaste" type="button">Validar JSON colado</button>
+      <div class="batchPersistentPanel" id="batchImportPanel" role="status"><strong id="batchImportTitle">Nenhum arquivo validado</strong><span id="batchImportStatus">Selecione, arraste ou cole o JSON retornado pelo GPT.</span></div>
+      <div class="batchPreviewWrap"><table class="audioImportTable"><thead><tr><th>Lead</th><th>Vendedor</th><th>Etapa</th><th>Hash</th><th>Status da análise</th><th>Risco</th><th>Urgência</th><th>Aguardando</th><th>Resultado</th></tr></thead><tbody id="batchImportPreview"><tr><td colspan="9">Aguardando JSON.</td></tr></tbody></table></div>
+    </div>
+    <div class="modalFt"><button class="ghost" id="btnDownloadBatchFailures" type="button" hidden>Baixar falhas</button><button class="primary" id="btnImportValidatedBatch" type="button" disabled>Importar análises válidas</button></div>
+  </dialog>
+
   <!-- Pending item modal -->
   <dialog id="pendingModal">
     <div class="modalHd">
@@ -1087,6 +1118,7 @@
 <script src="whatsapp-data-service.js"></script>
 <script src="whatsapp-crm-extension/capture-core.js"></script>
 <script src="audio-import-matcher.js"></script>
+<script src="batch-analysis.js?v=2.3.0-3"></script>
 
 <script>
 /*
@@ -3604,6 +3636,17 @@ function renderReports(){
 
   return `
     <div style="display:flex; flex-direction:column; gap:10px; width:100%; min-width:0;">
+      <details class="batchAnalysisSection">
+        <summary>Análise em lote das conversas</summary>
+        <div class="batchAnalysisSectionBody">
+          <p>Exporte conversas capturadas para analisar no seu GPT e importe o JSON final após a conferência. Nenhuma API paga é chamada pelo CRM.</p>
+          <div class="whatsappActions">
+            <button class="ghost" id="btnOpenBatchExport" type="button">Exportar conversas para análise</button>
+            <button class="primary" id="btnOpenBatchImport" type="button">Importar análises em lote</button>
+          </div>
+          <small>CRM 2.3.0 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")}</small>
+        </div>
+      </details>
       <div class="formNotice">${escapeHtml(reportPeriod)}</div>
       <div class="summaryGrid">
         <div class="summaryCard"><div class="t">Novos leads • semana</div><div class="n">${shown.newLeads}</div><div class="d">Entradas recentes no funil.</div></div>
@@ -3763,6 +3806,7 @@ function render(){
   }
   if(currentTab==="reports"){
     $("board").innerHTML = renderReports();
+    wireBatchAnalysisReport();
     return;
   }
   if(currentTab==="pending"){
@@ -5164,6 +5208,7 @@ if("serviceWorker" in navigator){
   await initSupabase();
 })();
 </script>
+<script src="batch-analysis-ui.js?v=2.3.0-3"></script>
 <script src="partners.js"></script>
 </body>
 </html>
