@@ -42,14 +42,14 @@ async function accountFor(workspaceId:string,wabaId:string,metadata:Json){
   const {data,error}=await admin.from("crm_whatsapp_accounts").upsert(payload,{onConflict:"workspace_id,phone_number_id"}).select("*").single();if(error)throw error;return data;
 }
 
-async function matchRecord(contactWaId:string){
-  const {data,error}=await admin.from("crm_records").select("id,phone");if(error)throw error;
+async function matchRecord(contactWaId:string,workspaceId:string){
+  const {data,error}=await admin.from("crm_records").select("id,phone").eq("workspace_id",workspaceId);if(error)throw error;
   const matches=(data||[]).filter(r=>digits(r.phone)===contactWaId);
   return {recordId:matches.length===1?matches[0].id:null,status:matches.length===1?"matched":matches.length>1?"ambiguous":"unmatched",count:matches.length};
 }
 
 async function conversationFor(account:Json,contactWaId:string,contactName=""){
-  const matched=await matchRecord(contactWaId);
+  const matched=await matchRecord(contactWaId,account.workspace_id);
   const payload={workspace_id:account.workspace_id,account_id:account.id,record_id:matched.recordId,contact_wa_id:contactWaId,contact_name:contactName||null,match_status:matched.status,match_details:{phone_match_count:matched.count},updated_at:new Date().toISOString()};
   const {data,error}=await admin.from("crm_whatsapp_conversations").upsert(payload,{onConflict:"account_id,contact_wa_id"}).select("*").single();if(error)throw error;return data;
 }

@@ -111,15 +111,11 @@ function comparableText(value){
 
 function sameCustomer(title, request){
   const active = comparableText(title);
-  const expectedName = comparableText(request?.customerName);
   const activeDigits = active.replace(/\D/g, "");
-  const expectedDigits = String(request?.phone || "").replace(/\D/g, "");
+  const expectedDigits = globalThis.CriarePhoneIdentity.comparableDigits(request?.phone);
   if(expectedDigits && activeDigits && activeDigits.endsWith(expectedDigits.slice(-10))) return true;
-  const tokens = expectedName.split(" ").filter(token=>token.length >= 3);
-  if(!tokens.length) return false;
-  const activeTokens = active.split(" ").filter(Boolean);
-  if(activeTokens[0] === tokens[0] && activeTokens.length <= 3) return true;
-  return tokens.filter(token=>active.includes(token)).length >= Math.min(2, tokens.length);
+  const routedPhone = new URL(location.href).searchParams.get("phone") || "";
+  return Boolean(expectedDigits && (globalThis.CriarePhoneIdentity.comparableDigits(`+${routedPhone}`)===expectedDigits || request?.phoneNavigationConfirmed===true));
 }
 
 function messageNodes(main=activeMain()){
@@ -273,11 +269,10 @@ function sidebarSearchControl(){
 
 function sidebarRowMatches(row,request={}){
   const rowText = comparableText(row?.innerText || row?.textContent || "");
-  const phone = String(request?.phone || "").replace(/\D/g,"");
+  const phone = globalThis.CriarePhoneIdentity.comparableDigits(request?.phone);
   const rowDigits = rowText.replace(/\D/g,"");
   if(phone && rowDigits.includes(phone.slice(-8))) return true;
-  const tokens = comparableText(request?.customerName).split(" ").filter(token=>token.length>=3);
-  return tokens.length > 0 && tokens.filter(token=>rowText.includes(token)).length >= Math.min(2,tokens.length);
+  return false;
 }
 
 function setSidebarSearchValue(control,value){
@@ -298,10 +293,11 @@ async function openConversationFromSidebar(request={}){
   if(!row){
     const search = sidebarSearchControl();
     if(!search) return {ok:false,code:"sidebar_search_not_found",error:"A busca da lista lateral não foi localizada para abrir o primeiro contato."};
-    setSidebarSearchValue(search,String(request.phone || "").replace(/\D/g,""));
+    setSidebarSearchValue(search,globalThis.CriarePhoneIdentity.comparableDigits(request.phone));
     for(let attempt=0;attempt<20&&!row;attempt+=1){
       await sleep(350);
       row = findRow();
+      if(!row){const rows=sidebarConversationRows().filter(candidate=>candidate.offsetWidth>0&&candidate.offsetHeight>0);if(rows.length===1)row=rows[0];}
     }
   }
   if(!row) return {ok:false,code:"contact_not_found",error:"Contato não localizado na lista lateral do WhatsApp."};

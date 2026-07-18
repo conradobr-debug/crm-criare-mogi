@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Criare CRM — Capturar WhatsApp",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Captura e salva conversas do WhatsApp Web no CRM Criare; análise e transcrição são fluxos separados.",
   "permissions": ["tabs", "storage"],
   "host_permissions": [
@@ -20,7 +20,7 @@
     },
     {
       "matches": ["https://web.whatsapp.com/*"],
-      "js": ["capture-core.js", "content-whatsapp.js"],
+      "js": ["phone-identity.js", "capture-core.js", "content-whatsapp.js"],
       "run_at": "document_idle"
     }
   ]

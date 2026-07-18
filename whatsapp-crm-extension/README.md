@@ -7,7 +7,7 @@ manual do CRM.
 
 ## Instalação
 
-1. Extraia o arquivo `criare-whatsapp-extension-2.2.0.zip`.
+1. Extraia o arquivo `criare-whatsapp-extension-2.3.0.zip`.
 2. Abra `chrome://extensions`.
 3. Ative **Modo do desenvolvedor**.
 4. Clique em **Carregar sem compactação** e selecione a pasta extraída.
@@ -16,7 +16,7 @@ manual do CRM.
 ## Uso
 
 Abra um lead salvo e clique em **Capturar conversa**. O CRM abre o telefone
-correto no WhatsApp Web, espera a conversa estabilizar, solicita o histórico
+canônico e único no WhatsApp Web, espera a conversa estabilizar, solicita o histórico
 mais antigo disponível no celular, percorre as janelas virtualizadas, mescla as
 mensagens pelo identificador do WhatsApp e informa a quantidade salva no lead.
 
@@ -44,6 +44,7 @@ local; não permanecem armazenados pela extensão.
 ## Limites e segurança
 
 - A extensão não envia, apaga ou edita mensagens.
+- A conversa nunca é confirmada apenas por semelhança do nome; a identidade usada é o telefone solicitado pelo CRM.
 - Ela acessa somente o CRM da Criare e o WhatsApp Web.
 - A conversa é gravada no workspace autenticado do CRM.
 - O WhatsApp Web só disponibiliza o histórico sincronizado com o navegador.

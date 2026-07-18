@@ -1,8 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { normalizePhone } from "../_shared/phone-identity.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const WEBHOOK_TOKEN = Deno.env.get("WEBHOOK_TOKEN")!;
+const DEFAULT_WORKSPACE = "00000000-0000-4000-8000-000000000001";
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 const JSON_HEADERS = { "content-type": "application/json" };
@@ -28,6 +30,7 @@ type ExtractedLead = {
 
 type ExistingRecord = {
   id: string;
+  workspace_id: string;
   pipeline: string;
   stage: string;
   stage_entered_at: string;
@@ -195,12 +198,14 @@ function extractLead(lead: JsonMap, body: JsonMap): ExtractedLead {
   ], "Lead Online")!;
   const { firstName, lastName } = splitName(rawName);
 
-  const phone = firstText([
+  const rawPhone = firstText([
     fromConversions(["telefone", "phone lead", "phone", "celular", "mobile phone"]),
     lead.personal_phone,
     lead.mobile_phone,
     lead.phone,
   ], "Não informado")!;
+  const phoneIdentity = normalizePhone(rawPhone);
+  const phone = phoneIdentity.is_valid ? phoneIdentity.normalized_e164! : rawPhone;
 
   const email = firstText([
     fromConversions(["email lead", "email", "e mail"]),
@@ -307,7 +312,7 @@ async function buildFingerprints(
 }
 
 const EXISTING_COLUMNS = [
-  "id", "pipeline", "stage", "stage_entered_at", "source", "rooms", "city", "phone",
+  "id", "workspace_id", "pipeline", "stage", "stage_entered_at", "source", "rooms", "city", "phone",
   "email", "estimate", "notes", "first_name", "last_name", "rd_fingerprint",
 ].join(",");
 
@@ -319,6 +324,7 @@ async function findExisting(
     const { data, error } = await supabase
       .from("crm_records")
       .select(EXISTING_COLUMNS)
+      .eq("workspace_id", DEFAULT_WORKSPACE)
       .eq("rd_conversion_id", conversionId)
       .limit(1)
       .maybeSingle();
@@ -330,11 +336,20 @@ async function findExisting(
   const { data, error } = await supabase
     .from("crm_records")
     .select(EXISTING_COLUMNS)
+    .eq("workspace_id", DEFAULT_WORKSPACE)
     .in("rd_fingerprint", uniqueFingerprints)
     .limit(1)
     .maybeSingle();
   if (error) throw new Error(`lookup_fingerprint:${error.code || "unknown"}`);
   return (data as ExistingRecord | null) || null;
+}
+
+async function findExistingByPhone(phone: string): Promise<ExistingRecord | null> {
+  const identity=normalizePhone(phone);if(!identity.is_valid)return null;
+  const {data,error}=await supabase.from("crm_records").select(EXISTING_COLUMNS).eq("workspace_id",DEFAULT_WORKSPACE);
+  if(error)throw new Error(`lookup_phone:${error.code||"unknown"}`);
+  const matches=(data||[]).filter(record=>normalizePhone(record.phone).normalized_e164===identity.normalized_e164);
+  return matches.length===1?matches[0] as ExistingRecord:null;
 }
 
 function duplicatePatch(
@@ -367,7 +382,7 @@ function duplicatePatch(
 async function processLead(lead: JsonMap, body: JsonMap): Promise<ProcessResult> {
   const extracted = extractLead(lead, body);
   const { fingerprint, legacyFingerprint } = await buildFingerprints(extracted, lead);
-  const existing = await findExisting(extracted.conversionId, [fingerprint, legacyFingerprint]);
+  const existing = await findExisting(extracted.conversionId, [fingerprint, legacyFingerprint]) || await findExistingByPhone(extracted.phone);
 
   if (existing) {
     const { error } = await supabase
@@ -379,6 +394,7 @@ async function processLead(lead: JsonMap, body: JsonMap): Promise<ProcessResult>
   }
 
   const payload = {
+    workspace_id: DEFAULT_WORKSPACE,
     pipeline: "lead",
     stage: "Novo",
     stage_entered_at: extracted.conversionAt || new Date().toISOString(),

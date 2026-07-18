@@ -1,5 +1,7 @@
 "use strict";
 
+importScripts("phone-identity.js");
+
 const TARGETS_KEY = "criareWhatsAppTargetTabs";
 const CAPTURE_TIMEOUT_MS = 210000;
 const crmCaptureTabs = new Map();
@@ -72,8 +74,7 @@ async function saveTarget(phone,tabId){
 }
 
 function validPhone(value){
-  const digits = String(value || "").replace(/\D/g,"");
-  return digits.length >= 12 && digits.length <= 13 ? digits : "";
+  return globalThis.CriarePhoneIdentity.comparableDigits(value);
 }
 
 async function ensureCurrentContentScript(tabId){
@@ -126,7 +127,7 @@ async function ensureConversationOpened(request,{active=false,operationId=null}=
     await saveTarget(phone,tab.id);
     await waitForTabComplete(tab.id);
     await ensureCurrentContentScript(tab.id);
-    const conversationRequest = {...request,phone,request_id:requestId};
+    const conversationRequest = {...request,phone,request_id:requestId,phoneNavigationConfirmed:true};
     // A primeira abertura da sessão pode não criar #main só com a rota /send.
     // Primeiro observamos a transição SPA; se ela não montar o painel, usamos a
     // busca/lista lateral e somente então aguardamos a conversa estabilizar.

@@ -383,6 +383,7 @@
       .appointmentItem .btn,.appointmentItem button{width:100%;text-align:center;}
     }
     .req{color:#ffd88a; font-weight:700}
+    .phoneIdentityStatus{grid-column:span 12;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.45;background:#f7f6f2}.phoneIdentityStatus.valid{border-color:#96c7a2;background:#f1f8f2}.phoneIdentityStatus.invalid{border-color:#df9b91;background:#fff3f1}.phoneIdentityStatus.warning{border-color:#d4b36f;background:#fff9eb}.phoneIdentityStatus b{display:block;margin-bottom:3px}.phoneIdentityStatus button{margin-top:7px}
     textarea{min-height:90px; resize:vertical}
     .modalFt{
       padding:14px 16px;
@@ -628,6 +629,7 @@
           <label>Telefone <span class="req">*</span></label>
           <input id="phone" required autocomplete="off" />
         </div>
+        <div class="phoneIdentityStatus" id="phoneIdentityStatus" aria-live="polite"></div>
         <div class="col-3">
           <label>Cidade <span class="req">*</span></label>
           <input id="city" required autocomplete="off" />
@@ -1117,9 +1119,10 @@
 <!-- Supabase via CDN -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="whatsapp-data-service.js"></script>
+<script src="whatsapp-crm-extension/phone-identity.js?v=2.4.0"></script>
 <script src="whatsapp-crm-extension/capture-core.js"></script>
 <script src="audio-import-matcher.js"></script>
-<script src="batch-analysis.js?v=2.3.2-3"></script>
+<script src="batch-analysis.js?v=2.4.0"></script>
 
 <script>
 /*
@@ -1296,18 +1299,40 @@ async function saveOutlookEvent(recordId, appointmentId){
   return result;
 }
 function whatsappNumber(value){
-  let digits = String(value || "").replace(/\D/g, "");
-  if(digits.startsWith("00")) digits = digits.slice(2);
-  if((digits.length === 10 || digits.length === 11) && !digits.startsWith("55")) digits = `55${digits}`;
-  return digits.length >= 12 && digits.length <= 13 ? digits : "";
+  return globalThis.CriarePhoneIdentity.comparableDigits(value);
 }
+const DEFAULT_CRM_WORKSPACE_ID="00000000-0000-4000-8000-000000000001";
+function phoneWorkspaceKey(record){return String(record?.workspace_id||DEFAULT_CRM_WORKSPACE_ID);}
+function phoneDuplicateRecords(value,{excludeId=null,workspaceId=null}={}){
+  const scope=String(workspaceId||records.find(item=>item.id===excludeId)?.workspace_id||DEFAULT_CRM_WORKSPACE_ID);
+  return globalThis.CriarePhoneIdentity.duplicateRecords(records,value,{excludeId,workspaceId:scope});
+}
+function phoneIdentityState(record,{value=null,excludeId=null}={}){
+  const raw=value===null?record?.phone:value;const normalized=globalThis.CriarePhoneIdentity.normalizePhone(raw);
+  const duplicates=normalized.is_valid?phoneDuplicateRecords(raw,{excludeId:excludeId??record?.id,workspaceId:record?.workspace_id}):[];
+  const captured=Number(record?.whatsapp_sync_message_count||0)>0||Boolean(record?.whatsapp_transcript_updated_at);
+  if(!String(raw||"").trim()||String(raw).trim()==="Não informado")return {code:"phone_missing",label:"Telefone obrigatório",detail:"Corrija o telefone para habilitar o WhatsApp.",normalized,duplicates,captured,ready:false};
+  if(!normalized.is_valid)return {code:"phone_invalid",label:"Telefone inválido",detail:"Informe DDD e número completos. Para outro país, use + e o código do país.",normalized,duplicates,captured,ready:false};
+  if(duplicates.length)return {code:"phone_duplicate",label:"Telefone duplicado",detail:`Este telefone já está vinculado ao lead “${[duplicates[0].first_name,duplicates[0].last_name].filter(Boolean).join(" ")}”.`,normalized,duplicates,captured,ready:false};
+  return {code:captured?"conversation_linked":"whatsapp_ready",label:captured?"Conversa vinculada":"Pronto para sincronizar",detail:captured?"As próximas capturas serão confirmadas por este telefone.":"Conversa ainda não capturada.",normalized,duplicates,captured,ready:true};
+}
+function renderPhoneIdentityStatus(record=null){
+  const box=$("phoneIdentityStatus");if(!box)return null;const state=phoneIdentityState(record,{value:$("phone").value,excludeId:record?.id||$("id").value||null});
+  const raw=String($("phone").value||"").trim()||"—";const canonical=state.normalized.normalized_e164||"—";
+  box.className=`phoneIdentityStatus ${state.ready?"valid":state.code==="phone_duplicate"?"warning":"invalid"}`;
+  box.innerHTML=`<b>${escapeHtml(state.label)}</b><div>Número informado: ${escapeHtml(raw)}</div><div>Número que será usado no WhatsApp: ${escapeHtml(canonical)}</div><div>${escapeHtml(state.detail)}</div>${state.duplicates[0]?`<button type="button" class="ghost" data-open-phone-duplicate="${escapeHtml(state.duplicates[0].id)}">Abrir lead existente</button>`:""}`;
+  const manualNew=!$("id").value;$("btnSave").disabled=manualNew?!state.ready:!state.normalized.is_valid||Boolean(state.duplicates.length);
+  const captureAllowed=Boolean($("id").value)&&state.ready;["btnWhatsApp","btnWhatsAppFooter","btnUpdateOfficialAnalysis","btnCaptureOpenWhatsApp"].forEach(id=>{if($(id))$(id).disabled=!captureAllowed;});
+  return state;
+}
+function requireWhatsAppIdentity(record){const state=phoneIdentityState(record);if(!state.ready){const error=new Error(`${state.label}. ${state.detail}`);error.code=state.code;throw error;}return state.normalized;}
 function openWhatsAppFor(record=null){
-  const number = whatsappNumber(record?.phone || $("phone").value);
-  if(!number) return toast("Informe um telefone válido com DDD para abrir o WhatsApp.");
+  const target=record||{phone:$("phone").value,id:$("id").value};let identity;try{identity=requireWhatsAppIdentity(target);}catch(error){return toast(error.message,{error:true,duration:10000});}
+  const number = identity.normalized_e164.slice(1);
   const webUrl=`https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
   window.open(webUrl,"_blank","noopener,noreferrer");
 }
-const WHATSAPP_EXTENSION_VERSION = "2.2.0";
+const WHATSAPP_EXTENSION_VERSION = "2.3.0";
 const WHATSAPP_BATCH_AUDIO_ENABLED = false;
 const WHATSAPP_BATCH_APPROVAL_KEY = "crm_whatsapp_full_batch_unlocked";
 const WHATSAPP_BATCH_FLOW_VERSION = "capture-flow-2.1.8";
@@ -1378,6 +1403,7 @@ async function requireCurrentWhatsAppExtension(){
 }
 function requestWhatsAppAutomaticSync(record,{batch=false}={}){
   return new Promise(resolve=>{
+    try{requireWhatsAppIdentity(record);}catch(error){return resolve({ok:false,error:error.message,code:error.code});}
     const phone=whatsappNumber(record?.phone);if(!phone)return resolve({ok:false,error:"Telefone inválido ou sem DDD."});
     const requestId=crypto.randomUUID();
     const request={requestId,requestedAt:nowISO(),phone,customerName:`${record?.first_name||""} ${record?.last_name||""}`.trim(),batch,disableAudio:batch&&!WHATSAPP_BATCH_AUDIO_ENABLED};
@@ -1389,6 +1415,7 @@ function requestWhatsAppAutomaticSync(record,{batch=false}={}){
 }
 function requestWhatsAppOpenCapture(record,{batch=false}={}){
   return new Promise(resolve=>{
+    try{requireWhatsAppIdentity(record);}catch(error){return resolve({ok:false,error:error.message,code:error.code});}
     const phone=whatsappNumber(record?.phone);if(!phone)return resolve({ok:false,error:"Telefone inválido ou sem DDD."});
     const requestId=crypto.randomUUID();
     const request={requestId,requestedAt:nowISO(),phone,customerName:`${record?.first_name||""} ${record?.last_name||""}`.trim(),batch,disableAudio:batch&&!WHATSAPP_BATCH_AUDIO_ENABLED};
@@ -1767,7 +1794,7 @@ function updateWhatsAppBatchPanel(current="Aguardando início."){
 }
 function whatsappBatchCandidates(){
   const active=records.filter(record=>!isSpecifier(record)&&record.pipeline==="lead"&&record.stage!=="Perdido");
-  const queue=active.filter(record=>Boolean(whatsappNumber(record.phone)));
+  const queue=active.filter(record=>phoneIdentityState(record).ready);
   return {queue,ignored:active.length-queue.length};
 }
 function whatsappBatchError(record,error){
@@ -3646,7 +3673,7 @@ function renderReports(){
             <div class="batchWorkflowStep batchWorkflowGpt"><b>2. ANALISAR NO GPT</b><span>Envie ao GPT somente o arquivo que começa com <strong>01-ENVIAR-AO-GPT</strong>.</span><button class="ghost" id="btnCopyBatchGptInstruction" type="button">Copiar instrução para o GPT</button></div>
             <div class="batchWorkflowStep batchWorkflowImport"><b>3. IMPORTAR RESULTADO</b><span>Importe no CRM somente o arquivo que começa com <strong>02-IMPORTAR-NO-CRM</strong>.</span><button class="primary" id="btnOpenBatchImport" type="button">3. Importar resultado da análise</button></div>
           </div>
-          <small>CRM 2.3.2 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
+          <small>CRM 2.4.0 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
         </div>
       </details>
       <div class="formNotice">${escapeHtml(reportPeriod)}</div>
@@ -3710,7 +3737,21 @@ function renderConfig(){
     ? "A Make recebe somente os dados necessários do compromisso e grava no calendário central. Os usuários continuam trabalhando apenas no CRM."
     : "Depois da conexão inicial, todos os usuários criam e atualizam compromissos sem sair do CRM.";
 
+  const audited=records.filter(record=>!isSpecifier(record));
+  const phoneRows=audited.map(record=>({record,state:phoneIdentityState(record)}));
+  const valid=phoneRows.filter(item=>item.state.normalized.is_valid).length;
+  const missing=phoneRows.filter(item=>item.state.code==="phone_missing").length;
+  const invalid=phoneRows.filter(item=>item.state.code==="phone_invalid").length;
+  const duplicated=phoneRows.filter(item=>item.state.code==="phone_duplicate").length;
+  const ready=phoneRows.filter(item=>item.state.ready).length;
+  const affected=phoneRows.filter(item=>!item.state.ready).map(({record,state})=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:9px;border-bottom:1px dashed var(--line);align-items:center"><span><b>${escapeHtml([record.first_name,record.last_name].filter(Boolean).join(" "))}</b><br><small>${escapeHtml(state.label)} • ${escapeHtml(state.normalized.normalized_e164||String(record.phone||"não informado"))}</small></span><button class="ghost" data-open-phone-lead="${escapeHtml(record.id)}">Abrir</button></div>`).join("");
+
   return `
+    <section class="outlookStatusCard" style="width:100%">
+      <div class="sectionHd" style="padding:0 0 10px;border-bottom:1px solid var(--line)"><span>Qualidade dos telefones</span><span>${audited.length} leads</span></div>
+      <div class="note" style="margin:10px 0">Válidos: ${valid} • ausentes: ${missing} • inválidos: ${invalid} • duplicados: ${duplicated} • prontos para WhatsApp: ${ready}</div>
+      <details><summary>Revisar telefones que exigem correção</summary>${affected||`<div class="empty">Todos os telefones estão prontos.</div>`}</details>
+    </section>
     <section class="outlookStatusCard">
       <div class="sectionHd" style="padding:0 0 10px;border-bottom:1px solid var(--line)"><span>Calendário central</span></div>
       <div class="outlookStatusLine"><span class="statusDot ${outlookStatus.connected ? "connected" : ""}"></span><span>${escapeHtml(outlookLabel)}</span></div>
@@ -3992,6 +4033,8 @@ function closeAllMenus(){
   document.querySelectorAll(".card.menuOpen").forEach(c=>c.classList.remove("menuOpen"));
 }
 document.addEventListener("click", async (e)=>{
+  const phoneLeadButton=e.target.closest?.("button[data-open-phone-lead]");
+  if(phoneLeadButton){const record=records.find(item=>item.id===phoneLeadButton.dataset.openPhoneLead);if(record)openModal(record);return;}
   const btn = e.target.closest?.("[data-menu-btn]");
   if(btn){
     e.stopPropagation();
@@ -4254,6 +4297,7 @@ function openModal(record=null, options={}){
   $("fCity").value = prevCity;
 
   $("modal").showModal();
+  renderPhoneIdentityStatus(record);
   if(originalRecord)persistLegacyWhatsAppNormalization(originalRecord,record).then(normalized=>{
     if($("id").value===normalized.id)renderWhatsAppSectionSummary(normalized);
   });
@@ -4277,17 +4321,30 @@ async function upsertFromForm(){
 
   const firstName = $("firstName").value.trim();
   const lastName  = $("lastName").value.trim();
-  const phone     = $("phone").value.trim();
+  const phoneInput = $("phone").value.trim();
   const city      = $("city").value.trim();
   const rooms     = kind === "specifier"
     ? ($("companyName").value.trim() || $("specifierType").value || "Parcerias")
     : $("rooms").value.trim();
 
-  if(!firstName || !lastName || !phone || !city || (!rooms && kind !== "specifier")){
+  if(!firstName || !lastName || !phoneInput || !city || (!rooms && kind !== "specifier")){
     toast(kind === "specifier"
       ? "Preencha: Nome, Sobrenome, Telefone e Cidade."
       : "Preencha: Nome, Sobrenome, Telefone, Cidade e Ambiente.");
     return false;
+  }
+
+  const existingRecord = records.find(record=>record.id===id);
+  const phoneState=phoneIdentityState(existingRecord,{value:phoneInput,excludeId:id||null});
+  if(!phoneState.normalized.is_valid){renderPhoneIdentityStatus(existingRecord);toast(`${phoneState.label}. ${phoneState.detail}`,{error:true,duration:10000});return false;}
+  if(phoneState.duplicates.length){renderPhoneIdentityStatus(existingRecord);toast(phoneState.detail,{error:true,duration:10000});return false;}
+  const phone=phoneState.normalized.normalized_e164;
+  const previous=globalThis.CriarePhoneIdentity.normalizePhone(existingRecord?.phone);
+  if(existingRecord&&previous.is_valid&&previous.normalized_e164!==phone){
+    const warning=Number(existingRecord.whatsapp_sync_message_count||0)>0||existingRecord.whatsapp_transcript_updated_at
+      ? "Este lead já possui uma conversa capturada. Alterar o telefone pode vincular futuras capturas a outra conversa. O histórico atual será preservado. Confirmar alteração?"
+      : "Alterar o telefone muda a conversa do WhatsApp associada a este lead. Confirmar alteração?";
+    if(!window.confirm(warning))return false;
   }
 
   if($("nextAction").value) addAppointmentFromComposer({silent:true});
@@ -4297,7 +4354,6 @@ async function upsertFromForm(){
   const nextActionAt = primaryAppointment?.starts_at || null;
   const nextActionDate = nextActionAt ? inputDateValue(new Date(nextActionAt)) : null;
 
-  const existingRecord = records.find(record=>record.id===id);
   const whatsappSummary = $("whatsappSummary").value.trim();
   const summaryChanged = (existingRecord?.whatsapp_summary || "") !== whatsappSummary;
   if(summaryChanged) currentWhatsAppAnalysis.hardBoss = whatsappSummary;
@@ -4734,6 +4790,9 @@ $("btnSave").addEventListener("click", async (e)=>{
     render();
   }
 });
+$("phone").addEventListener("input",()=>renderPhoneIdentityStatus(records.find(item=>item.id===$("id").value)||null));
+$("phone").addEventListener("blur",()=>renderPhoneIdentityStatus(records.find(item=>item.id===$("id").value)||null));
+$("phoneIdentityStatus").addEventListener("click",event=>{const button=event.target.closest("[data-open-phone-duplicate]");if(!button)return;const record=records.find(item=>item.id===button.dataset.openPhoneDuplicate);if(record){$("modal").close();openModal(record);}});
 $("btnOutlook").addEventListener("click", async (e)=>{
   e.preventDefault();
   if($("nextAction").value) addAppointmentFromComposer({silent:true});
@@ -5210,7 +5269,7 @@ if("serviceWorker" in navigator){
   await initSupabase();
 })();
 </script>
-<script src="batch-analysis-ui.js?v=2.3.2-3"></script>
+<script src="batch-analysis-ui.js?v=2.4.0"></script>
 <script src="partners.js"></script>
 </body>
 </html>

@@ -24,6 +24,8 @@ test("conversation_hash é determinístico e muda com alteração material",asyn
   assert.notEqual(await batch.conversationHash(textLead),await batch.conversationHash(changed));
 });
 
+test("formatação do telefone não altera o hash da conversa",async()=>{const formatted={...textLead,phone:"(19) 99614-2935"},canonical={...textLead,phone:"+5519996142935"};assert.equal(await batch.conversationHash(formatted),await batch.conversationHash(canonical));});
+
 test("separa data, horário, remetente, direção e corpo das mensagens legadas",()=>{
   const record={whatsapp_message_entries:[{message_id:"legacy-1",text:"[14:21, 10/07/2026] Criare Ambientes Planejados: Boa tarde"},{message_id:"legacy-2",text:"[14:32, 10/07/2026] Melissa Stefany: Quero a cozinha"}]};
   const messages=batch.canonicalMessages(record);
