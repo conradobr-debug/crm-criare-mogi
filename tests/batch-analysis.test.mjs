@@ -73,9 +73,9 @@ test("rejeita conversation_hash desatualizado",async()=>{
   const result=await batch.validateImport(payload,[textLead]);assert.equal(result.results[0].status,"stale_conversation");
 });
 
-test("rejeita lead duplicado no mesmo lote",async()=>{
+test("mantém uma análise primária e rejeita a repetição exata",async()=>{
   const payload=await envelopeFor(textLead);payload.analyses.push(structuredClone(payload.analyses[0]));
-  const result=await batch.validateImport(payload,[textLead]);assert(result.results.every(item=>item.status==="duplicate"));
+  const result=await batch.validateImport(payload,[textLead]);assert.deepEqual(result.results.map(item=>item.status),["ready_to_import","duplicate"]);
 });
 
 test("rejeita enum inválido",async()=>{
@@ -114,4 +114,60 @@ test("três fixtures geram pacote ZIP com os quatro arquivos obrigatórios",asyn
   const payload=await batch.buildBatch([textLead,audioLead,staleLead]);assert.equal(payload.conversation_count,3);
   const files=batch.packageFiles(payload);assert.deepEqual(Object.keys(files),["batch_input.json","analysis_instructions.md","analysis_output_schema.json","README.txt"]);
   const zip=batch.zipFiles(files);assert(zip.length>JSON.stringify(payload).length);assert.equal(new DataView(zip.buffer).getUint32(0,true),0x04034b50);
+});
+
+async function threeAnalysisEnvelope(records=[textLead,audioLead,staleLead]){const analyses=[];for(const record of records)analyses.push(validAnalysis(record.id,await batch.conversationHash(record),batch.lastMessageId(record)));return {schema_version:"1.0",generated_at:"2026-07-18T02:02:29.657Z",analysis_model:"GPT de teste",prompt_version:"criare-batch-v1",analyses};}
+async function sixAnalysisEnvelope(){const payload=await threeAnalysisEnvelope();return {...payload,analyses:payload.analyses.flatMap(item=>[structuredClone(item),structuredClone(item)])};}
+async function simulateImport(payload,database,machine=batch.createImportStateMachine()){
+  const records=[...database.values()];const validation=await batch.validateImport(payload,records);machine.load(payload,validation);let writes=0;
+  if(machine.phase==="completed")return {writes,validation,machine,blocked:true};
+  const result=await machine.run(async snapshot=>{const queue=[...new Map(snapshot.validation.results.filter(item=>item.status==="ready_to_import").map(item=>[item.import_key,item])).values()];for(const item of queue){const fresh=database.get(item.lead_id);if(batch.storedImportKeys(fresh).has(item.import_key)){item.status="already_imported";continue;}const patch=batch.persistencePatch(fresh,item.item,payload,"2026-07-18T03:00:00Z");const reloaded={...fresh,...structuredClone(patch)};database.set(item.lead_id,reloaded);writes+=1;item.status="imported";}return {writes,validation};});return {...result,machine};
+}
+
+test("três análises únicas produzem três itens de prévia",async()=>{
+  const result=await batch.validateImport(await threeAnalysisEnvelope(),[textLead,audioLead,staleLead]);assert.equal(result.results.length,3);assert.equal(result.results.filter(item=>item.status==="ready_to_import").length,3);assert.equal(result.summary.unique,3);
+});
+
+test("fixture real de seis entradas representa três chaves e três duplicatas",async()=>{
+  const result=await batch.validateImport(await sixAnalysisEnvelope(),[textLead,audioLead,staleLead]);assert.equal(result.summary.received,6);assert.equal(result.summary.unique,3);assert.equal(result.summary.duplicates,3);assert.equal(result.results.filter(item=>item.status==="ready_to_import").length,3);
+});
+
+test("seis entradas duplicadas produzem somente três gravações",async()=>{
+  const database=new Map([textLead,audioLead,staleLead].map(record=>[record.id,structuredClone(record)]));const result=await simulateImport(await sixAnalysisEnvelope(),database);assert.equal(result.writes,3);assert.equal(database.size,3);
+});
+
+test("segunda importação do mesmo JSON produz zero gravações e três already_imported",async()=>{
+  const database=new Map([textLead,audioLead,staleLead].map(record=>[record.id,structuredClone(record)])),payload=await sixAnalysisEnvelope();const first=await simulateImport(payload,database);const second=await simulateImport(payload,database,first.machine);assert.equal(first.writes,3);assert.equal(second.writes,0);assert.equal(second.validation.results.filter(item=>item.status==="already_imported").length,3);assert.equal(second.validation.results.filter(item=>item.status==="duplicate").length,3);
+});
+
+test("duplo clique compartilha uma única execução",async()=>{
+  const machine=batch.createImportStateMachine();machine.load({}, {results:[{status:"ready_to_import"}]});let calls=0;const task=async()=>{calls+=1;await new Promise(resolve=>setTimeout(resolve,5));return {ok:true};};const [one,two]=await Promise.all([machine.run(task),machine.run(task)]);assert.equal(calls,1);assert.deepEqual(one,two);assert.equal(machine.phase,"completed");
+});
+
+test("duas chamadas simultâneas fazem uma gravação por lead",async()=>{
+  const machine=batch.createImportStateMachine();machine.load({}, {results:[{status:"ready_to_import"}]});let writes=0;const task=async()=>{writes+=1;await new Promise(resolve=>setTimeout(resolve,5));return writes;};await Promise.all([machine.run(task),machine.run(task)]);assert.equal(writes,1);
+});
+
+test("listeners de importação têm guarda global e um único registro",async()=>{
+  const ui=await readFile(new URL("../batch-analysis-ui.js",import.meta.url),"utf8");assert.match(ui,/__criareBatchAnalysisUiLoaded/);assert.match(ui,/__criareBatchAnalysisStaticListenersRegistered/);assert.equal((ui.match(/btnImportValidatedBatch"\)\.addEventListener\("click",importValidated/g)||[]).length,1);assert.match(ui,/dataset\.batchWired/);
+});
+
+test("validar duas vezes substitui o snapshot em vez de anexar",()=>{
+  const machine=batch.createImportStateMachine();machine.load({id:1},{results:[{status:"ready_to_import"},{status:"duplicate"}]});machine.load({id:2},{results:[{status:"ready_to_import"}]});assert.equal(machine.snapshot.payload.id,2);assert.equal(machine.snapshot.validation.results.length,1);assert.equal(machine.generation,2);
+});
+
+test("análise atual com a mesma chave torna-se already_imported",async()=>{
+  const payload=await envelopeFor(textLead),patch=batch.persistencePatch(textLead,payload.analyses[0],payload);const current={...textLead,...patch};const result=await batch.validateImport(payload,[current]);assert.equal(result.results[0].status,"already_imported");assert(batch.storedImportKeys(current).has(batch.canonicalImportKey(payload.analyses[0],payload)));
+});
+
+test("mesma chave com conteúdo diferente bloqueia ambas como duplicate_conflict",async()=>{
+  const payload=await envelopeFor(textLead),conflict=structuredClone(payload.analyses[0]);conflict.chefe_duro="Conteúdo materialmente diferente";payload.analyses.push(conflict);const result=await batch.validateImport(payload,[textLead]);assert.equal(result.summary.duplicate_conflicts,2);assert(result.results.every(item=>item.status==="duplicate_conflict"));
+});
+
+test("histórico recebe a análise anterior uma única vez",async()=>{
+  const priorPayload=await envelopeFor(textLead),priorPatch=batch.persistencePatch(textLead,priorPayload.analyses[0],priorPayload,"2026-07-17T00:00:00Z");const withPrior={...textLead,...priorPatch};const changedItem=structuredClone(priorPayload.analyses[0]);changedItem.conversation_hash="hash-novo";changedItem.analyzed_until_message_id="novo-id";const changedEnvelope={...priorPayload,analyses:[changedItem]};const first=batch.persistencePatch(withPrior,changedItem,changedEnvelope,"2026-07-18T00:00:00Z");const afterFirst={...withPrior,...first};const second=batch.persistencePatch(afterFirst,changedItem,changedEnvelope,"2026-07-18T00:01:00Z");assert.equal(first.whatsapp_analysis_history.length,1);assert.equal(second.whatsapp_analysis_history.length,1);
+});
+
+test("releitura simulada mantém um resultado verificado por lead",async()=>{
+  const database=new Map([textLead,audioLead,staleLead].map(record=>[record.id,structuredClone(record)])),payload=await threeAnalysisEnvelope();const result=await simulateImport(payload,database);assert.equal(result.writes,3);for(const item of payload.analyses){const stored=database.get(item.lead_id);assert.equal(stored.whatsapp_analysis_structured.batch_metadata.import_key,batch.canonicalImportKey(item,payload));}assert.equal(new Set([...database.values()].map(record=>record.whatsapp_analysis_structured.batch_metadata.import_key)).size,3);
 });

@@ -1,10 +1,12 @@
 (function(){
   "use strict";
+  if(window.__criareBatchAnalysisUiLoaded)return;
+  window.__criareBatchAnalysisUiLoaded=true;
 
-  const CRM_BATCH_VERSION="2.3.0";
+  const CRM_BATCH_VERSION="2.3.1";
   const engine=window.CriareBatchAnalysis;
-  const state={candidates:[],selected:new Set(),cancelled:false,lastBatch:null,importPayload:null,validation:null,importResults:[]};
-  const statusLabels={ready_to_import:"Pronta",invalid_schema:"Schema incompatível",duplicate:"Duplicada",lead_not_found:"Lead não encontrado",invalid_analysis:"Análise inválida",stale_conversation:"Conversa alterada",already_imported:"Já importada",imported:"Importada",save_error:"Erro ao salvar"};
+  const state={candidates:[],selected:new Set(),cancelled:false,lastBatch:null,importPayload:null,validation:null,importResults:[],importMachine:engine.createImportStateMachine(),importPhase:"idle",actualWrites:0};
+  const statusLabels={ready_to_import:"Pronta",invalid_schema:"Schema incompatível",duplicate:"Duplicada — não importada",duplicate_conflict:"Conflito de duplicidade",lead_not_found:"Lead não encontrado",invalid_analysis:"Análise inválida",stale_conversation:"Conversa alterada",already_imported:"Já importada",imported:"Importada",save_error:"Erro ao salvar"};
 
   function setPanel(id,titleId,statusId,title,message,kind=""){
     const panel=$(id); if(!panel)return;
@@ -78,45 +80,56 @@
   function renderImportPreview(){
     const results=state.validation?.results||[];
     $("batchImportPreview").innerHTML=results.length?results.map(result=>{const item=result.item||{},record=result.record;return `<tr><td><b>${escapeHtml(record?fullName(record):result.lead_id||"—")}</b><br/><small>${escapeHtml(result.lead_id||"—")}</small></td><td>${escapeHtml(record?profileNameById(record.owner_id):"—")}</td><td>${escapeHtml(record?.stage||"—")}</td><td>${escapeHtml(hashLabel(result))}</td><td>${escapeHtml(analysisSnapshot(result))}</td><td>${escapeHtml(item.risk?.level||"—")}</td><td>${escapeHtml(item.risk?.urgency_score??"—")}</td><td>${escapeHtml(item.conversation_status?.waiting_for||"—")}</td><td class="batchStatus ${escapeHtml(result.status)}" title="${escapeHtml(result.reason)}">${escapeHtml(statusLabels[result.status]||result.status)}<br/><small>${escapeHtml(result.reason)}</small></td></tr>`;}).join(""):'<tr><td colspan="9">Nenhuma análise encontrada.</td></tr>';
-    const ready=results.filter(result=>result.status==="ready_to_import").length;
-    $("btnImportValidatedBatch").disabled=!ready;
-    setPanel("batchImportPanel","batchImportTitle","batchImportStatus",`${ready} pronta(s) para importar`,`${results.length-ready} item(ns) serão preservados sem gravação.`,ready?"success":"error");
+    const counts=results.reduce((map,result)=>(map[result.status]=(map[result.status]||0)+1,map),{});const ready=counts.ready_to_import||0;const received=state.validation?.summary?.received??results.length;const unique=state.validation?.summary?.unique??ready;const duplicates=counts.duplicate||0;const conflicts=counts.duplicate_conflict||0;const already=counts.already_imported||0;const imported=counts.imported||0;
+    const completed=state.importPhase==="completed"||state.importMachine.phase==="completed";
+    $("btnImportValidatedBatch").disabled=!ready||state.importPhase!=="ready";$("btnImportValidatedBatch").hidden=completed;
+    $("btnLoadAnotherBatch").hidden=!completed;
+    const title=completed?`Recebidas: ${received} • importadas: ${imported}`:`${ready} pronta(s) para importar`;
+    const detail=`Únicas: ${unique} • duplicadas: ${duplicates} • conflitos: ${conflicts} • já importadas: ${already} • gravações: ${state.actualWrites}.`;
+    setPanel("batchImportPanel","batchImportTitle","batchImportStatus",title,detail,(counts.save_error||conflicts)?"error":"success");
   }
   async function parseImportText(text){
+    state.importPhase="validating";state.actualWrites=0;$("btnImportValidatedBatch").disabled=true;$("btnImportValidatedBatch").hidden=false;$("btnLoadAnotherBatch").hidden=true;
     setPanel("batchImportPanel","batchImportTitle","batchImportStatus","Validando arquivo","Conferindo schema, leads, hashes e conteúdo.");
-    try{const payload=JSON.parse(text);state.importPayload=payload;state.validation=await engine.validateImport(payload,records);state.importResults=[];renderImportPreview();}
-    catch(error){state.importPayload=null;state.validation=null;$("batchImportPreview").innerHTML='<tr><td colspan="9">JSON inválido.</td></tr>';$("btnImportValidatedBatch").disabled=true;setPanel("batchImportPanel","batchImportTitle","batchImportStatus","JSON inválido",error.message||String(error),"error");}
+    try{const payload=JSON.parse(text);const validation=await engine.validateImport(payload,records);state.importPayload=payload;state.validation=validation;state.importResults=[];state.importMachine.load(payload,validation);state.importPhase=state.importMachine.phase;renderImportPreview();}
+    catch(error){state.importPayload=null;state.validation=null;state.importPhase="error";$("batchImportPreview").innerHTML='<tr><td colspan="9">JSON inválido.</td></tr>';$("btnImportValidatedBatch").disabled=true;setPanel("batchImportPanel","batchImportTitle","batchImportStatus","JSON inválido",error.message||String(error),"error");}
   }
-  function verifySavedAnalysis(record,item,payload){const meta=record?.whatsapp_analysis_structured?.batch_metadata;return record?.whatsapp_analysis_status==="current"&&record?.whatsapp_analysis_hard_boss===engine.clean(item.chefe_duro)&&meta?.conversation_hash===item.conversation_hash&&meta?.prompt_version===payload.prompt_version;}
-  async function importValidated(){
-    const ready=(state.validation?.results||[]).filter(result=>result.status==="ready_to_import");if(!ready.length)return;
-    const button=$("btnImportValidatedBatch"),original=button.textContent;button.disabled=true;button.textContent="Importando…";state.importResults=[];
-    for(let index=0;index<ready.length;index++){
-      const result=ready[index];setPanel("batchImportPanel","batchImportTitle","batchImportStatus",`Importando ${index+1} de ${ready.length}`,fullName(result.record));
-      try{
-        const patch=engine.persistencePatch(result.record,result.item,state.importPayload,nowISO());
-        const {error}=await sb.from(TBL_RECORDS).update(patch).eq("id",result.record.id);if(error)throw error;
-        const {data:reloaded,error:reloadError}=await sb.from(TBL_RECORDS).select("*").eq("id",result.record.id).single();if(reloadError)throw reloadError;
-        if(!verifySavedAnalysis(reloaded,result.item,state.importPayload))throw new Error("A confirmação após a gravação não corresponde ao arquivo importado.");
-        const at=records.findIndex(record=>record.id===reloaded.id);if(at>=0)records[at]=reloaded;
-        result.status="imported";result.reason="Análise gravada e confirmada após releitura.";
-      }catch(error){result.status="save_error";result.reason=error.message||String(error);}
-      state.importResults.push(result);
-    }
-    const base=(state.validation?.results||[]).filter(result=>result.status!=="ready_to_import");state.validation.results=[...state.importResults,...base];
-    renderImportPreview();
-    const counts=state.validation.results.reduce((map,result)=>(map[result.status]=(map[result.status]||0)+1,map),{});
-    const imported=counts.imported||0,invalid=(counts.invalid_analysis||0)+(counts.invalid_schema||0)+(counts.duplicate||0),failed=(counts.save_error||0)+invalid+(counts.lead_not_found||0)+(counts.stale_conversation||0);
-    setPanel("batchImportPanel","batchImportTitle","batchImportStatus",`Recebidas: ${state.validation.results.length} • importadas: ${imported}`,`Desatualizadas: ${counts.stale_conversation||0} • inválidas: ${invalid} • lead não encontrado: ${counts.lead_not_found||0} • já importadas: ${counts.already_imported||0} • erros ao salvar: ${counts.save_error||0}.`,failed?"error":"success");
-    $("btnDownloadBatchFailures").hidden=!state.validation.results.some(result=>!['imported','already_imported'].includes(result.status));button.textContent=original;button.disabled=true;
+  function verifySavedAnalysis(record,result,payload){const meta=record?.whatsapp_analysis_structured?.batch_metadata;return record?.whatsapp_analysis_status==="current"&&record?.whatsapp_analysis_hard_boss===engine.clean(result.item.chefe_duro)&&meta?.import_key===result.import_key&&meta?.conversation_hash===result.item.conversation_hash&&meta?.prompt_version===payload.prompt_version;}
+  function replaceRecord(reloaded){const at=records.findIndex(record=>record.id===reloaded.id);if(at>=0)records[at]=reloaded;}
+  function importValidated(){
+    if(!["ready","importing"].includes(state.importMachine.phase))return Promise.resolve({blocked:true,phase:state.importMachine.phase});
+    const button=$("btnImportValidatedBatch");button.disabled=true;button.textContent="Importando…";state.importPhase="importing";
+    const operation=state.importMachine.run(async snapshot=>{
+      const ready=[...new Map((snapshot.validation?.results||[]).filter(result=>result.status==="ready_to_import").map(result=>[result.import_key,result])).values()];state.importResults=[];state.actualWrites=0;
+      for(let index=0;index<ready.length;index++){
+        const result=ready[index];setPanel("batchImportPanel","batchImportTitle","batchImportStatus",`Importando ${index+1} de ${ready.length}`,fullName(result.record));
+        try{
+          const {data:fresh,error:freshError}=await sb.from(TBL_RECORDS).select("*").eq("id",result.record.id).single();if(freshError)throw freshError;
+          if(engine.storedImportKeys(fresh).has(result.import_key)){replaceRecord(fresh);result.record=fresh;result.status="already_imported";result.reason="A chave já estava persistida; nenhuma gravação foi executada.";state.importResults.push(result);continue;}
+          const recheck=await engine.validateImport({...snapshot.payload,analyses:[result.item]},[fresh]);if(recheck.results[0]?.status!=="ready_to_import"){result.status=recheck.results[0]?.status||"save_error";result.reason=recheck.results[0]?.reason||"A validação antes da gravação falhou.";state.importResults.push(result);continue;}
+          const patch=engine.persistencePatch(fresh,result.item,snapshot.payload,nowISO());
+          const {error}=await sb.from(TBL_RECORDS).update(patch).eq("id",fresh.id);if(error)throw error;state.actualWrites+=1;
+          const {data:reloaded,error:reloadError}=await sb.from(TBL_RECORDS).select("*").eq("id",fresh.id).single();if(reloadError)throw reloadError;
+          if(!verifySavedAnalysis(reloaded,result,snapshot.payload))throw new Error("A confirmação após a gravação não corresponde à chave importada.");
+          replaceRecord(reloaded);result.record=reloaded;result.status="imported";result.reason="Uma gravação executada e confirmada após releitura.";
+        }catch(error){result.status="save_error";result.reason=error.message||String(error);}
+        state.importResults.push(result);
+      }
+      return {writes:state.actualWrites,results:state.importResults};
+    });
+    return operation.then(result=>{if(!result?.blocked){state.importPhase="completed";button.textContent="Importar análises válidas";$("btnDownloadBatchFailures").hidden=!(state.validation?.results||[]).some(item=>!["imported","already_imported","duplicate"].includes(item.status));renderImportPreview();}return result;}).catch(error=>{state.importPhase="error";button.textContent="Importar análises válidas";setPanel("batchImportPanel","batchImportTitle","batchImportStatus","Falha na importação",error.message||String(error),"error");return {error};});
   }
+  function loadAnotherImport(){if(!state.importMachine.reset())return;state.importPhase="idle";state.importPayload=null;state.validation=null;state.importResults=[];state.actualWrites=0;$("batchImportPaste").value="";$("batchImportPreview").innerHTML='<tr><td colspan="9">Aguardando JSON.</td></tr>';$("btnImportValidatedBatch").hidden=false;$("btnImportValidatedBatch").disabled=true;$("btnLoadAnotherBatch").hidden=true;$("btnDownloadBatchFailures").hidden=true;setPanel("batchImportPanel","batchImportTitle","batchImportStatus","Nenhum arquivo validado","Selecione, arraste ou cole um novo JSON retornado pelo GPT.");}
   function downloadFailures(){const failures=(state.validation?.results||[]).filter(result=>!['imported','already_imported'].includes(result.status)).map(result=>({lead_id:result.lead_id,status:result.status,reason:result.reason,analysis:result.item||null}));downloadBlob(new Blob([JSON.stringify({crm_version:CRM_BATCH_VERSION,generated_at:nowISO(),failures},null,2)],{type:"application/json"}),`criare-batch-import-falhas-${fileStamp()}.json`);}
 
   window.wireBatchAnalysisReport=function(){
-    $("btnOpenBatchExport")?.addEventListener("click",()=>{populateExportFilters();refreshExportPicker(true);$("batchExportModal").showModal();});
-    $("btnOpenBatchImport")?.addEventListener("click",()=>{$("batchImportModal").showModal();});
+    const exportButton=$("btnOpenBatchExport"),importButton=$("btnOpenBatchImport");
+    if(exportButton&&!exportButton.dataset.batchWired){exportButton.dataset.batchWired="1";exportButton.addEventListener("click",()=>{populateExportFilters();refreshExportPicker(true);$("batchExportModal").showModal();});}
+    if(importButton&&!importButton.dataset.batchWired){importButton.dataset.batchWired="1";importButton.addEventListener("click",()=>{$("batchImportModal").showModal();});}
   };
 
+  if(window.__criareBatchAnalysisStaticListenersRegistered)return;
+  window.__criareBatchAnalysisStaticListenersRegistered=true;
   ["batchExportScope","batchExportOwner","batchExportStage","batchExportDateFrom","batchExportDateTo","batchExportClosed","batchExportLost"].forEach(id=>$(id).addEventListener("change",()=>refreshExportPicker(true)));
   $("batchExportLeadPicker").addEventListener("change",event=>{const input=event.target.closest("[data-batch-lead]");if(!input)return;input.checked?state.selected.add(input.dataset.batchLead):state.selected.delete(input.dataset.batchLead);setPanel("batchExportPanel","batchExportCount","batchExportStatus",`${state.selected.size} conversa(s) selecionada(s)`,"Confira a seleção ou gere o pacote.");$("btnGenerateBatchZip").disabled=!state.selected.size;$("btnDownloadBatchJson").disabled=!state.selected.size;});
   $("btnGenerateBatchZip").addEventListener("click",()=>exportBatch("zip"));$("btnDownloadBatchJson").addEventListener("click",()=>exportBatch("json"));
@@ -125,5 +138,5 @@
   $("batchImportFile").addEventListener("change",event=>{const file=event.target.files?.[0];if(file)file.text().then(parseImportText);event.target.value="";});
   $("btnPreviewBatchPaste").addEventListener("click",()=>parseImportText($("batchImportPaste").value));
   const drop=$("batchImportDropZone");drop.addEventListener("click",()=>$("batchImportFile").click());drop.addEventListener("dragover",event=>{event.preventDefault();drop.classList.add("dragging");});drop.addEventListener("dragleave",()=>drop.classList.remove("dragging"));drop.addEventListener("drop",event=>{event.preventDefault();drop.classList.remove("dragging");const file=[...event.dataTransfer.files].find(item=>item.name.toLowerCase().endsWith(".json"));if(file)file.text().then(parseImportText);else setPanel("batchImportPanel","batchImportTitle","batchImportStatus","Arquivo não reconhecido","Use um arquivo JSON retornado pelo GPT.","error");});
-  $("btnImportValidatedBatch").addEventListener("click",importValidated);$("btnDownloadBatchFailures").addEventListener("click",downloadFailures);
+  $("btnImportValidatedBatch").addEventListener("click",importValidated);$("btnLoadAnotherBatch").addEventListener("click",loadAnotherImport);$("btnDownloadBatchFailures").addEventListener("click",downloadFailures);
 })();
