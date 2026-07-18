@@ -185,7 +185,7 @@ test("duas chamadas simultâneas fazem uma gravação por lead",async()=>{
 });
 
 test("listeners de importação têm guarda global e um único registro",async()=>{
-  const ui=await readFile(new URL("../batch-analysis-ui.js",import.meta.url),"utf8");assert.match(ui,/__criareBatchAnalysisUiLoaded/);assert.match(ui,/__criareBatchAnalysisStaticListenersRegistered/);assert.equal((ui.match(/btnImportValidatedBatch"\)\.addEventListener\("click",importValidated/g)||[]).length,1);assert.match(ui,/dataset\.batchWired/);
+  const ui=await readFile(new URL("../batch-analysis-ui.js",import.meta.url),"utf8");assert.match(ui,/__criareBatchAnalysisUiLoaded/);assert.match(ui,/__criareBatchAnalysisStaticListenersRegistered/);assert.equal((ui.match(/btnImportValidatedBatch"\)\.addEventListener\("click",importValidated/g)||[]).length,1);assert.match(ui,/dataset\.batchWired/);assert.match(ui,/filenameBatchId/);
 });
 
 test("validar duas vezes substitui o snapshot em vez de anexar",()=>{
