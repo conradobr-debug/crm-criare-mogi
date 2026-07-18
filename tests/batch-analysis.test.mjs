@@ -116,6 +116,42 @@ test("três fixtures geram pacote ZIP com os quatro arquivos obrigatórios",asyn
   const zip=batch.zipFiles(files);assert(zip.length>JSON.stringify(payload).length);assert.equal(new DataView(zip.buffer).getUint32(0,true),0x04034b50);
 });
 
+test("nome do pacote exportado começa com 01-ENVIAR-AO-GPT",async()=>{
+  const payload=await batch.buildBatch([textLead]);assert.match(batch.inputFilename(payload.batch_id),/^01-ENVIAR-AO-GPT_criare-lote_\d{8}-\d{4}-[A-F0-9]{4}\.zip$/);
+});
+
+test("nome esperado do resultado começa com 02-IMPORTAR-NO-CRM",async()=>{
+  const payload=await batch.buildBatch([textLead]);assert.equal(payload.expected_output_filename,batch.outputFilename(payload.batch_id));assert.match(payload.expected_output_filename,/^02-IMPORTAR-NO-CRM_criare-analises_/);
+});
+
+test("batch_id está presente em todos os componentes do pacote",async()=>{
+  const payload=await batch.buildBatch([textLead]),files=batch.packageFiles(payload);assert.equal(JSON.parse(files["batch_input.json"]).batch_id,payload.batch_id);assert.equal(JSON.parse(files["analysis_output_schema.json"]).batch_id,payload.batch_id);assert.match(files["analysis_instructions.md"],new RegExp(payload.batch_id));assert.match(files["README.txt"],new RegExp(payload.batch_id));
+});
+
+test("JSON de entrada selecionado no importador é classificado e rejeitado claramente",async()=>{
+  const payload=await batch.buildBatch([textLead]),classification=batch.classifyImportPayload(payload,{filename:"batch_input.json",type:"application/json"});assert.equal(classification.code,"input_payload");assert.equal(classification.label,"Pacote de entrada enviado ao GPT");
+});
+
+test("ZIP de entrada selecionado no importador é classificado e rejeitado claramente",()=>{
+  const classification=batch.classifyImportPayload(null,{filename:"01-ENVIAR-AO-GPT_criare-lote_20260718-0745-A7F3.zip",type:"application/zip"});assert.equal(classification.code,"input_package");
+});
+
+test("resultado 1.1 válido é reconhecido pelo conteúdo",async()=>{
+  const input=await batch.buildBatch([textLead]),item=validAnalysis(textLead.id,input.conversations[0].conversation_hash,batch.lastMessageId(textLead));item.batch_id=input.batch_id;const payload={schema_version:"1.1",batch_id:input.batch_id,generated_at:"2026-07-18T12:00:00Z",analysis_model:"Custom GPT",prompt_version:"criare-batch-v1",analyses:[item]};const classification=batch.classifyImportPayload(payload,{filename:input.expected_output_filename,type:"application/json"});assert.equal(classification.code,"analysis_result");assert.equal((await batch.validateImport(payload,[textLead])).results[0].status,"ready_to_import");
+});
+
+test("nome correto não contorna a validação do conteúdo",async()=>{
+  const input=await batch.buildBatch([textLead]),classification=batch.classifyImportPayload(input,{filename:input.expected_output_filename,type:"application/json"});assert.equal(classification.code,"input_payload");
+});
+
+test("lotes misturados no schema 1.1 são rejeitados",async()=>{
+  const input=await batch.buildBatch([textLead,audioLead]),analyses=[];for(const conversation of input.conversations){const record=conversation.lead_id===textLead.id?textLead:audioLead,item=validAnalysis(record.id,conversation.conversation_hash,batch.lastMessageId(record));item.batch_id=input.batch_id;analyses.push(item);}analyses[1].batch_id="20260718-0745-FFFF";const payload={schema_version:"1.1",batch_id:input.batch_id,generated_at:"2026-07-18T12:00:00Z",analysis_model:"Custom GPT",prompt_version:"criare-batch-v1",analyses};assert.equal(batch.classifyImportPayload(payload,{filename:input.expected_output_filename}).code,"incompatible");const validation=await batch.validateImport(payload,[textLead,audioLead]);assert.equal(validation.validEnvelope,false);assert(validation.results.every(item=>item.status==="invalid_schema"));
+});
+
+test("schema 1.0 permanece compatível",async()=>{
+  const payload=await envelopeFor(textLead),classification=batch.classifyImportPayload(payload,{filename:"resultado-legado.json",type:"application/json"});assert.equal(classification.code,"analysis_result");assert.equal((await batch.validateImport(payload,[textLead])).results[0].status,"ready_to_import");
+});
+
 async function threeAnalysisEnvelope(records=[textLead,audioLead,staleLead]){const analyses=[];for(const record of records)analyses.push(validAnalysis(record.id,await batch.conversationHash(record),batch.lastMessageId(record)));return {schema_version:"1.0",generated_at:"2026-07-18T02:02:29.657Z",analysis_model:"GPT de teste",prompt_version:"criare-batch-v1",analyses};}
 async function sixAnalysisEnvelope(){const payload=await threeAnalysisEnvelope();return {...payload,analyses:payload.analyses.flatMap(item=>[structuredClone(item),structuredClone(item)])};}
 async function simulateImport(payload,database,machine=batch.createImportStateMachine()){
