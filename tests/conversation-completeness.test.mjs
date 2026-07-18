@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+await import("../whatsapp-crm-extension/capture-core.js");
+await import("../audio-import-matcher.js");
 await import("../conversation-completeness.js");
 const engine=globalThis.CriareConversationCompleteness;
 const audio=(id,status={},extra={})=>({message_id:id,type:"Áudio",text:"[10:00, 01/07/2026] Cliente: [Áudio sem transcrição]",...status,...extra});
@@ -26,11 +28,18 @@ assert.equal(engine.calculate(record([text()]),{identity_status:"phone_duplicate
 assert.equal(engine.sortRows([{summary:engine.calculate(record([text()]))},{summary:engine.calculate(record([audio("A")],{whatsapp_analysis_status:"never"}))}])[0].summary.pending_audio_count,1);
 assert.equal(engine.calculate(record([audio("A",{media_status:"media_unavailable"})])).conversation_completeness_status,"unavailable_audio");
 assert.equal(engine.calculate(record([audio("A",{transcription_status:"failed"})])).conversation_completeness_status,"pending_audio");
-const readyAudio=(id,duration)=>audio(id,{}, {sender:"Cliente",direction:"incoming",date:"01/07/2026",message_time:"10:00",duration_seconds:duration,duration_valid:true});
+const readyAudio=(id,duration)=>audio(id,{}, {sender:"Cliente",direction:"incoming",date:"01/07/2026",message_time:"10:00",duration_seconds:duration,duration_valid:true,duration_source:"whatsapp_player"});
 const fivePending=engine.calculate(record([readyAudio("A",10),readyAudio("B",11),readyAudio("C",12),readyAudio("D",13),audio("E",{}, {sender:"Cliente",direction:"incoming",date:"01/07/2026",message_time:"10:01",duration_valid:false})]));
 assert.equal(fivePending.pending_audio_count,5);assert.equal(fivePending.ready_for_import_count,4);assert.equal(fivePending.metadata_pending_audio_count,1);assert.match(fivePending.completeness_reasons.join(" "),/aguardando atualização de metadados/);
 const importerCompatible=engine.calculate(record([audio("META",{}, {sender:"Cliente",direction:"incoming",date:"01/07/2026",message_time:"10:02",audioMeta:{durationSeconds:31}})]));
 assert.equal(importerCompatible.ready_for_import_count,1,"a central deve aceitar a mesma duração audio_meta já aceita pelo importador");
+const approvedImporterParity=engine.calculate(record([
+  readyAudio("P1",10),readyAudio("P2",11),readyAudio("P3",12),readyAudio("P4",13),
+  audio("P5",{}, {sender:"Cliente",direction:"incoming",date:"01/07/2026",message_time:"10:02",duration_source:"missing"}),
+  readyAudio("DONE",14),
+].map(entry=>entry.message_id==="DONE"?{...entry,transcript:"já transcrito"}:entry)));
+assert.equal(approvedImporterParity.pending_audio_count,5);
+assert.equal(approvedImporterParity.ready_for_import_count,4,"a central deve usar a elegibilidade canônica do importador, excluindo transcritos");
 assert.equal(engine.calculate(record([text()]),{identity_status:"conversation_linked"}).conversation_completeness_status,"complete");
 assert.equal(engine.matchesSearch({first_name:"Crislaine",last_name:"Silvia"},["+5519999999999","(19) 99999-9999"],"crislaine"),true);
 assert.equal(engine.matchesSearch({first_name:"Crislaine"},["+5519999999999"],"+5519"),true);

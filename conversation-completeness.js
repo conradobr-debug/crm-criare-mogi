@@ -43,6 +43,14 @@
   function readyForAudioImport(entry){
     return Boolean(normalizeId(entry?.message_id||entry?.id)&&confirmedDuration(entry)&&clean(entry?.sender)&&["incoming","outgoing"].includes(clean(entry?.direction).toLowerCase())&&clean(entry?.date)&&clean(entry?.message_time||entry?.time));
   }
+  function readyAudioIds(source){
+    if(global.CriareAudioImportMatcher?.buildInventory){
+      return new Set(global.CriareAudioImportMatcher.buildInventory(source)
+        .filter(item=>item.eligible&&!clean(item.transcript))
+        .map(item=>normalizeId(item.normalized_message_id||item.message_id)));
+    }
+    return new Set(source.filter(entry=>isAudio(entry)&&!transcript(entry)&&readyForAudioImport(entry)).map(entry=>normalizeId(entry?.message_id||entry?.id)));
+  }
   function canonicalEntries(record){
     const structured=Array.isArray(record?.whatsapp_message_entries)?record.whatsapp_message_entries:[];const source=structured.length?structured:clean(record?.whatsapp_transcript).split(/\n+/).map(text=>({text})).filter(entry=>entry.text);
     const byId=new Map(),anonymous=[];
@@ -64,6 +72,7 @@
     return raw==="error"?"error":"current";
   }
   function calculate(record,options={}){
+    const structured=Array.isArray(record?.whatsapp_message_entries)?record.whatsapp_message_entries:[];
     const entries=canonicalEntries(record),audios=entries.filter(isAudio).map(entry=>({...entry,audio_status:audioStatus(entry)}));
     const dated=entries.map(entry=>entry.timestamp).filter(Boolean).sort();
     const lastSync=record?.whatsapp_transcript_updated_at||record?.whatsapp_last_sync_at||record?.whatsapp_synced_at||null;
@@ -77,7 +86,8 @@
     const counts={transcribed:0,pending_download:0,pending_import:0,transcription_error:0,media_unavailable:0,verification_required:0};audios.forEach(item=>counts[item.audio_status]++);
     const analysis_status=analysisStatus(record,lastSync),pending=counts.pending_download+counts.pending_import+counts.verification_required;
     const pendingAudios=audios.filter(item=>["pending_download","pending_import","verification_required"].includes(item.audio_status));
-    const readyForImport=pendingAudios.filter(readyForAudioImport);
+    const importerReadyIds=readyAudioIds(structured.length?structured:entries);
+    const readyForImport=pendingAudios.filter(item=>importerReadyIds.has(normalizeId(item.message_id||item.id)));
     const metadataPending=Math.max(0,pendingAudios.length-readyForImport.length);
     let conversation_completeness_status="complete";
     if(conversation_status==="verification_required")conversation_completeness_status="verification_required";
