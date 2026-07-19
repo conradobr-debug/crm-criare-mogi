@@ -289,6 +289,7 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(crm,/CriareAudioImportMatcher\.validateManualAssignments/);
   assert.match(crm,/association_status:"manual_confirmed"/);
   assert.match(crm,/const durationSource=playerConfirmed\?"whatsapp_player":"manual_confirmed"/);
+  assert.doesNotMatch(crm,/importedAudioEntries/);
   assert.match(content,/nao_localizado_no_dom/);
   assert.match(crm,/audioImportModal/);
   assert.match(crm,/Importar áudios baixados/);
