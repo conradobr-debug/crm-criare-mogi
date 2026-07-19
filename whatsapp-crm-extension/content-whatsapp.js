@@ -2,7 +2,7 @@
 
 const CRIARE_CONTENT_SCRIPT_VERSION = chrome.runtime.getManifest().version;
 const CaptureCore = globalThis.CriareWhatsAppCaptureCore;
-const {cleanText, normalizedUiText, normalizeWhatsAppMessageId, messageHash, continuationPrefix, playerDurationSeconds} = CaptureCore;
+const {cleanText, normalizedUiText, normalizeWhatsAppMessageId, messageHash, continuationPrefix, playerDurationSeconds, mergeMessageWindow} = CaptureCore;
 
 function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 
@@ -119,15 +119,13 @@ function sameCustomer(title, request){
   const activeDigits = active.replace(/\D/g, "");
   const expectedDigits = globalThis.CriarePhoneIdentity.comparableDigits(request?.phone);
   if(expectedDigits && activeDigits && activeDigits.endsWith(expectedDigits.slice(-10))) return true;
-  const routedPhone = new URL(location.href).searchParams.get("phone") || "";
-  const routedDigits = globalThis.CriarePhoneIdentity.comparableDigits(`+${routedPhone}`);
-  return Boolean(expectedDigits && (routedDigits===expectedDigits || request?.phoneNavigationConfirmed===true));
+  return Boolean(expectedDigits&&request?.phoneIdentityConfirmed===true&&globalThis.CriarePhoneIdentity.comparableDigits(request?.confirmedPhone)===expectedDigits);
 }
 
 function messageNodes(main=activeMain()){
   if(!main) return [];
   const current = [...main.querySelectorAll('[data-testid^="conv-msg-"]')]
-    .filter(node=>node.querySelector('[data-testid="msg-container"]'));
+    .filter(node=>node.getAttribute("data-id")||node.querySelector('[data-id]'));
   if(current.length) return current;
   const containers = [...main.querySelectorAll('[data-testid="msg-container"]')];
   const unique = new Set();
@@ -157,6 +155,19 @@ async function waitForMessagesToSettle(main, {timeoutMs=12000,minWaitMs=1800}={}
     await sleep(450);
   }
   return messageNodes(main).length;
+}
+
+async function waitForHistoryHydration(main,{timeoutMs=12000,minWaitMs=4500}={}){
+  const startedAt=Date.now(),deadline=startedAt+timeoutMs;let previous="",stable=0,bestCount=0;
+  while(Date.now()<deadline){
+    const scroller=messageScrollContainer(main);const count=messageNodes(main).length;
+    const signature=`${windowSignature(main)}:${scroller?.scrollHeight||0}:${scroller?.clientHeight||0}`;
+    bestCount=Math.max(bestCount,count);stable=signature&&signature===previous?stable+1:0;previous=signature;
+    const hydrated=count>1&&Number(scroller?.scrollHeight||0)>Number(scroller?.clientHeight||0);
+    if(Date.now()-startedAt>=minWaitMs&&stable>=4&&(hydrated||bestCount>1))break;
+    await sleep(450);
+  }
+  return {count:messageNodes(main).length,bestCount};
 }
 
 function olderMessagesButton(main=activeMain()){
@@ -319,7 +330,7 @@ async function openConversationFromSidebar(request={}){
   if(!row) return {ok:false,code:"contact_not_found",error:"Contato não localizado na lista lateral do WhatsApp."};
   row.scrollIntoView({block:"center"});
   row.click();
-  return {ok:true,code:"sidebar_contact_opened"};
+  return {ok:true,code:"sidebar_contact_opened",phoneIdentityConfirmed:true,confirmedPhone:globalThis.CriarePhoneIdentity.normalizePhone(request.phone).normalized_e164||""};
 }
 
 function waitForConversationStable(request={}, {timeoutMs=65000}={}){
@@ -456,16 +467,8 @@ function readVisibleMessageWindow(main,audioState=new Map()){
 }
 
 function mergeWindow(currentEntries, visibleEntries){
-  const currentById = new Map(currentEntries.map((entry,index)=>[entry.id,index]));
-  const older = [];
-  for(const entry of visibleEntries){
-    if(currentById.has(entry.id)){
-      currentEntries[currentById.get(entry.id)] = entry;
-      continue;
-    }
-    older.push(entry);
-  }
-  return {entries:[...older,...currentEntries],added:older.length};
+  const merged=mergeMessageWindow(currentEntries,visibleEntries,{prepend:true});
+  return {entries:merged.entries,added:merged.addedCount,updated:merged.updatedCount};
 }
 
 function messageScrollContainer(main){
@@ -483,6 +486,9 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
   let stableTopPasses = 0;
   let reachedStart = false;
   let loadedStartReached = false;
+  const domMessageKeys=new Set(entries.map(entry=>normalizeWhatsAppMessageId(entry.message_id||entry.id)||entry.id||messageHash(entry.text)));
+  let windowsCollected=entries.length?1:0;
+  let olderLoadAttempts=0;
 
   while(Date.now() < deadline && entries.length < maximum && scrollPasses < 220){
     const scroller = messageScrollContainer(main);
@@ -493,15 +499,24 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
     scroller.dispatchEvent(new Event("scroll",{bubbles:true}));
     await sleep(550);
     await waitForMessagesToSettle(main,{timeoutMs:3500,minWaitMs:450});
-    const merged = mergeWindow(entries, readVisibleMessageWindow(main,audioState));
+    const visible=readVisibleMessageWindow(main,audioState);visible.forEach(entry=>domMessageKeys.add(normalizeWhatsAppMessageId(entry.message_id||entry.id)||entry.id||messageHash(entry.text)));windowsCollected+=1;
+    const merged = mergeWindow(entries, visible);
     entries = merged.entries;
     scrollPasses += 1;
     const atTop = scroller.scrollTop <= 2;
     const unchanged = beforeSignature === windowSignature(main) && merged.added === 0;
     stableTopPasses = atTop && unchanged ? stableTopPasses + 1 : 0;
     if(atTop && stableTopPasses >= 2){
+      const older=olderMessagesButton(main);
+      if(older&&olderLoadAttempts<8){
+        const beforeLoad=windowSignature(main);olderLoadAttempts+=1;older.click();
+        const loadDeadline=Math.min(deadline,Date.now()+15000);
+        while(Date.now()<loadDeadline&&windowSignature(main)===beforeLoad)await sleep(500);
+        await waitForHistoryHydration(main,{timeoutMs:10000,minWaitMs:2500});
+        stableTopPasses=0;continue;
+      }
       loadedStartReached = true;
-      reachedStart = !olderMessagesButton(main);
+      reachedStart = !older;
       break;
     }
   }
@@ -510,7 +525,7 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
   if(entries.length > maximum) entries = entries.slice(-maximum);
   const scroller = messageScrollContainer(main);
   if(scroller){ scroller.scrollTop = scroller.scrollHeight; scroller.dispatchEvent(new Event("scroll",{bubbles:true})); }
-  return {entries,reachedStart,loadedStartReached,scrollPasses,limited,audioState};
+  return {entries,reachedStart,loadedStartReached,scrollPasses,limited,audioState,domMessagesFound:domMessageKeys.size,windowsCollected,olderLoadAttempts};
 }
 
 async function processAudioQueue(main,request,history){
@@ -534,6 +549,7 @@ async function extractLoadedMessages(request={}){
     loadedScroller.dispatchEvent(new Event("scroll",{bubbles:true}));
     await waitForMessagesToSettle(main,{timeoutMs:8000,minWaitMs:900});
   }
+  await waitForHistoryHydration(main,{timeoutMs:12000,minWaitMs:4500});
   const history = await collectAvailableHistory(main);
   if(!history.entries.length) throw new Error("Não encontrei mensagens carregadas nesta conversa.");
   const audioCount = history.entries.filter(entry=>entry.hasVoiceMessage).length;
@@ -542,13 +558,17 @@ async function extractLoadedMessages(request={}){
     transcript:history.entries.map(entry=>entry.text).join("\n"),
     entries:history.entries.map(({id,text,type,capturedAt,hasVoiceMessage,audioTranscribed,audioMeta,message_id,sender,direction,date,time,duration,chronological_position})=>({id,text,type,capturedAt,hasVoiceMessage,audioTranscribed,audioMeta,message_id,sender,direction,date,time,duration,chronological_position})),
     count:history.entries.length,audioCount,audioTranscribed,
+    domMessagesFound:history.domMessagesFound,
+    uniqueMessagesInterpreted:history.entries.length,
+    windowsCollected:history.windowsCollected,
     audioExtensionDetected:false,
     olderHistoryRequested:olderHistory.requested,
     olderHistoryLoaded:olderHistory.loaded,
     olderHistoryPending:olderHistory.pending,
     reachedStart:history.reachedStart && !olderHistory.pending,
-    loadedHistoryComplete:history.loadedStartReached && !history.limited,
+    loadedHistoryComplete:history.reachedStart && history.loadedStartReached && !history.limited,
     scrollPasses:history.scrollPasses,
+    olderLoadAttempts:history.olderLoadAttempts,
     profilePhotoUrl:profilePhotoUrl(main),limited:history.limited
   };
   return payload;
@@ -640,6 +660,12 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
     openConversationFromSidebar(message.request || {})
       .then(result=>sendResponse({contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...result}))
       .catch(error=>sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,code:"sidebar_open_failed",error:error.message||"Não foi possível abrir o contato pela lista lateral."}));
+    return true;
+  }
+  if(message?.type === "criare-confirm-conversation-phone"){
+    openConversationFromSidebar(message.request || {})
+      .then(result=>sendResponse({contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...result}))
+      .catch(error=>sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,code:"contact_mismatch",error:error.message||"Não foi possível confirmar o telefone exato da conversa."}));
     return true;
   }
   if(message?.type === "criare-recover-audios"){

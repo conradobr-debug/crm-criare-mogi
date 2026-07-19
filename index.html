@@ -1134,8 +1134,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="whatsapp-data-service.js"></script>
 <script src="whatsapp-crm-extension/phone-identity.js?v=2.5.1"></script>
-<script src="whatsapp-crm-extension/capture-core.js?v=2.5.3"></script>
-<script src="audio-import-matcher.js?v=2.5.3"></script>
+<script src="whatsapp-crm-extension/capture-core.js?v=2.5.4"></script>
+<script src="audio-import-matcher.js?v=2.5.4"></script>
 <script src="conversation-completeness.js?v=2.5.1-final"></script>
 <script src="batch-analysis.js?v=2.5.1"></script>
 
@@ -1348,7 +1348,7 @@ function openWhatsAppFor(record=null){
   const webUrl=`https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
   window.open(webUrl,"_blank","noopener,noreferrer");
 }
-const WHATSAPP_EXTENSION_VERSION = "2.3.4";
+const WHATSAPP_EXTENSION_VERSION = "2.3.5";
 const WHATSAPP_BATCH_AUDIO_ENABLED = false;
 const WHATSAPP_BATCH_APPROVAL_KEY = "crm_whatsapp_full_batch_unlocked";
 const WHATSAPP_BATCH_FLOW_VERSION = "capture-flow-2.1.8";
@@ -1576,9 +1576,15 @@ async function saveWhatsAppCapture(record,result){
     whatsapp_profile_photo_path:photoPath,whatsapp_profile_photo_updated_at:photoUpdatedAt
   };
   const write=await writeWhatsAppCapturePatch(record,patch);
-  const data=write.data;
+  const {data,error:rereadError}=await sb.from(TBL_RECORDS).select("*").eq("id",record.id).single();
+  if(rereadError)throw rereadError;
+  const persistedEntries=Array.isArray(data?.whatsapp_message_entries)?data.whatsapp_message_entries.map(normalizeCapturedEntry).filter(Boolean):[];
+  const expectedIds=new Set(merged.entries.map(entry=>normalizeWhatsAppMessageId(entry.message_id||entry.id)).filter(Boolean));
+  const persistedIds=new Set(persistedEntries.map(entry=>normalizeWhatsAppMessageId(entry.message_id||entry.id)).filter(Boolean));
+  const missingIds=[...expectedIds].filter(id=>!persistedIds.has(id));
+  if(persistedEntries.length!==merged.totalCount||missingIds.length)throw new Error(`A releitura do banco divergiu da captura: esperado ${merged.totalCount}, persistido ${persistedEntries.length}${missingIds.length?` • IDs ausentes: ${missingIds.slice(0,5).join(", ")}`:""}.`);
   const index=records.findIndex(item=>item.id===data.id);if(index>=0)records[index]=data;
-  return {record:data,...merged,complete,analysisReady:complete||loadedHistoryReady,note,database:{write_attempted:true,write_succeeded:true,compatibilityMode:write.compatibilityMode,attempts:write.attempts}};
+  return {record:data,...merged,complete,analysisReady:complete||loadedHistoryReady,note,audioCount:persistedEntries.filter(entry=>entry.type==="Áudio"||entry.hasVoiceMessage).length,database:{write_attempted:true,write_succeeded:true,reread_succeeded:true,compatibilityMode:write.compatibilityMode,attempts:write.attempts}};
 }
 function capturedEntryParts(text){
   const match=String(text||"").match(/^\[([^,\]]+),\s*([^\]]+)\]\s*([^:]+):\s*([\s\S]*)$/);
@@ -1716,10 +1722,20 @@ async function captureFreeWhatsAppConversation(record,{openOnly=false}={}){
     setStage("Salvando mensagens capturadas");
     const saved=await saveWhatsAppCapture(record,result);context.savedCount=saved.totalCount;
     $("whatsappConversation").value=saved.record.whatsapp_transcript||"";renderCapturedWhatsAppTimeline(saved.record);updateCapturedWhatsAppIndicators(saved.record);render();
-    $("whatsappOfficialAnalysis").textContent=`${saved.totalCount} mensagens encontradas • ${saved.addedCount} novas`;
-    $("whatsappSyncStatus").textContent=`Conversa salva • ${saved.totalCount} mensagens encontradas • ${saved.addedCount} novas`;
+    const factual=`DOM ${Number(result.domMessagesFound||result.domCount||result.count||0)} • interpretadas ${Number(result.uniqueMessagesInterpreted||result.count||0)} • novas ${saved.addedCount} • atualizadas ${saved.updatedCount} • total persistido ${saved.totalCount} • áudios ${saved.audioCount}`;
+    $("whatsappOfficialAnalysis").textContent=factual;
+    $("whatsappSyncStatus").textContent=`Conversa salva e relida • ${factual}`;
     return {...saved,result};
   }catch(error){error.captureContext={...context};throw error;}
+}
+async function captureCompletenessConversation(record,button){
+  const original=button.textContent;button.disabled=true;button.textContent="Atualizando conversa…";
+  try{
+    const saved=await captureFreeWhatsAppConversation(record);
+    const result=saved.result||{};const factual=`DOM ${Number(result.domMessagesFound||result.domCount||result.count||0)} • únicas ${Number(result.uniqueMessagesInterpreted||result.count||0)} • novas ${saved.addedCount} • atualizadas ${saved.updatedCount} • persistidas ${saved.totalCount} • áudios ${saved.audioCount}`;
+    button.title=factual;toast(`${fullName(record)} atualizado(a): ${factual}.`);render();return saved;
+  }catch(error){showCaptureFailure(record,error);toast(error.message||"Não foi possível atualizar a conversa.",{error:true});throw error;}
+  finally{button.disabled=false;button.textContent=original;}
 }
 function captureFailureMessage(record,error){
   const details=captureFailureDetails(record,error);return `Falha na captura • CRM ${details.requiredVersion} • extensão ${details.installedVersion} • telefone ${details.phone} • conversa ${details.contact} • URL ${details.url} • DOM ${details.domCount} • interpretadas ${details.interpretedCount} • salvas ${details.savedCount} • etapa ${details.stage} • ${details.cause}`;
@@ -3765,7 +3781,7 @@ function renderReports(){
             <div class="batchWorkflowStep batchWorkflowGpt"><b>2. ANALISAR NO GPT</b><span>Envie ao GPT somente o arquivo que começa com <strong>01-ENVIAR-AO-GPT</strong>.</span><button class="ghost" id="btnCopyBatchGptInstruction" type="button">Copiar instrução para o GPT</button></div>
             <div class="batchWorkflowStep batchWorkflowImport"><b>3. IMPORTAR RESULTADO</b><span>Importe no CRM somente o arquivo que começa com <strong>02-IMPORTAR-NO-CRM</strong>.</span><button class="primary" id="btnOpenBatchImport" type="button">3. Importar resultado da análise</button></div>
           </div>
-          <small>CRM 2.5.3 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
+          <small>CRM 2.5.4 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
         </div>
       </details>
       <div class="formNotice">${escapeHtml(reportPeriod)}</div>
@@ -4635,7 +4651,7 @@ $("board").addEventListener("click",event=>{
   const action=button.dataset.completenessAction;
   if(action==="open")return openModal(record);
   if(action==="whatsapp")return openWhatsAppFor(record);
-  if(action==="capture"){openModal(record);return setTimeout(()=>$("btnUpdateOfficialAnalysis").click(),150);}
+  if(action==="capture")return captureCompletenessConversation(record,button).catch(()=>{});
   if(action==="metadata")return updateCompletenessAudioMetadata(record,button);
   if(action==="audios")return openPendingAudioDetails(record);
   if(action==="import")return openAudioImport(record);

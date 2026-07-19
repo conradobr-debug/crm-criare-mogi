@@ -127,7 +127,12 @@ async function ensureConversationOpened(request,{active=false,operationId=null}=
     await saveTarget(phone,tab.id);
     await waitForTabComplete(tab.id);
     await ensureCurrentContentScript(tab.id);
-    const conversationRequest = {...request,phone,request_id:requestId,phoneNavigationConfirmed:true};
+    const phoneConfirmation=await chrome.tabs.sendMessage(tab.id,{type:"criare-confirm-conversation-phone",request:{...request,phone,request_id:requestId}});
+    if(!phoneConfirmation?.ok){
+      const currentTab=await chrome.tabs.get(tab.id).catch(()=>({}));
+      return {ok:false,code:phoneConfirmation?.code||"contact_mismatch",error:phoneConfirmation?.error||"O telefone da conversa aberta não corresponde ao lead.",tabId:tab.id,tabUrl:currentTab.url||"",detectedTitle:"",domCount:0};
+    }
+    const conversationRequest = {...request,phone,request_id:requestId,phoneIdentityConfirmed:true,confirmedPhone:phoneConfirmation.confirmedPhone||phone};
     // A primeira abertura da sessão pode não criar #main só com a rota /send.
     // Primeiro observamos a transição SPA; se ela não montar o painel, usamos a
     // busca/lista lateral e somente então aguardamos a conversa estabilizar.
@@ -143,7 +148,7 @@ async function ensureConversationOpened(request,{active=false,operationId=null}=
     }
     const currentTab = await chrome.tabs.get(tab.id).catch(()=>({}));
     if(!ready?.ok) return {ok:false,code:ready?.code||"spa_timeout",error:ready?.error||"Tempo esgotado na transição interna do WhatsApp Web.",tabId:tab.id,tabUrl:currentTab.url||"",detectedTitle:ready?.title||"",domCount:Number(ready?.count||0)};
-    return {ok:true,tabId:tab.id,tabUrl:currentTab.url||"",requestId,loadedState:ready,extensionVersion:chrome.runtime.getManifest().version};
+    return {ok:true,tabId:tab.id,tabUrl:currentTab.url||"",requestId,confirmedPhone:phoneConfirmation.confirmedPhone||phone,loadedState:ready,extensionVersion:chrome.runtime.getManifest().version};
   }catch(error){
     return {ok:false,code:"spa_navigation_failed",error:error.message||"Não foi possível abrir a conversa correta no WhatsApp Web."};
   }finally{
@@ -259,7 +264,7 @@ async function syncCustomerChat(request,sender){
   try{
     const opened = await ensureConversationOpened({...request,phone,request_id:operationId},{active:false,operationId});
     if(!opened.ok) return {...opened,extensionVersion:chrome.runtime.getManifest().version};
-    return await captureChatFromTab(opened.tabId,{...request,phone,request_id:operationId,phoneNavigationConfirmed:true},opened.loadedState);
+    return await captureChatFromTab(opened.tabId,{...request,phone,request_id:operationId,phoneIdentityConfirmed:true,confirmedPhone:opened.confirmedPhone},opened.loadedState);
   }finally{
     if(activeConversationOperation === operationId) activeConversationOperation = null;
   }

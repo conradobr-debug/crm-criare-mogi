@@ -23,6 +23,32 @@ test("preserva mensagens repetidas quando os IDs do WhatsApp são diferentes",()
   assert.equal(merged.addedCount,2);
 });
 
+test("combina múltiplas janelas virtualizadas somente pelo message_id canônico",()=>{
+  const newest=[
+    {id:"wa:M3",message_id:"M3",text:"[10:03, 25/06/2026] Raquel: terceira"},
+    {id:"wa:M4",message_id:"M4",text:"[10:04, 25/06/2026] Você: repetida"}
+  ];
+  const middle=[
+    {id:"wa:M2",message_id:"M2",text:"[10:02, 25/06/2026] Você: repetida"},
+    {id:"wa:M3",message_id:"wa:M3",text:"[10:03, 25/06/2026] Raquel: terceira"}
+  ];
+  const oldest=[
+    {id:"wa:M1",message_id:"M1",text:"[09:59, 24/06/2026] Raquel: primeira"},
+    {id:"wa:M2",message_id:"M2",text:"[10:02, 25/06/2026] Você: repetida"}
+  ];
+  const first=core.mergeMessageWindow(newest,middle,{prepend:true});
+  const complete=core.mergeMessageWindow(first.entries,oldest,{prepend:true});
+  assert.deepEqual(Array.from(complete.entries,entry=>entry.message_id),["M1","M2","M3","M4"]);
+  assert.equal(new Set(complete.entries.map(entry=>entry.message_id)).size,4);
+});
+
+test("preserva múltiplos áudios distintos entre janelas virtualizadas",()=>{
+  const first=core.mergeMessageWindow([],Array.from({length:13},(_,index)=>({message_id:`AUDIO-${index}`,id:`wa:AUDIO-${index}`,type:"Áudio",text:"[Áudio sem transcrição]"})),{prepend:true});
+  const second=core.mergeMessageWindow(first.entries,Array.from({length:13},(_,index)=>({message_id:`AUDIO-${index+13}`,id:`wa:AUDIO-${index+13}`,type:"Áudio",text:"[Áudio sem transcrição]"})),{prepend:false});
+  assert.equal(second.entries.length,26);
+  assert.equal(new Set(second.entries.map(entry=>entry.message_id)).size,26);
+});
+
 test("atualiza mensagem editada sem duplicar o ID",()=>{
   const merged = core.mergeEntries(
     [{id:"wa:1",text:"[10:00, 01/07/2026] Cliente: segunda"}],
@@ -228,11 +254,11 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.doesNotMatch(content,/limited:history\.limited \|\| olderHistory\.pending/);
   assert.match(crm,/result\?\.reachedStart\|\|result\?\.loadedHistoryComplete/);
   assert.match(crm,/function analyzeSavedWhatsAppConversation/);
-  assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
+  assert.match(content,/loadedHistoryComplete:history\.reachedStart && history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.4"/);
-  assert.equal(manifest.version,"2.3.4");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.5"/);
+  assert.equal(manifest.version,"2.3.5");
   assert(!manifest.permissions.includes("downloads"));
   assert(!manifest.permissions.includes("debugger"));
   assert.doesNotMatch(background,/"criare-(?:start-audio-download-watch|wait-audio-download|dispatch-real-mouse-move)"/);
@@ -301,6 +327,13 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(crm,/whatsapp_analysis_status:"stale"/);
   assert.match(crm,/LOCAL_AUDIO_TRANSCRIBER_URL/);
   assert.match(background,/criare-open-conversation-fallback/);
+  assert.match(background,/criare-confirm-conversation-phone/);
+  assert.match(content,/phoneIdentityConfirmed/);
+  assert.doesNotMatch(content,/phoneNavigationConfirmed===true/);
+  assert.match(content,/waitForHistoryHydration/);
+  assert.match(content,/domMessagesFound/);
+  assert.match(crm,/captureCompletenessConversation\(record,button\)/);
+  assert.match(crm,/reread_succeeded:true/);
   assert.match(background,/criare-recover-whatsapp-audios/);
   assert.match(contentCrm,/criare-whatsapp-recover-audios/);
   assert.match(background,/timeoutMs:14000/);
@@ -369,8 +402,10 @@ test("confirma conversa somente pelo telefone E.164 navegado",async()=>{
   const content=await readFile(new URL("../whatsapp-crm-extension/content-whatsapp.js",import.meta.url),"utf8");
   const background=await readFile(new URL("../whatsapp-crm-extension/background.js",import.meta.url),"utf8");
   assert.doesNotMatch(content,/expectedName|nameMatches/);
-  assert.match(content,/expectedDigits && \(routedDigits===expectedDigits \|\| request\?\.phoneNavigationConfirmed===true\)/);
-  assert.match(background,/captureChatFromTab\(opened\.tabId,\{\.\.\.request,phone,request_id:operationId,phoneNavigationConfirmed:true\}/);
+  assert.match(content,/phoneIdentityConfirmed===true/);
+  assert.match(content,/comparableDigits\(request\?\.confirmedPhone\)===expectedDigits/);
+  assert.match(background,/criare-confirm-conversation-phone/);
+  assert.match(background,/captureChatFromTab\(opened\.tabId,\{\.\.\.request,phone,request_id:operationId,phoneIdentityConfirmed:true/);
 });
 
 test("fallback reconhece o campo de busca atual da lista lateral",async()=>{

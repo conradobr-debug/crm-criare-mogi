@@ -137,6 +137,30 @@
     return {entries, addedCount, updatedCount, limited};
   }
 
+  function mergeMessageWindow(currentEntries, visibleEntries,{prepend=true}={}){
+    const current=(Array.isArray(currentEntries)?currentEntries:[]).map(normalizeEntry).filter(Boolean);
+    const visible=(Array.isArray(visibleEntries)?visibleEntries:[]).map(normalizeEntry).filter(Boolean);
+    const currentByKey=new Map();
+    current.forEach((entry,index)=>{
+      const canonical=normalizeWhatsAppMessageId(entry.message_id||entry.id);
+      const key=canonical?`id:${canonical}`:`fallback:${entry.id||messageHash(entry.text)}`;
+      currentByKey.set(key,{list:"current",index});
+    });
+    const additions=[];let updatedCount=0;
+    for(const entry of visible){
+      const canonical=normalizeWhatsAppMessageId(entry.message_id||entry.id);
+      const key=canonical?`id:${canonical}`:`fallback:${entry.id||messageHash(entry.text)}`;
+      if(currentByKey.has(key)){
+        const found=currentByKey.get(key);const target=found.list==="current"?current:additions;const merged=mergeEntryMetadata(target[found.index],entry);
+        if(JSON.stringify(target[found.index])!==JSON.stringify(merged)){target[found.index]=merged;updatedCount+=1;}
+        continue;
+      }
+      currentByKey.set(key,{list:"additions",index:additions.length});
+      additions.push(entry);
+    }
+    return {entries:prepend?[...additions,...current]:[...current,...additions],addedCount:additions.length,updatedCount};
+  }
+
   function audioUnavailable(entry){
     const state=[entry?.media_status,entry?.audioMeta?.extractionStatus,entry?.audioMeta?.transcriptionStatus,entry?.audioMeta?.error,entry?.text].map(normalizedUiText).join(" ");
     return /media_unavailable|legacy_unavailable|nao_localizado_no_dom|arquivo_inexistente|mensagem de midia indisponivel/.test(state);
@@ -180,6 +204,7 @@
     playerDurationSeconds,
     normalizeEntry,
     mergeEntries,
+    mergeMessageWindow,
     audioUnavailable,
     audioFileTimestamp,
     audioMatchCandidates
