@@ -277,7 +277,8 @@ function sidebarConversationRows(){
     '[data-testid="chat-list"] [role="row"]',
     '[data-testid="chat-list"] [role="listitem"]'
   ];
-  return [...new Set(selectors.flatMap(selector=>[...document.querySelectorAll(selector)]))];
+  return [...new Set(selectors.flatMap(selector=>[...document.querySelectorAll(selector)]))]
+    .filter(row=>row.querySelector('[data-testid="cell-frame-container"],[role="gridcell"]'));
 }
 
 function sidebarSearchControl(){
