@@ -259,7 +259,7 @@ async function syncCustomerChat(request,sender){
   try{
     const opened = await ensureConversationOpened({...request,phone,request_id:operationId},{active:false,operationId});
     if(!opened.ok) return {...opened,extensionVersion:chrome.runtime.getManifest().version};
-    return await captureChatFromTab(opened.tabId,request,opened.loadedState);
+    return await captureChatFromTab(opened.tabId,{...request,phone,request_id:operationId,phoneNavigationConfirmed:true},opened.loadedState);
   }finally{
     if(activeConversationOperation === operationId) activeConversationOperation = null;
   }

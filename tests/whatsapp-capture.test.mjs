@@ -193,8 +193,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.1"/);
-  assert.equal(manifest.version,"2.3.1");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.2"/);
+  assert.equal(manifest.version,"2.3.2");
   assert(!manifest.permissions.includes("downloads"));
   assert(!manifest.permissions.includes("debugger"));
   assert.doesNotMatch(background,/"criare-(?:start-audio-download-watch|wait-audio-download|dispatch-real-mouse-move)"/);
@@ -314,4 +314,12 @@ test("central usa E.164 canônico, busca local e painel persistente",async()=>{
 
 test("preflight oferece reconexão, lista estruturada e não duplica mensagem final",async()=>{
   const crm=await readFile(new URL("../index.html",import.meta.url),"utf8");assert.match(crm,/btnReconnectExtension/);assert.match(crm,/batchPreflightHtml/);assert.match(crm,/Pré-verificação concluída\./);assert.doesNotMatch(crm,/updateWhatsAppBatchPanel\(batchPreflightLabel\(result\)\)/);
+});
+
+test("confirma conversa somente pelo telefone E.164 navegado",async()=>{
+  const content=await readFile(new URL("../whatsapp-crm-extension/content-whatsapp.js",import.meta.url),"utf8");
+  const background=await readFile(new URL("../whatsapp-crm-extension/background.js",import.meta.url),"utf8");
+  assert.doesNotMatch(content,/expectedName|nameMatches/);
+  assert.match(content,/expectedDigits && \(routedDigits===expectedDigits \|\| request\?\.phoneNavigationConfirmed===true\)/);
+  assert.match(background,/captureChatFromTab\(opened\.tabId,\{\.\.\.request,phone,request_id:operationId,phoneNavigationConfirmed:true\}/);
 });

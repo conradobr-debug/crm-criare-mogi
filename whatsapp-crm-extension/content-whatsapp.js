@@ -115,7 +115,8 @@ function sameCustomer(title, request){
   const expectedDigits = globalThis.CriarePhoneIdentity.comparableDigits(request?.phone);
   if(expectedDigits && activeDigits && activeDigits.endsWith(expectedDigits.slice(-10))) return true;
   const routedPhone = new URL(location.href).searchParams.get("phone") || "";
-  return Boolean(expectedDigits && (globalThis.CriarePhoneIdentity.comparableDigits(`+${routedPhone}`)===expectedDigits || request?.phoneNavigationConfirmed===true));
+  const routedDigits = globalThis.CriarePhoneIdentity.comparableDigits(`+${routedPhone}`);
+  return Boolean(expectedDigits && (routedDigits===expectedDigits || request?.phoneNavigationConfirmed===true));
 }
 
 function messageNodes(main=activeMain()){
