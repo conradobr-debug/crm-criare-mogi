@@ -318,7 +318,11 @@ async function openConversationFromSidebar(request={}){
   const findRow = () => sidebarConversationRows().find(row=>sidebarRowMatches(row,request));
   let row = findRow();
   if(!row){
-    const search = sidebarSearchControl();
+    let search = sidebarSearchControl();
+    for(let attempt=0;attempt<30&&!search;attempt+=1){
+      await sleep(400);
+      search = sidebarSearchControl();
+    }
     if(!search) return {ok:false,code:"sidebar_search_not_found",error:"A busca da lista lateral não foi localizada para abrir o primeiro contato."};
     setSidebarSearchValue(search,globalThis.CriarePhoneIdentity.comparableDigits(request.phone));
     for(let attempt=0;attempt<20&&!row;attempt+=1){
