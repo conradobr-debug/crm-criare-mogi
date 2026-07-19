@@ -12,7 +12,7 @@ const matcherSource = await readFile(new URL("audio-import-matcher.js", root), "
 const matcherContext = {globalThis:{CriareWhatsAppCaptureCore:core}};
 vm.runInNewContext(matcherSource, matcherContext);
 const matcher = matcherContext.globalThis.CriareAudioImportMatcher;
-assert.equal(matcher.version,"2.2.0");
+assert.equal(matcher.version,"2.2.1");
 
 test("preserva mensagens repetidas quando os IDs do WhatsApp são diferentes",()=>{
   const merged = core.mergeEntries([], [
@@ -35,6 +35,44 @@ test("atualiza mensagem editada sem duplicar o ID",()=>{
 
 test("normaliza prefixo wa e preserva o identificador completo",()=>{
   assert.equal(core.normalizeWhatsAppMessageId(" wa:acf748cbdc45c89656b816fbcc3ec5d0 "),"ACF748CBDC45C89656B816FBCC3EC5D0");
+});
+
+test("associação manual fica restrita ao inventário do lead e exige confirmação",()=>{
+  const inventory=matcher.buildInventory([
+    {message_id:"A585938634827C21AC608F52E405AA15",type:"Áudio",sender:"Você",direction:"outgoing",date:"10/06/2026",message_time:"10:51",text:"[Áudio sem transcrição]",chronological_position:7},
+    {message_id:"A574534332D0C11ED09F7DCE72DFF361",type:"Áudio",sender:"Você",direction:"outgoing",date:"11/06/2026",message_time:"13:45",text:"[Áudio sem transcrição]",chronological_position:12}
+  ]);
+  assert.deepEqual(Array.from(matcher.manualCandidates(inventory),item=>item.normalized_message_id),[
+    "A585938634827C21AC608F52E405AA15",
+    "A574534332D0C11ED09F7DCE72DFF361"
+  ]);
+  assert.equal(matcher.validateManualAssignments([{file_key:"arquivo-1",message_id:"A585938634827C21AC608F52E405AA15",confirmed:false}],inventory).ok,false);
+  assert.deepEqual(Array.from(matcher.validateManualAssignments([{file_key:"arquivo-1",message_id:"OUTRO-LEAD",confirmed:true}],inventory).errors),["message_id_fora_do_lead"]);
+});
+
+test("associação manual bloqueia arquivo e message_id reutilizados",()=>{
+  const inventory=matcher.buildInventory([
+    {message_id:"MSG-1",type:"Áudio",sender:"Você",direction:"outgoing",date:"10/06/2026",message_time:"10:51",text:"[Áudio sem transcrição]"},
+    {message_id:"MSG-2",type:"Áudio",sender:"Você",direction:"outgoing",date:"11/06/2026",message_time:"13:45",text:"[Áudio sem transcrição]"}
+  ]);
+  const result=matcher.validateManualAssignments([
+    {file_key:"arquivo-1",message_id:"MSG-1",confirmed:true},
+    {file_key:"arquivo-1",message_id:"MSG-1",confirmed:true}
+  ],inventory);
+  assert.equal(result.ok,false);
+  assert(result.errors.includes("arquivo_reutilizado"));
+  assert(result.errors.includes("message_id_reutilizado"));
+});
+
+test("metadado manual confirmado persiste e o player posterior preserva a transcrição",()=>{
+  const manual={message_id:"MSG-AUDIO",type:"Áudio",text:"[Transcrição de áudio] conteúdo confirmado",transcript:"conteúdo confirmado",audioTranscribed:true,duration_seconds:43,duration_source:"manual_confirmed",audioMeta:{durationSeconds:43,durationSource:"manual_confirmed",transcription:"conteúdo confirmado",transcriptionStatus:"completed"}};
+  const laterPlayer={message_id:"wa:MSG-AUDIO",type:"Áudio",text:"[Áudio sem transcrição]",duration_seconds:43,duration_text:"0:43",duration_source:"whatsapp_player",duration_valid:true,audioMeta:{durationSeconds:43,durationSource:"whatsapp_player"}};
+  const first=core.mergeEntries([], [manual]).entries[0];
+  assert.equal(first.duration_source,"manual_confirmed");
+  const enriched=core.mergeEntries([first],[laterPlayer]).entries[0];
+  assert.equal(enriched.duration_source,"whatsapp_player");
+  assert.equal(enriched.transcript,"conteúdo confirmado");
+  assert.match(enriched.text,/conteúdo confirmado/);
 });
 
 test("metadado confirmado do player não é rebaixado por captura posterior",()=>{
@@ -193,8 +231,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.3"/);
-  assert.equal(manifest.version,"2.3.3");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.4"/);
+  assert.equal(manifest.version,"2.3.4");
   assert(!manifest.permissions.includes("downloads"));
   assert(!manifest.permissions.includes("debugger"));
   assert.doesNotMatch(background,/"criare-(?:start-audio-download-watch|wait-audio-download|dispatch-real-mouse-move)"/);
@@ -229,6 +267,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/function audioEntryId/);
   assert.match(content,/criare-recover-audios/);
   assert.match(content,/function audioDurationText/);
+  assert.match(content,/while\(ancestor&&ancestor!==node\)/);
+  assert.match(content,/text!==visibleTime\(node\)/);
   assert.match(content,/playerDurationSeconds\(durationText\)/);
   assert.match(content,/duration_source:playerDuration\?"whatsapp_player"/);
   assert.match(content,/normalizeWhatsAppMessageId/);
@@ -241,6 +281,14 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(crm,/id="btnRefreshAudioMetadata"[^>]*>Atualizar metadados dos áudios/);
   assert.match(crm,/CriareWhatsAppCaptureCore\.mergeEntryMetadata/);
   assert.match(crm,/requestWhatsAppAudioRecovery\(record,\{metadataOnly:true\}\)/);
+  assert.match(crm,/leadId:record\.id,workspaceId:phoneWorkspaceKey\(record\),phone/);
+  assert.match(crm,/function updateCompletenessAudioMetadata\(record,button\)/);
+  assert.match(crm,/if\(action==="metadata"\)return updateCompletenessAudioMetadata\(record,button\)/);
+  assert.doesNotMatch(crm,/if\(action==="metadata"\)\{openModal\(record\)/);
+  assert.match(crm,/Atualização de metadados: \$\{stage\}/);
+  assert.match(crm,/CriareAudioImportMatcher\.validateManualAssignments/);
+  assert.match(crm,/association_status:"manual_confirmed"/);
+  assert.match(crm,/const durationSource=playerConfirmed\?"whatsapp_player":"manual_confirmed"/);
   assert.match(content,/nao_localizado_no_dom/);
   assert.match(crm,/audioImportModal/);
   assert.match(crm,/Importar áudios baixados/);

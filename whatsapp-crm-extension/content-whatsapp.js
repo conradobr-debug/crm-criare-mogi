@@ -17,8 +17,13 @@ function audioDurationText(node){
   for(const leaf of node.querySelectorAll("span,div")){
     if(leaf.children.length||leaf.closest("[data-pre-plain-text]")||leaf.closest("time"))continue;
     const text=cleanText(leaf.textContent||"");
-    const insidePlayer=Boolean(leaf.parentElement?.querySelector('button[aria-label*="mensagem de voz" i],button[aria-label*="voice message" i],[role="slider"][aria-label*="voz" i],[role="slider"][aria-label*="voice" i]'));
-    if(insidePlayer&&/^\d+:\d{2}(?::\d{2})?$/.test(text))return text;
+    let ancestor=leaf.parentElement,insidePlayer=false;
+    while(ancestor&&ancestor!==node){
+      const hasVoiceControl=Boolean(ancestor.querySelector('button[aria-label*="mensagem de voz" i],button[aria-label*="voice message" i],[role="slider"][aria-label*="recado de voz" i],[role="slider"][aria-label*="mensagem de voz" i],[role="slider"][aria-label*="voice" i]'));
+      if(hasVoiceControl){insidePlayer=true;break;}
+      ancestor=ancestor.parentElement;
+    }
+    if(insidePlayer&&text!==visibleTime(node)&&/^\d+:\d{2}(?::\d{2})?$/.test(text))return text;
   }
   const players=[...node.querySelectorAll('[data-testid*="audio" i],[aria-label*="mensagem de voz" i],[aria-label*="voice message" i],audio')];
   const sources=[];

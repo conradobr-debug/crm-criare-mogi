@@ -30,7 +30,7 @@
   function audioDurationPriority(entry){
     const source=audioDurationSource(entry);
     if(source==="whatsapp_player")return 5;
-    if(source==="imported_file"||source==="confirmed")return 4;
+    if(["manual_confirmed","imported_confirmed","imported_file","confirmed"].includes(source))return 4;
     if(source==="audio_meta"||source==="message_duration")return 3;
     if(source==="unconfirmed")return 2;
     if(source==="legacy_invalid")return 1;

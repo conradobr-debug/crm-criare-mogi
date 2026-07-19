@@ -1,7 +1,7 @@
 (function(global){
   "use strict";
 
-  const VERSION="2.2.0";
+  const VERSION="2.2.1";
   const TIME_TOLERANCE_SECONDS=12*60*60;
   const UNAVAILABLE_STATES=["media_unavailable","legacy_unavailable","nao_localizado_no_dom","arquivo_inexistente"];
   const normalizeWhatsAppMessageId=value=>global.CriareWhatsAppCaptureCore.normalizeWhatsAppMessageId(value);
@@ -26,7 +26,7 @@
 
   function durationInfo(entry){
     const source=String(entry?.duration_source||entry?.audioMeta?.durationSource||"").trim();
-    const confirmedSource=["whatsapp_player","confirmed","imported_file","audio_meta","message_duration"].includes(source);
+    const confirmedSource=["whatsapp_player","manual_confirmed","imported_confirmed","confirmed","imported_file","audio_meta","message_duration"].includes(source);
     const confirmed=confirmedSource?Number(entry?.duration_seconds||entry?.duration||entry?.audioMeta?.durationSeconds||0):0;
     if(Number.isFinite(confirmed)&&confirmed>0&&confirmed<600)return {duration:confirmed,duration_seconds:confirmed,duration_valid:true,duration_source:source};
     const audioMeta=Number(entry?.audioMeta?.durationSeconds||0);
@@ -122,6 +122,30 @@
 
   function compareFile(file,inventory,options={}){return matchFiles([file],inventory,options).results[0]||{file:fileMetadata(file),comparisons:[],ranked:[],top3:[],assigned:null,margin:0,autoSelect:false};}
 
-  const api={version:VERSION,buildInventory,fileMetadata,messageTimestamp,durationTolerance,evaluatePair,hungarianMax,matchFiles,compareFile,durationInfo,directionOf,unavailableReason};
+  function manualCandidates(inventory,{allowReplaceIds=[]}={}){
+    const replacements=new Set(allowReplaceIds);
+    return (Array.isArray(inventory)?inventory:[]).filter(candidate=>{
+      if(!candidate?.normalized_message_id)return false;
+      if(unavailableReason(candidate.entry||candidate))return false;
+      if(candidate.transcript&&!replacements.has(candidate.normalized_message_id))return false;
+      return true;
+    });
+  }
+
+  function validateManualAssignments(assignments,inventory,options={}){
+    const candidates=new Set(manualCandidates(inventory,options).map(item=>item.normalized_message_id));
+    const files=new Set(),messages=new Set(),errors=[];
+    for(const assignment of Array.isArray(assignments)?assignments:[]){
+      const fileKey=String(assignment?.file_key||"");const messageId=normalizeWhatsAppMessageId(assignment?.message_id);
+      if(!assignment?.confirmed)errors.push("confirmacao_obrigatoria");
+      if(!fileKey||files.has(fileKey))errors.push("arquivo_reutilizado");
+      if(!messageId||messages.has(messageId))errors.push("message_id_reutilizado");
+      if(messageId&&!candidates.has(messageId))errors.push("message_id_fora_do_lead");
+      files.add(fileKey);messages.add(messageId);
+    }
+    return {ok:errors.length===0,errors:[...new Set(errors)]};
+  }
+
+  const api={version:VERSION,buildInventory,fileMetadata,messageTimestamp,durationTolerance,evaluatePair,hungarianMax,matchFiles,compareFile,durationInfo,directionOf,unavailableReason,manualCandidates,validateManualAssignments};
   global.CriareAudioImportMatcher=api;if(typeof module!=="undefined"&&module.exports)module.exports=api;
 })(typeof globalThis!=="undefined"?globalThis:this);
