@@ -193,8 +193,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.2"/);
-  assert.equal(manifest.version,"2.3.2");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.3"/);
+  assert.equal(manifest.version,"2.3.3");
   assert(!manifest.permissions.includes("downloads"));
   assert(!manifest.permissions.includes("debugger"));
   assert.doesNotMatch(background,/"criare-(?:start-audio-download-watch|wait-audio-download|dispatch-real-mouse-move)"/);
@@ -322,4 +322,11 @@ test("confirma conversa somente pelo telefone E.164 navegado",async()=>{
   assert.doesNotMatch(content,/expectedName|nameMatches/);
   assert.match(content,/expectedDigits && \(routedDigits===expectedDigits \|\| request\?\.phoneNavigationConfirmed===true\)/);
   assert.match(background,/captureChatFromTab\(opened\.tabId,\{\.\.\.request,phone,request_id:operationId,phoneNavigationConfirmed:true\}/);
+});
+
+test("fallback reconhece o campo de busca atual da lista lateral",async()=>{
+  const content=await readFile(new URL("../whatsapp-crm-extension/content-whatsapp.js",import.meta.url),"utf8");
+  assert.match(content,/aria-placeholder\*="Pesquisar"/);
+  assert.match(content,/aria-label\*="Pesquisar"/);
+  assert.match(content,/data-tab="3"/);
 });

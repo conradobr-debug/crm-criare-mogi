@@ -265,7 +265,17 @@ function sidebarConversationRows(){
 }
 
 function sidebarSearchControl(){
-  return document.querySelector('#pane-side input,#pane-side [contenteditable="true"][role="textbox"],#pane-side [contenteditable="true"],[data-testid="chat-list-search"] input,[data-testid="chat-list-search"] [contenteditable="true"]');
+  return document.querySelector([
+    '#pane-side input',
+    '#pane-side [contenteditable="true"][role="textbox"]',
+    '#pane-side [contenteditable="true"]',
+    '[data-testid="chat-list-search"] input',
+    '[data-testid="chat-list-search"] [contenteditable="true"]',
+    '[contenteditable="true"][role="textbox"][aria-placeholder*="Pesquisar" i]',
+    '[contenteditable="true"][role="textbox"][aria-label*="Pesquisar" i]',
+    'input[placeholder*="Pesquisar" i]',
+    '[contenteditable="true"][role="textbox"][data-tab="3"]'
+  ].join(','));
 }
 
 function sidebarRowMatches(row,request={}){
