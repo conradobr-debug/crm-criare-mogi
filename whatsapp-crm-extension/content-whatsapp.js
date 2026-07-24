@@ -129,15 +129,11 @@ function messageNodes(main=activeMain()){
   const voiceRoots=[...main.querySelectorAll(VOICE_MESSAGE_SELECTOR)].map(node=>node.closest('[data-testid^="conv-msg-"],[data-id],[role="row"]')||node.closest('[data-testid="msg-container"]')||node);
   const roots=[...main.querySelectorAll('[data-testid^="conv-msg-"],[data-id]'),...voiceRoots];
   const containers=[...main.querySelectorAll('[data-testid="msg-container"]')];
-  const unique=new Set(),seenIds=new Set();
-  return [...roots,...containers].map(node=>node.closest('[data-testid^="conv-msg-"]')||node.closest('[data-id]')||node.closest('[role="row"]')||node)
-    .filter(node=>{
-      if(!node||unique.has(node))return false;
-      const id=cleanText(node.getAttribute("data-id")||node.querySelector('[data-id]')?.getAttribute("data-id")||"");
-      const isMessage=Boolean(node.matches('[data-testid^="conv-msg-"]')||node.querySelector('[data-testid="msg-container"],[data-pre-plain-text]')||hasVoiceMessage(node));
-      if(!isMessage||(id&&seenIds.has(id)))return false;
-      unique.add(node);if(id)seenIds.add(id);return true;
-    });
+  const candidates=[...roots,...containers].map((node,order)=>({node:node.closest('[data-testid^="conv-msg-"]')||node.closest('[data-id]')||node.closest('[role="row"]')||node,order})).filter(({node})=>Boolean(node&&(node.matches('[data-testid^="conv-msg-"]')||node.querySelector('[data-testid="msg-container"],[data-pre-plain-text]')||hasVoiceMessage(node))));
+  const selectedVoices=new Map(),selectedMessages=new Map();
+  const score=node=>(node.querySelector('[data-pre-plain-text]')?100:0)+(messageId(node)?20:0)+(node.matches('[data-testid^="conv-msg-"]')?10:0);
+  for(const candidate of candidates){const voice=candidate.node.matches?.(VOICE_MESSAGE_SELECTOR)?candidate.node:candidate.node.querySelector(VOICE_MESSAGE_SELECTOR);if(voice){const prior=selectedVoices.get(voice);if(!prior||score(candidate.node)>score(prior.node))selectedVoices.set(voice,candidate);continue;}const id=messageId(candidate.node)||`node:${candidate.order}`;if(!selectedMessages.has(id))selectedMessages.set(id,candidate);}
+  return [...selectedMessages.values(),...selectedVoices.values()].sort((left,right)=>left.order-right.order).map(item=>item.node);
 }
 
 function messageId(node){
