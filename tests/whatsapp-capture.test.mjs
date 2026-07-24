@@ -301,8 +301,11 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.reachedStart && history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.7"/);
-  assert.equal(manifest.version,"2.3.7");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.8"/);
+  assert.equal(manifest.version,"2.3.8");
+  assert.match(content,/VOICE_MESSAGE_SELECTOR/);
+  assert.match(content,/\[data-testid\*="ptt" i\]/);
+  assert.match(content,/\[data-icon\*="ptt" i\]/);
   assert.match(content,/for\(let attempt=0;attempt<30&&!search;attempt\+=1\)/);
   assert.match(content,/filter\(row=>row\.querySelector\('\[data-testid="cell-frame-container"\],\[role="gridcell"\]'\)\)/);
   assert(!manifest.permissions.includes("downloads"));

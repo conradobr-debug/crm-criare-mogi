@@ -8,7 +8,9 @@ function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 
 const LOCAL_TRANSCRIBER_URL = "http://127.0.0.1:32123/v1/transcribe";
 const AUDIO_MAX_BYTES = 15 * 1024 * 1024;
-function voiceMessageNodes(main=activeMain()){return messageNodes(main).filter(node=>node.querySelector('[aria-label*="mensagem de voz" i],[aria-label*="voice message" i],[data-testid*="audio" i],audio'));}
+const VOICE_MESSAGE_SELECTOR='[aria-label*="mensagem de voz" i],[aria-label*="voice message" i],[data-testid*="audio" i],[data-testid*="ptt" i],[data-icon*="audio" i],[data-icon*="ptt" i],audio';
+function hasVoiceMessage(node){return Boolean(node?.querySelector(VOICE_MESSAGE_SELECTOR));}
+function voiceMessageNodes(main=activeMain()){return messageNodes(main).filter(hasVoiceMessage);}
 function audioElement(node){return node.querySelector("audio")||null;}
 function audioSource(node){const audio=audioElement(node);const candidates=[audio?.currentSrc,audio?.src,audio?.getAttribute("src"),node.querySelector("a[download],a[href*='blob:'],[data-url],[data-download-url]")?.getAttribute("href"),node.querySelector("[data-url],[data-download-url]")?.getAttribute("data-url")];return candidates.map(value=>String(value||"").trim()).find(value=>/^(blob:|data:|https?:)/i.test(value))||"";}
 function audioDurationText(node){
@@ -379,7 +381,7 @@ function waitForConversationStable(request={}, {timeoutMs=65000}={}){
 }
 
 function mediaType(node){
-  if(node.querySelector('[data-testid*="audio" i],audio,[aria-label*="mensagem de voz" i],[aria-label*="voice message" i]')) return "Áudio";
+  if(hasVoiceMessage(node)) return "Áudio";
   if(node.querySelector('[data-testid*="document" i],[aria-label*="documento" i],[aria-label*="document" i]')) return "Documento";
   if(node.querySelector('[data-testid*="video" i],video,[aria-label*="vídeo" i],[aria-label*="video" i]')) return "Vídeo";
   if(node.querySelector('[data-testid*="location" i],a[href*="maps.google"],a[aria-label*="localização" i]')) return "Localização";
