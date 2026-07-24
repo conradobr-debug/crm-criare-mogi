@@ -1,7 +1,7 @@
 (function(global){
   "use strict";
 
-  const VERSION="2.2.3";
+  const VERSION="2.2.4";
   const TIME_TOLERANCE_SECONDS=12*60*60;
   const UNAVAILABLE_STATES=["media_unavailable","legacy_unavailable","nao_localizado_no_dom","arquivo_inexistente"];
   const normalizeWhatsAppMessageId=value=>global.CriareWhatsAppCaptureCore.normalizeWhatsAppMessageId(value);
@@ -133,7 +133,7 @@
     const metadata=(Array.isArray(files)?files:[]).map(fileMetadata);const candidates=(Array.isArray(inventory)?inventory:[]).filter(item=>item.normalized_message_id);
     const chronologicalFiles=[...metadata].sort((a,b)=>(a.timestamp??Infinity)-(b.timestamp??Infinity)||a.name.localeCompare(b.name));const fileRanks=new Map(chronologicalFiles.map((file,index)=>[file.import_order,index]));
     const chronologicalCandidates=[...candidates].sort((a,b)=>a.position-b.position||a.visual_index-b.visual_index);const candidateRanks=new Map(chronologicalCandidates.map((item,index)=>[item.normalized_message_id,index]));const visualCandidates=[...candidates].sort((a,b)=>a.visual_index-b.visual_index||a.position-b.position);const visualRanks=new Map(visualCandidates.map((item,index)=>[item.normalized_message_id,index]));
-    const calendarDateShiftMs=inferredCalendarDateShift(metadata,candidates,options);const context={...options,reservedIds:new Set(options.reservedMessageIds||[]),allowReplaceIds:new Set(options.allowReplaceIds||[]),fileRanks,candidateRanks,visualRanks,fileCount:metadata.length,candidateCount:candidates.length,calendarDateShiftMs};
+    const inferredShiftMs=inferredCalendarDateShift(metadata,candidates,options);const preservedShiftMs=Number(options.calendarDateShiftMs||0);const calendarDateShiftMs=inferredShiftMs||preservedShiftMs;const context={...options,reservedIds:new Set(options.reservedMessageIds||[]),allowReplaceIds:new Set(options.allowReplaceIds||[]),fileRanks,candidateRanks,visualRanks,fileCount:metadata.length,candidateCount:candidates.length,calendarDateShiftMs};
     const comparisons=metadata.map(file=>candidates.map(candidate=>evaluatePair(file,candidate,context)));
     const weights=comparisons.map(row=>row.map(pair=>pair.plausible?pair.score:-100000));const assignment=hungarianMax(weights);
     const results=metadata.map((file,fileIndex)=>{const ranked=comparisons[fileIndex].filter(pair=>pair.plausible).sort((a,b)=>b.score-a.score||a.position-b.position);const column=assignment[fileIndex];const assigned=column>=0&&comparisons[fileIndex][column]?.plausible?comparisons[fileIndex][column]:null;const secondBest=assigned?ranked.find(item=>item.normalized_message_id!==assigned.normalized_message_id):null;const margin=assigned?assigned.score-(secondBest?.score??0):0;const critical=Boolean(assigned?.normalized_message_id&&assigned?.sender&&assigned?.direction!=="unknown"&&assigned?.date&&assigned?.message_time&&assigned?.duration_valid);const oneSecondExact=Boolean(assigned&&assigned.duration_difference<=1&&assigned.time_difference_seconds<=120&&ranked.filter(item=>item.duration_difference<=1&&item.time_difference_seconds<=120).length===1);const autoSelect=Boolean(assigned&&critical&&((assigned.score>=95&&margin>=10)||oneSecondExact));return {file,comparisons:comparisons[fileIndex],ranked,top3:ranked.slice(0,3),assigned,margin,autoSelect};});
