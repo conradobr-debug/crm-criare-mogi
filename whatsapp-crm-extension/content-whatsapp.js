@@ -126,7 +126,8 @@ function sameCustomer(title, request){
 
 function messageNodes(main=activeMain()){
   if(!main) return [];
-  const roots=[...main.querySelectorAll('[data-testid^="conv-msg-"],[data-id]')];
+  const voiceRoots=[...main.querySelectorAll(VOICE_MESSAGE_SELECTOR)].map(node=>node.closest('[data-testid^="conv-msg-"],[data-id],[role="row"]')||node.closest('[data-testid="msg-container"]')||node);
+  const roots=[...main.querySelectorAll('[data-testid^="conv-msg-"],[data-id]'),...voiceRoots];
   const containers=[...main.querySelectorAll('[data-testid="msg-container"]')];
   const unique=new Set(),seenIds=new Set();
   return [...roots,...containers].map(node=>node.closest('[data-testid^="conv-msg-"]')||node.closest('[data-id]')||node.closest('[role="row"]')||node)
