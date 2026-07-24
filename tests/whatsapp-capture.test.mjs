@@ -313,8 +313,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.reachedStart && history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.11"/);
-  assert.equal(manifest.version,"2.3.11");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.12"/);
+  assert.equal(manifest.version,"2.3.12");
   assert.match(content,/VOICE_MESSAGE_SELECTOR/);
   assert.match(content,/\[data-testid\*="ptt" i\]/);
   assert.match(content,/\[data-icon\*="ptt" i\]/);
@@ -358,7 +358,10 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/criare-recover-audios/);
   assert.match(content,/function audioDurationText/);
   assert.match(content,/while\(ancestor&&ancestor!==node\)/);
-  assert.match(content,/text!==visibleTime\(node\)/);
+  assert.match(content,/text!==messageTime/);
+  assert.match(content,/const messageTime=visibleTime\(node\)/);
+  assert.match(content,/const durationLeaves=\[\]/);
+  assert.match(content,/durationLeaves\.sort/);
   assert.match(content,/playerDurationSeconds\(durationText\)/);
   assert.match(content,/duration_source:playerDuration\?"whatsapp_player"/);
   assert.match(content,/normalizeWhatsAppMessageId/);

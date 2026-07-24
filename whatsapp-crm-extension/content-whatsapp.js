@@ -16,17 +16,31 @@ function audioSource(node){const audio=audioElement(node);const candidates=[audi
 function audioDurationText(node){
   // O horário da mensagem fica fora do player. Só aceitamos nós-folha que
   // pertencem ao controle de áudio; nunca usamos o texto completo da bolha.
+  const messageTime=visibleTime(node);
+  const durationLeaves=[];
   for(const leaf of node.querySelectorAll("span,div")){
-    if(leaf.children.length||leaf.closest("[data-pre-plain-text]")||leaf.closest("time"))continue;
+    // Em versões recentes do WhatsApp, tanto o player quanto o horário podem
+    // ficar dentro do mesmo data-pre-plain-text. Não descarte todo o subtree:
+    // descarte apenas o elemento de horário e valide o texto de duração.
+    if(leaf.children.length||leaf.closest("time"))continue;
     const text=cleanText(leaf.textContent||"");
+    const seconds=playerDurationSeconds(text);
+    if(seconds&&seconds<600&&text!==messageTime)durationLeaves.push({text,seconds,insidePlayer:false});
     let ancestor=leaf.parentElement,insidePlayer=false;
     while(ancestor&&ancestor!==node){
-      const hasVoiceControl=Boolean(ancestor.querySelector('button[aria-label*="mensagem de voz" i],button[aria-label*="voice message" i],[role="slider"][aria-label*="recado de voz" i],[role="slider"][aria-label*="mensagem de voz" i],[role="slider"][aria-label*="voice" i]'));
+      const hasVoiceControl=Boolean(ancestor.querySelector('button[aria-label*="mensagem de voz" i],button[aria-label*="voice message" i],[role="slider"],[data-testid*="audio" i],[data-testid*="ptt" i],audio'));
       if(hasVoiceControl){insidePlayer=true;break;}
       ancestor=ancestor.parentElement;
     }
-    if(insidePlayer&&text!==visibleTime(node)&&/^\d+:\d{2}(?::\d{2})?$/.test(text))return text;
+    if(insidePlayer&&seconds&&seconds<600&&text!==messageTime)durationLeaves[durationLeaves.length-1].insidePlayer=true;
   }
+  // O player pode não expor aria-label/data-testid em todas as versões. Como
+  // esta função só é chamada em uma bolha já identificada como áudio, o maior
+  // contador interno válido (por exemplo, 0:12 em vez de 0:00) é seguro e
+  // preserva a duração real sem usar o horário da mensagem.
+  const leafDuration=durationLeaves.filter(item=>item.insidePlayer).sort((left,right)=>right.seconds-left.seconds)[0]
+    || durationLeaves.sort((left,right)=>right.seconds-left.seconds)[0];
+  if(leafDuration)return leafDuration.text;
   const players=[...node.querySelectorAll('[data-testid*="audio" i],[aria-label*="mensagem de voz" i],[aria-label*="voice message" i],audio')];
   const sources=[];
   for(const player of players){
