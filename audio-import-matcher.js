@@ -1,7 +1,7 @@
 (function(global){
   "use strict";
 
-  const VERSION="2.2.4";
+  const VERSION="2.2.5";
   const TIME_TOLERANCE_SECONDS=12*60*60;
   const UNAVAILABLE_STATES=["media_unavailable","legacy_unavailable","nao_localizado_no_dom","arquivo_inexistente"];
   const normalizeWhatsAppMessageId=value=>global.CriareWhatsAppCaptureCore.normalizeWhatsAppMessageId(value);
@@ -108,8 +108,10 @@
     if(!file.duration)return reject("duracao_do_arquivo_nao_lida");
     const difference=Math.abs(file.duration-candidate.duration);const tolerance=durationTolerance(file.duration);
     if(difference>tolerance)return reject("duracao_fisicamente_incompativel");
-    const dateKey=messageDateKey(candidate),shiftMs=Number(context.calendarDateShiftMs||0),adjustedFileTimestamp=Number.isFinite(file.timestamp)?file.timestamp+shiftMs:null,adjustedFileDateKey=dateKeyFromTimestamp(adjustedFileTimestamp)||file.date;if(file.date&&dateKey&&adjustedFileDateKey!==dateKey)return reject("data_incompativel");
-    const timestamp=messageTimestamp(candidate);const timeDifference=Number.isFinite(adjustedFileTimestamp)&&Number.isFinite(timestamp)?Math.abs(adjustedFileTimestamp-timestamp)/1000:null;
+    const dateKey=messageDateKey(candidate),timestamp=messageTimestamp(candidate);let shiftMs=Number(context.calendarDateShiftMs||0),adjustedFileTimestamp=Number.isFinite(file.timestamp)?file.timestamp+shiftMs:null,adjustedFileDateKey=dateKeyFromTimestamp(adjustedFileTimestamp)||file.date;
+    if(file.date&&dateKey&&adjustedFileDateKey!==dateKey&&Number.isFinite(file.timestamp)&&Number.isFinite(timestamp)&&!shiftMs){const singleDayShift=Math.round((timestamp-file.timestamp)/DAY_MS)*DAY_MS;const aligned=Math.abs((file.timestamp+singleDayShift)-timestamp)<=120*1000;if(Math.abs(singleDayShift)===DAY_MS&&aligned&&difference<=1){shiftMs=singleDayShift;adjustedFileTimestamp=file.timestamp+shiftMs;adjustedFileDateKey=dateKeyFromTimestamp(adjustedFileTimestamp)||file.date;}}
+    if(file.date&&dateKey&&adjustedFileDateKey!==dateKey)return reject("data_incompativel");
+    const timeDifference=Number.isFinite(adjustedFileTimestamp)&&Number.isFinite(timestamp)?Math.abs(adjustedFileTimestamp-timestamp)/1000:null;
     if(Number.isFinite(file.timestamp)&&!Number.isFinite(timestamp))return reject("data_hora_da_mensagem_ausente");
     if(Number.isFinite(timeDifference)&&timeDifference>(context.timeToleranceSeconds||TIME_TOLERANCE_SECONDS))return reject("horario_fora_da_tolerancia");
     const durationWithinOneSecond=difference<=1&&(!Number.isFinite(timeDifference)||timeDifference<=120);const durationQuality=durationWithinOneSecond?1:Math.max(0,1-difference/tolerance);const timeQuality=Number.isFinite(timeDifference)?Math.max(0,1-timeDifference/(context.timeToleranceSeconds||TIME_TOLERANCE_SECONDS)):0;

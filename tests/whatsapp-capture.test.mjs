@@ -12,7 +12,7 @@ const matcherSource = await readFile(new URL("audio-import-matcher.js", root), "
 const matcherContext = {globalThis:{CriareWhatsAppCaptureCore:core}};
 vm.runInNewContext(matcherSource, matcherContext);
 const matcher = matcherContext.globalThis.CriareAudioImportMatcher;
-assert.equal(matcher.version,"2.2.4");
+assert.equal(matcher.version,"2.2.5");
 
 test("preserva mensagens repetidas quando os IDs do WhatsApp são diferentes",()=>{
   const merged = core.mergeEntries([], [
@@ -236,6 +236,18 @@ test("preserva a diferença de calendário comprovada quando resta um único áu
   assert.equal(matching.calendar_date_shift_days,-1);
   assert.equal(matching.assignments[0].message_id,"MARCIA-31");
   assert.equal(matching.results[0].autoSelect,true);
+});
+
+test("associa automaticamente um download com data deslocada em um dia quando horário e duração são únicos",()=>{
+  const inventory=matcher.buildInventory([
+    {message_id:"KATY-46",type:"Áudio",sender:"Você",direction:"outgoing",date:"21/07/2026",time:"10:06",duration_seconds:46,duration_source:"whatsapp_player",text:"[Áudio sem transcrição]",chronological_position:0}
+  ]);
+  const matching=matcher.matchFiles([
+    {name:"WhatsApp Ptt 2026-07-22 at 10.06.26.ogg",duration:46,import_order:0}
+  ],inventory,{directionMode:"outgoing"});
+  assert.equal(matching.assignments[0].message_id,"KATY-46");
+  assert.equal(matching.results[0].autoSelect,true);
+  assert(matching.results[0].assigned?.reasons.includes("data ajustada por diferença de calendário confirmada"));
 });
 
 test("matching seleciona automaticamente diferença de um segundo quando o horário confirma",()=>{
