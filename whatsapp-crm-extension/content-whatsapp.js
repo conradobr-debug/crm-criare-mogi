@@ -126,13 +126,17 @@ function sameCustomer(title, request){
 
 function messageNodes(main=activeMain()){
   if(!main) return [];
-  const current = [...main.querySelectorAll('[data-testid^="conv-msg-"]')]
-    .filter(node=>node.getAttribute("data-id")||node.querySelector('[data-id]'));
-  if(current.length) return current;
-  const containers = [...main.querySelectorAll('[data-testid="msg-container"]')];
-  const unique = new Set();
-  return containers.map(node=>node.closest('[data-id]') || node.closest('[role="row"]') || node)
-    .filter(node=>node && !unique.has(node) && unique.add(node));
+  const roots=[...main.querySelectorAll('[data-testid^="conv-msg-"],[data-id]')];
+  const containers=[...main.querySelectorAll('[data-testid="msg-container"]')];
+  const unique=new Set(),seenIds=new Set();
+  return [...roots,...containers].map(node=>node.closest('[data-testid^="conv-msg-"]')||node.closest('[data-id]')||node.closest('[role="row"]')||node)
+    .filter(node=>{
+      if(!node||unique.has(node))return false;
+      const id=cleanText(node.getAttribute("data-id")||node.querySelector('[data-id]')?.getAttribute("data-id")||"");
+      const isMessage=Boolean(node.matches('[data-testid^="conv-msg-"]')||node.querySelector('[data-testid="msg-container"],[data-pre-plain-text]')||hasVoiceMessage(node));
+      if(!isMessage||(id&&seenIds.has(id)))return false;
+      unique.add(node);if(id)seenIds.add(id);return true;
+    });
 }
 
 function messageId(node){
