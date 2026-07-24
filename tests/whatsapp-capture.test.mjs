@@ -12,7 +12,7 @@ const matcherSource = await readFile(new URL("audio-import-matcher.js", root), "
 const matcherContext = {globalThis:{CriareWhatsAppCaptureCore:core}};
 vm.runInNewContext(matcherSource, matcherContext);
 const matcher = matcherContext.globalThis.CriareAudioImportMatcher;
-assert.equal(matcher.version,"2.2.1");
+assert.equal(matcher.version,"2.2.2");
 
 test("preserva mensagens repetidas quando os IDs do WhatsApp são diferentes",()=>{
   const merged = core.mergeEntries([], [
@@ -208,6 +208,22 @@ test("matching global resolve arquivos em ordem inversa e exclui enviados e indi
   assert.equal(new Set(matching.assignments.map(item=>item.message_id)).size,2);
   assert(matching.results.every(result=>result.comparisons.find(item=>item.normalized_message_id==="OUT17").comparison_reason==="direcao_incompativel"));
   assert(matching.results.every(result=>result.comparisons.find(item=>item.normalized_message_id==="UNAVAILABLE").comparison_reason==="media_unavailable"));
+});
+
+test("matching confirma a diferença de um dia entre nome do download e áudios do WhatsApp",()=>{
+  const inventory=matcher.buildInventory([
+    {message_id:"MARCIA-31",type:"Áudio",sender:"Você",direction:"outgoing",date:"23/07/2026",time:"09:54",duration_seconds:31,duration_source:"whatsapp_player",text:"[Áudio sem transcrição]",chronological_position:0},
+    {message_id:"MARCIA-9",type:"Áudio",sender:"Márcia Guarnieri",direction:"incoming",date:"23/07/2026",time:"10:06",duration_seconds:9,duration_source:"whatsapp_player",text:"[Áudio sem transcrição]",chronological_position:1},
+    {message_id:"MARCIA-12",type:"Áudio",sender:"Você",direction:"outgoing",date:"23/07/2026",time:"11:02",duration_seconds:12,duration_source:"whatsapp_player",text:"[Áudio sem transcrição]",chronological_position:2}
+  ]);
+  const matching=matcher.matchFiles([
+    {name:"WhatsApp Ptt 2026-07-24 at 09.54.20.ogg",duration:31,import_order:0},
+    {name:"WhatsApp Ptt 2026-07-24 at 10.06.11.ogg",duration:9,import_order:1},
+    {name:"WhatsApp Ptt 2026-07-24 at 11.02.00.ogg",duration:12,import_order:2}
+  ],inventory,{directionMode:"both"});
+  assert.equal(matching.calendar_date_shift_days,-1);
+  assert.deepEqual(matching.assignments.map(item=>item.message_id),["MARCIA-31","MARCIA-9","MARCIA-12"]);
+  assert(matching.results.every(result=>result.assigned?.reasons.includes("data ajustada por diferença de calendário confirmada")));
 });
 
 test("duração confirmada no player substitui valor legado derivado do horário",()=>{

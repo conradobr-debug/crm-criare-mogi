@@ -1,7 +1,7 @@
 (function(global){
   "use strict";
 
-  const VERSION="2.2.1";
+  const VERSION="2.2.2";
   const TIME_TOLERANCE_SECONDS=12*60*60;
   const UNAVAILABLE_STATES=["media_unavailable","legacy_unavailable","nao_localizado_no_dom","arquivo_inexistente"];
   const normalizeWhatsAppMessageId=value=>global.CriareWhatsAppCaptureCore.normalizeWhatsAppMessageId(value);
@@ -76,6 +76,26 @@
   function messageTimestamp(candidate){const date=String(candidate.date||"").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);const time=String(candidate.message_time||candidate.time||"").match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);return date&&time?Date.UTC(+date[3],+date[2]-1,+date[1],+time[1],+time[2],+(time[3]||0)):null;}
   function messageDateKey(candidate){const date=String(candidate.date||"").match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);return date?`${date[3]}-${date[2].padStart(2,"0")}-${date[1].padStart(2,"0")}`:"";}
   const durationTolerance=seconds=>Math.max(2,Number(seconds||0)*.1);
+  const DAY_MS=24*60*60*1000;
+  function dateKeyFromTimestamp(timestamp){if(!Number.isFinite(timestamp))return "";const date=new Date(timestamp);return `${date.getUTCFullYear()}-${String(date.getUTCMonth()+1).padStart(2,"0")}-${String(date.getUTCDate()).padStart(2,"0")}`;}
+  function inferredCalendarDateShift(metadata,candidates,options={}){
+    const counts=new Map(),directionMode=options.directionMode||"";
+    for(const file of metadata){
+      if(!file.duration||!Number.isFinite(file.timestamp))continue;
+      for(const candidate of candidates){
+        const candidateTimestamp=messageTimestamp(candidate);
+        if(!candidate.eligible||!Number.isFinite(candidateTimestamp))continue;
+        if(directionMode!=="both"&&candidate.direction!==directionMode)continue;
+        if(Math.abs(file.duration-candidate.duration)>durationTolerance(file.duration))continue;
+        const shiftDays=Math.round((candidateTimestamp-file.timestamp)/DAY_MS);
+        if(Math.abs(shiftDays)!==1)continue;
+        if(Math.abs((file.timestamp+shiftDays*DAY_MS)-candidateTimestamp)>2*60*1000)continue;
+        counts.set(shiftDays,(counts.get(shiftDays)||0)+1);
+      }
+    }
+    const ranked=[...counts.entries()].sort((a,b)=>b[1]-a[1]||Math.abs(a[0])-Math.abs(b[0])),best=ranked[0];
+    return best&&best[1]>=2&&(ranked.length===1||best[1]>ranked[1][1])?best[0]*DAY_MS:0;
+  }
 
   function evaluatePair(file,candidate,context={}){
     const reserved=context.reservedIds||new Set();const allowReplace=context.allowReplaceIds||new Set();const directionMode=context.directionMode||"";
@@ -88,15 +108,15 @@
     if(!file.duration)return reject("duracao_do_arquivo_nao_lida");
     const difference=Math.abs(file.duration-candidate.duration);const tolerance=durationTolerance(file.duration);
     if(difference>tolerance)return reject("duracao_fisicamente_incompativel");
-    const dateKey=messageDateKey(candidate);if(file.date&&dateKey&&file.date!==dateKey)return reject("data_incompativel");
-    const timestamp=messageTimestamp(candidate);const timeDifference=Number.isFinite(file.timestamp)&&Number.isFinite(timestamp)?Math.abs(file.timestamp-timestamp)/1000:null;
+    const dateKey=messageDateKey(candidate),shiftMs=Number(context.calendarDateShiftMs||0),adjustedFileTimestamp=Number.isFinite(file.timestamp)?file.timestamp+shiftMs:null,adjustedFileDateKey=dateKeyFromTimestamp(adjustedFileTimestamp)||file.date;if(file.date&&dateKey&&adjustedFileDateKey!==dateKey)return reject("data_incompativel");
+    const timestamp=messageTimestamp(candidate);const timeDifference=Number.isFinite(adjustedFileTimestamp)&&Number.isFinite(timestamp)?Math.abs(adjustedFileTimestamp-timestamp)/1000:null;
     if(Number.isFinite(file.timestamp)&&!Number.isFinite(timestamp))return reject("data_hora_da_mensagem_ausente");
     if(Number.isFinite(timeDifference)&&timeDifference>(context.timeToleranceSeconds||TIME_TOLERANCE_SECONDS))return reject("horario_fora_da_tolerancia");
     const durationQuality=Math.max(0,1-difference/tolerance);const timeQuality=Number.isFinite(timeDifference)?Math.max(0,1-timeDifference/(context.timeToleranceSeconds||TIME_TOLERANCE_SECONDS)):0;
     const fileRank=context.fileRanks?.get(file.import_order)??0;const candidateRank=context.candidateRanks?.get(candidate.normalized_message_id)??0;const rankSpan=Math.max(1,(context.fileCount||1)-1,(context.candidateCount||1)-1);const orderQuality=Math.max(0,1-Math.abs(fileRank-candidateRank)/rankSpan);
     const visualRank=context.visualRanks?.get(candidate.normalized_message_id)??candidateRank;const visualQuality=Math.max(0,1-Math.abs(fileRank-visualRank)/rankSpan);
     const reasons=["duração fisicamente compatível",directionMode==="both"?"direção aceita no modo Ambos":"direção compatível"];
-    if(Number.isFinite(timeDifference))reasons.push("data/horário compatíveis");if(orderQuality>=.8)reasons.push("ordem cronológica compatível");if(visualQuality>=.8)reasons.push("posição visual compatível");
+    if(Number.isFinite(timeDifference))reasons.push(shiftMs?"data ajustada por diferença de calendário confirmada":"data/horário compatíveis");if(orderQuality>=.8)reasons.push("ordem cronológica compatível");if(visualQuality>=.8)reasons.push("posição visual compatível");
     const score=Math.round(55*durationQuality+25*timeQuality+10+5*orderQuality+5*visualQuality);
     return {...candidate,plausible:true,score,reasons,comparison_reason:"candidato plausível",duration_difference:difference,duration_tolerance:tolerance,time_difference_seconds:timeDifference};
   }
@@ -113,11 +133,11 @@
     const metadata=(Array.isArray(files)?files:[]).map(fileMetadata);const candidates=(Array.isArray(inventory)?inventory:[]).filter(item=>item.normalized_message_id);
     const chronologicalFiles=[...metadata].sort((a,b)=>(a.timestamp??Infinity)-(b.timestamp??Infinity)||a.name.localeCompare(b.name));const fileRanks=new Map(chronologicalFiles.map((file,index)=>[file.import_order,index]));
     const chronologicalCandidates=[...candidates].sort((a,b)=>a.position-b.position||a.visual_index-b.visual_index);const candidateRanks=new Map(chronologicalCandidates.map((item,index)=>[item.normalized_message_id,index]));const visualCandidates=[...candidates].sort((a,b)=>a.visual_index-b.visual_index||a.position-b.position);const visualRanks=new Map(visualCandidates.map((item,index)=>[item.normalized_message_id,index]));
-    const context={...options,reservedIds:new Set(options.reservedMessageIds||[]),allowReplaceIds:new Set(options.allowReplaceIds||[]),fileRanks,candidateRanks,visualRanks,fileCount:metadata.length,candidateCount:candidates.length};
+    const calendarDateShiftMs=inferredCalendarDateShift(metadata,candidates,options);const context={...options,reservedIds:new Set(options.reservedMessageIds||[]),allowReplaceIds:new Set(options.allowReplaceIds||[]),fileRanks,candidateRanks,visualRanks,fileCount:metadata.length,candidateCount:candidates.length,calendarDateShiftMs};
     const comparisons=metadata.map(file=>candidates.map(candidate=>evaluatePair(file,candidate,context)));
     const weights=comparisons.map(row=>row.map(pair=>pair.plausible?pair.score:-100000));const assignment=hungarianMax(weights);
     const results=metadata.map((file,fileIndex)=>{const ranked=comparisons[fileIndex].filter(pair=>pair.plausible).sort((a,b)=>b.score-a.score||a.position-b.position);const column=assignment[fileIndex];const assigned=column>=0&&comparisons[fileIndex][column]?.plausible?comparisons[fileIndex][column]:null;const secondBest=assigned?ranked.find(item=>item.normalized_message_id!==assigned.normalized_message_id):null;const margin=assigned?assigned.score-(secondBest?.score??0):0;const critical=Boolean(assigned?.normalized_message_id&&assigned?.sender&&assigned?.direction!=="unknown"&&assigned?.date&&assigned?.message_time&&assigned?.duration_valid);const autoSelect=Boolean(assigned&&assigned.score>=95&&critical&&margin>=10);return {file,comparisons:comparisons[fileIndex],ranked,top3:ranked.slice(0,3),assigned,margin,autoSelect};});
-    return {files:metadata,inventory:candidates,results,assignments:results.map((result,index)=>({file_index:index,message_id:result.assigned?.normalized_message_id||null,score:result.assigned?.score??null,auto_select:result.autoSelect}))};
+    return {files:metadata,inventory:candidates,calendar_date_shift_days:calendarDateShiftMs/DAY_MS,results,assignments:results.map((result,index)=>({file_index:index,message_id:result.assigned?.normalized_message_id||null,score:result.assigned?.score??null,auto_select:result.autoSelect}))};
   }
 
   function compareFile(file,inventory,options={}){return matchFiles([file],inventory,options).results[0]||{file:fileMetadata(file),comparisons:[],ranked:[],top3:[],assigned:null,margin:0,autoSelect:false};}
