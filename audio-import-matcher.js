@@ -1,7 +1,7 @@
 (function(global){
   "use strict";
 
-  const VERSION="2.2.2";
+  const VERSION="2.2.3";
   const TIME_TOLERANCE_SECONDS=12*60*60;
   const UNAVAILABLE_STATES=["media_unavailable","legacy_unavailable","nao_localizado_no_dom","arquivo_inexistente"];
   const normalizeWhatsAppMessageId=value=>global.CriareWhatsAppCaptureCore.normalizeWhatsAppMessageId(value);
@@ -112,10 +112,10 @@
     const timestamp=messageTimestamp(candidate);const timeDifference=Number.isFinite(adjustedFileTimestamp)&&Number.isFinite(timestamp)?Math.abs(adjustedFileTimestamp-timestamp)/1000:null;
     if(Number.isFinite(file.timestamp)&&!Number.isFinite(timestamp))return reject("data_hora_da_mensagem_ausente");
     if(Number.isFinite(timeDifference)&&timeDifference>(context.timeToleranceSeconds||TIME_TOLERANCE_SECONDS))return reject("horario_fora_da_tolerancia");
-    const durationQuality=Math.max(0,1-difference/tolerance);const timeQuality=Number.isFinite(timeDifference)?Math.max(0,1-timeDifference/(context.timeToleranceSeconds||TIME_TOLERANCE_SECONDS)):0;
+    const durationWithinOneSecond=difference<=1&&(!Number.isFinite(timeDifference)||timeDifference<=120);const durationQuality=durationWithinOneSecond?1:Math.max(0,1-difference/tolerance);const timeQuality=Number.isFinite(timeDifference)?Math.max(0,1-timeDifference/(context.timeToleranceSeconds||TIME_TOLERANCE_SECONDS)):0;
     const fileRank=context.fileRanks?.get(file.import_order)??0;const candidateRank=context.candidateRanks?.get(candidate.normalized_message_id)??0;const rankSpan=Math.max(1,(context.fileCount||1)-1,(context.candidateCount||1)-1);const orderQuality=Math.max(0,1-Math.abs(fileRank-candidateRank)/rankSpan);
     const visualRank=context.visualRanks?.get(candidate.normalized_message_id)??candidateRank;const visualQuality=Math.max(0,1-Math.abs(fileRank-visualRank)/rankSpan);
-    const reasons=["duração fisicamente compatível",directionMode==="both"?"direção aceita no modo Ambos":"direção compatível"];
+    const reasons=[durationWithinOneSecond?"duração compatível (margem ≤1s)":"duração fisicamente compatível",directionMode==="both"?"direção aceita no modo Ambos":"direção compatível"];
     if(Number.isFinite(timeDifference))reasons.push(shiftMs?"data ajustada por diferença de calendário confirmada":"data/horário compatíveis");if(orderQuality>=.8)reasons.push("ordem cronológica compatível");if(visualQuality>=.8)reasons.push("posição visual compatível");
     const score=Math.round(55*durationQuality+25*timeQuality+10+5*orderQuality+5*visualQuality);
     return {...candidate,plausible:true,score,reasons,comparison_reason:"candidato plausível",duration_difference:difference,duration_tolerance:tolerance,time_difference_seconds:timeDifference};
@@ -136,7 +136,7 @@
     const calendarDateShiftMs=inferredCalendarDateShift(metadata,candidates,options);const context={...options,reservedIds:new Set(options.reservedMessageIds||[]),allowReplaceIds:new Set(options.allowReplaceIds||[]),fileRanks,candidateRanks,visualRanks,fileCount:metadata.length,candidateCount:candidates.length,calendarDateShiftMs};
     const comparisons=metadata.map(file=>candidates.map(candidate=>evaluatePair(file,candidate,context)));
     const weights=comparisons.map(row=>row.map(pair=>pair.plausible?pair.score:-100000));const assignment=hungarianMax(weights);
-    const results=metadata.map((file,fileIndex)=>{const ranked=comparisons[fileIndex].filter(pair=>pair.plausible).sort((a,b)=>b.score-a.score||a.position-b.position);const column=assignment[fileIndex];const assigned=column>=0&&comparisons[fileIndex][column]?.plausible?comparisons[fileIndex][column]:null;const secondBest=assigned?ranked.find(item=>item.normalized_message_id!==assigned.normalized_message_id):null;const margin=assigned?assigned.score-(secondBest?.score??0):0;const critical=Boolean(assigned?.normalized_message_id&&assigned?.sender&&assigned?.direction!=="unknown"&&assigned?.date&&assigned?.message_time&&assigned?.duration_valid);const autoSelect=Boolean(assigned&&assigned.score>=95&&critical&&margin>=10);return {file,comparisons:comparisons[fileIndex],ranked,top3:ranked.slice(0,3),assigned,margin,autoSelect};});
+    const results=metadata.map((file,fileIndex)=>{const ranked=comparisons[fileIndex].filter(pair=>pair.plausible).sort((a,b)=>b.score-a.score||a.position-b.position);const column=assignment[fileIndex];const assigned=column>=0&&comparisons[fileIndex][column]?.plausible?comparisons[fileIndex][column]:null;const secondBest=assigned?ranked.find(item=>item.normalized_message_id!==assigned.normalized_message_id):null;const margin=assigned?assigned.score-(secondBest?.score??0):0;const critical=Boolean(assigned?.normalized_message_id&&assigned?.sender&&assigned?.direction!=="unknown"&&assigned?.date&&assigned?.message_time&&assigned?.duration_valid);const oneSecondExact=Boolean(assigned&&assigned.duration_difference<=1&&assigned.time_difference_seconds<=120&&ranked.filter(item=>item.duration_difference<=1&&item.time_difference_seconds<=120).length===1);const autoSelect=Boolean(assigned&&critical&&((assigned.score>=95&&margin>=10)||oneSecondExact));return {file,comparisons:comparisons[fileIndex],ranked,top3:ranked.slice(0,3),assigned,margin,autoSelect};});
     return {files:metadata,inventory:candidates,calendar_date_shift_days:calendarDateShiftMs/DAY_MS,results,assignments:results.map((result,index)=>({file_index:index,message_id:result.assigned?.normalized_message_id||null,score:result.assigned?.score??null,auto_select:result.autoSelect}))};
   }
 
