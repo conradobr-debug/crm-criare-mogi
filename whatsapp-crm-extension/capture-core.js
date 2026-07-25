@@ -179,6 +179,27 @@
     });
   }
 
+  // Alguns layouts do WhatsApp expõem um ID da bolha e outro ID do player.
+  // Quando só existe uma bolha com remetente/data naquele minuto, ela é a
+  // identidade canônica: incorporamos nela a duração obtida pelo player e
+  // descartamos os IDs técnicos incompletos.
+  function consolidateAudioEntries(entries){
+    const normalized=(Array.isArray(entries)?entries:[]).map(normalizeEntry).filter(Boolean);
+    const result=[...normalized];
+    const timeKey=entry=>(cleanText(entry?.message_time||entry?.time).match(/\d{1,2}:\d{2}/)||[])[0]||"";
+    for(const entry of normalized){
+      if(!isAudioEntry(entry)||(cleanText(entry.sender)&&cleanText(entry.date)))continue;
+      const time=timeKey(entry);if(!time)continue;
+      const complete=result.filter(item=>isAudioEntry(item)&&cleanText(item.sender)&&cleanText(item.date)&&timeKey(item)===time);
+      if(complete.length!==1)continue;
+      const canonical=complete[0];
+      const merged=mergeEntryMetadata(entry,canonical);
+      const at=result.indexOf(canonical);if(at>=0)result[at]=merged;
+      const orphanAt=result.indexOf(entry);if(orphanAt>=0)result.splice(orphanAt,1);
+    }
+    return pruneOrphanAudioEntries(result);
+  }
+
   function audioUnavailable(entry){
     const state=[entry?.media_status,entry?.audioMeta?.extractionStatus,entry?.audioMeta?.transcriptionStatus,entry?.audioMeta?.error,entry?.text].map(normalizedUiText).join(" ");
     return /media_unavailable|legacy_unavailable|nao_localizado_no_dom|arquivo_inexistente|mensagem de midia indisponivel/.test(state);
@@ -224,6 +245,7 @@
     mergeEntries,
     mergeMessageWindow,
     pruneOrphanAudioEntries,
+    consolidateAudioEntries,
     audioUnavailable,
     audioFileTimestamp,
     audioMatchCandidates

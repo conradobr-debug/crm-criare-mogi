@@ -1,11 +1,11 @@
-const CACHE_NAME = "crm-criare-shell-v60";
+const CACHE_NAME = "crm-criare-shell-v61";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./criare.css",
   "./whatsapp-data-service.js",
   "./whatsapp-crm-extension/phone-identity.js?v=2.5.1",
-  "./whatsapp-crm-extension/capture-core.js?v=2.5.16",
+  "./whatsapp-crm-extension/capture-core.js?v=2.5.17",
   "./audio-import-matcher.js?v=2.5.15",
   "./conversation-completeness.js?v=2.5.1",
   "./batch-analysis.js?v=2.5.1",

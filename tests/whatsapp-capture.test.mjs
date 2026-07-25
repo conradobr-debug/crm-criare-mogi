@@ -301,6 +301,18 @@ test("remove áudio interno órfão quando a bolha canônica está completa",()=
   assert.equal(entries[0].message_id,"1FAK3DA");
 });
 
+test("consolida duração do player no único registro completo da mensagem",()=>{
+  const entries=core.consolidateAudioEntries([
+    {id:"wa:A5BC",message_id:"A5BC",type:"Áudio",text:"[Áudio sem transcrição]",sender:"Você",direction:"outgoing",message_time:"10:40",duration_seconds:12,duration_source:"whatsapp_player",duration_valid:true},
+    {id:"wa:1BRK2J2",message_id:"1BRK2J2",type:"Áudio",text:"[Áudio sem transcrição]",sender:"Você",direction:"incoming",message_time:"10:40"},
+    {id:"wa:1FAK3DA",message_id:"1FAK3DA",type:"Áudio",text:"[Áudio sem transcrição]",sender:"Você",direction:"outgoing",date:"20/07/2026",message_time:"10:40"}
+  ]);
+  assert.equal(entries.length,1);
+  assert.equal(entries[0].message_id,"1FAK3DA");
+  assert.equal(entries[0].duration_seconds,12);
+  assert.equal(entries[0].duration_source,"whatsapp_player");
+});
+
 test("reconstrói prefixo de mídia que continua a mensagem anterior",()=>{
   const prefix = core.continuationPrefix("[15:16, 06/07/2026] Leticia Bougo: ","15:17","");
   assert.equal(prefix,"[15:17, 06/07/2026] Leticia Bougo: ");
@@ -322,8 +334,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.reachedStart && history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.14"/);
-  assert.equal(manifest.version,"2.3.14");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.15"/);
+  assert.equal(manifest.version,"2.3.15");
   assert.match(content,/VOICE_MESSAGE_SELECTOR/);
   assert.match(content,/\[data-testid\*="ptt" i\]/);
   assert.match(content,/\[data-icon\*="ptt" i\]/);
