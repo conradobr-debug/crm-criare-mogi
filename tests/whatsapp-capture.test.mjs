@@ -292,6 +292,15 @@ test("normaliza wa: e remove candidato órfão com o mesmo message_id",()=>{
   assert.equal(inventory[0].time,"10:26");
 });
 
+test("remove áudio interno órfão quando a bolha canônica está completa",()=>{
+  const entries=core.pruneOrphanAudioEntries([
+    {id:"wa:1BRK2J2",message_id:"1BRK2J2",type:"Áudio",text:"[Áudio sem transcrição]",direction:"outgoing",message_time:"10:40"},
+    {id:"wa:1FAK3DA",message_id:"1FAK3DA",type:"Áudio",text:"[Áudio sem transcrição]",sender:"Você",direction:"outgoing",date:"20/07/2026",message_time:"10:40"}
+  ]);
+  assert.equal(entries.length,1);
+  assert.equal(entries[0].message_id,"1FAK3DA");
+});
+
 test("reconstrói prefixo de mídia que continua a mensagem anterior",()=>{
   const prefix = core.continuationPrefix("[15:16, 06/07/2026] Leticia Bougo: ","15:17","");
   assert.equal(prefix,"[15:17, 06/07/2026] Leticia Bougo: ");
@@ -313,14 +322,16 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.reachedStart && history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.12"/);
-  assert.equal(manifest.version,"2.3.12");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.13"/);
+  assert.equal(manifest.version,"2.3.13");
   assert.match(content,/VOICE_MESSAGE_SELECTOR/);
   assert.match(content,/\[data-testid\*="ptt" i\]/);
   assert.match(content,/\[data-icon\*="ptt" i\]/);
   assert.match(content,/\[data-testid\^="conv-msg-"\],\[data-id\]/);
   assert.match(content,/const voiceRoots=\[\.\.\.main\.querySelectorAll\(VOICE_MESSAGE_SELECTOR\)\]/);
-  assert.match(content,/const selectedVoices=new Map\(\),selectedMessages=new Map\(\)/);
+  assert.match(content,/function canonicalMessageRoot/);
+  assert.match(content,/const selectedMessages=new Map\(\)/);
+  assert.doesNotMatch(content,/const selectedVoices=new Map/);
   assert.match(content,/for\(let attempt=0;attempt<30&&!search;attempt\+=1\)/);
   assert.match(content,/filter\(row=>row\.querySelector\('\[data-testid="cell-frame-container"\],\[role="gridcell"\]'\)\)/);
   assert(!manifest.permissions.includes("downloads"));

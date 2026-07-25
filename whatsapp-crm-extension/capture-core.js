@@ -161,6 +161,25 @@
     return {entries:prepend?[...additions,...current]:[...current,...additions],addedCount:additions.length,updatedCount};
   }
 
+  // O WhatsApp pode expor um data-id interno do player além do data-id da
+  // mensagem. Nunca mantemos esse registro incompleto quando a mesma bolha
+  // já foi lida com remetente, data e horário canônicos.
+  function pruneOrphanAudioEntries(entries){
+    const normalized=(Array.isArray(entries)?entries:[]).map(normalizeEntry).filter(Boolean);
+    return normalized.filter(entry=>{
+      if(!isAudioEntry(entry))return true;
+      const missingIdentity=!cleanText(entry.sender)||!cleanText(entry.date);
+      const time=cleanText(entry.message_time||entry.time);
+      if(!missingIdentity||!time)return true;
+      const direction=cleanText(entry.direction);
+      return !normalized.some(other=>other!==entry&&isAudioEntry(other)
+        &&cleanText(other.sender)&&cleanText(other.date)
+        &&cleanText(other.message_time||other.time)===time
+        &&cleanText(other.direction)===direction
+        &&normalizeWhatsAppMessageId(other.message_id||other.id)!==normalizeWhatsAppMessageId(entry.message_id||entry.id));
+    });
+  }
+
   function audioUnavailable(entry){
     const state=[entry?.media_status,entry?.audioMeta?.extractionStatus,entry?.audioMeta?.transcriptionStatus,entry?.audioMeta?.error,entry?.text].map(normalizedUiText).join(" ");
     return /media_unavailable|legacy_unavailable|nao_localizado_no_dom|arquivo_inexistente|mensagem de midia indisponivel/.test(state);
@@ -205,6 +224,7 @@
     normalizeEntry,
     mergeEntries,
     mergeMessageWindow,
+    pruneOrphanAudioEntries,
     audioUnavailable,
     audioFileTimestamp,
     audioMatchCandidates

@@ -138,20 +138,38 @@ function sameCustomer(title, request){
   return Boolean(expectedDigits&&request?.phoneIdentityConfirmed===true&&globalThis.CriarePhoneIdentity.comparableDigits(request?.confirmedPhone)===expectedDigits);
 }
 
+function canonicalMessageRoot(node){
+  if(!node)return null;
+  const container=(node.matches?.('[data-testid="msg-container"]')?node:null)
+    ||node.closest?.('[data-testid="msg-container"]')
+    ||node.querySelector?.('[data-testid="msg-container"]');
+  const start=container||node;const candidates=[];let cursor=start;
+  while(cursor&&cursor!==document.body){
+    if(cursor.hasAttribute?.("data-id"))candidates.push(cursor);
+    cursor=cursor.parentElement;
+  }
+  for(const child of start.querySelectorAll?.('[data-id]')||[])candidates.push(child);
+  const unique=[...new Set(candidates)];
+  return unique.sort((left,right)=>{
+    const score=item=>(item.matches?.('[data-testid^="conv-msg-"]')?100:0)+(item.querySelector?.('[data-testid="msg-container"]')?50:0)+(item.querySelector?.('[data-pre-plain-text]')?40:0)+(item.contains?.(start)?20:0);
+    return score(right)-score(left);
+  })[0]||container||node;
+}
+
 function messageNodes(main=activeMain()){
   if(!main) return [];
   const voiceRoots=[...main.querySelectorAll(VOICE_MESSAGE_SELECTOR)].map(node=>node.closest('[data-testid^="conv-msg-"],[data-id],[role="row"]')||node.closest('[data-testid="msg-container"]')||node);
   const roots=[...main.querySelectorAll('[data-testid^="conv-msg-"],[data-id]'),...voiceRoots];
   const containers=[...main.querySelectorAll('[data-testid="msg-container"]')];
-  const candidates=[...roots,...containers].map((node,order)=>({node:node.closest('[data-testid^="conv-msg-"]')||node.closest('[data-id]')||node.closest('[role="row"]')||node,order})).filter(({node})=>Boolean(node&&(node.matches('[data-testid^="conv-msg-"]')||node.querySelector('[data-testid="msg-container"],[data-pre-plain-text]')||hasVoiceMessage(node))));
-  const selectedVoices=new Map(),selectedMessages=new Map();
+  const candidates=[...roots,...containers].map((node,order)=>({node:canonicalMessageRoot(node),order})).filter(({node})=>Boolean(node&&(node.matches?.('[data-testid^="conv-msg-"]')||node.querySelector?.('[data-testid="msg-container"],[data-pre-plain-text]')||hasVoiceMessage(node))));
+  const selectedMessages=new Map();
   const score=node=>(node.querySelector('[data-pre-plain-text]')?100:0)+(messageId(node)?20:0)+(node.matches('[data-testid^="conv-msg-"]')?10:0);
-  for(const candidate of candidates){const voice=candidate.node.matches?.(VOICE_MESSAGE_SELECTOR)?candidate.node:candidate.node.querySelector(VOICE_MESSAGE_SELECTOR);if(voice){const prior=selectedVoices.get(voice);if(!prior||score(candidate.node)>score(prior.node))selectedVoices.set(voice,candidate);continue;}const id=messageId(candidate.node)||`node:${candidate.order}`;if(!selectedMessages.has(id))selectedMessages.set(id,candidate);}
-  return [...selectedMessages.values(),...selectedVoices.values()].sort((left,right)=>left.order-right.order).map(item=>item.node);
+  for(const candidate of candidates){const id=messageId(candidate.node)||`node:${candidate.order}`;const prior=selectedMessages.get(id);if(!prior||score(candidate.node)>score(prior.node))selectedMessages.set(id,candidate);}
+  return [...selectedMessages.values()].sort((left,right)=>left.order-right.order).map(item=>item.node);
 }
 
 function messageId(node){
-  return cleanText((node.closest?.("[data-id]") || node.querySelector?.("[data-id]"))?.getAttribute("data-id") || "");
+  return cleanText(canonicalMessageRoot(node)?.getAttribute?.("data-id") || "");
 }
 
 function windowSignature(main=activeMain()){
