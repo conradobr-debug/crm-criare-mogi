@@ -43,6 +43,16 @@
     return entry?.type==="Áudio"||entry?.hasVoiceMessage||Boolean(entry?.audioMeta)||/\[(?:Áudio sem transcrição|Transcrição de áudio)\]/i.test(String(entry?.text||""));
   }
 
+  // O leitor pode usar literalmente "data não identificada" enquanto a bolha
+  // canônica ainda carrega a data real. Esse texto é um placeholder, não uma
+  // identidade suficiente para manter um segundo áudio técnico no inventário.
+  function hasCanonicalAudioIdentity(entry){
+    const sender=normalizedUiText(entry?.sender);
+    const date=normalizedUiText(entry?.date);
+    const missingDate=!date||/^(?:data )?nao identificada$|^sem data$|^data desconhecida$/.test(date);
+    return Boolean(sender)&&!missingDate;
+  }
+
   function mergeEntryMetadata(stored,incoming){
     const canonical=normalizeWhatsAppMessageId(incoming?.message_id||incoming?.id||stored?.message_id||stored?.id);
     if(!isAudioEntry(stored)&&!isAudioEntry(incoming))return {...stored,...incoming,...(canonical?{message_id:canonical}:{})};
@@ -168,11 +178,11 @@
     const normalized=(Array.isArray(entries)?entries:[]).map(normalizeEntry).filter(Boolean);
     return normalized.filter(entry=>{
       if(!isAudioEntry(entry))return true;
-      const missingIdentity=!cleanText(entry.sender)||!cleanText(entry.date);
+      const missingIdentity=!hasCanonicalAudioIdentity(entry);
       const time=(cleanText(entry.message_time||entry.time).match(/\d{1,2}:\d{2}/)||[])[0]||"";
       if(!missingIdentity||!time)return true;
       const completeAtSameTime=normalized.filter(other=>other!==entry&&isAudioEntry(other)
-        &&cleanText(other.sender)&&cleanText(other.date)
+        &&hasCanonicalAudioIdentity(other)
         &&((cleanText(other.message_time||other.time).match(/\d{1,2}:\d{2}/)||[])[0]||"")===time
         &&normalizeWhatsAppMessageId(other.message_id||other.id)!==normalizeWhatsAppMessageId(entry.message_id||entry.id));
       return completeAtSameTime.length!==1;
@@ -188,9 +198,9 @@
     const result=[...normalized];
     const timeKey=entry=>(cleanText(entry?.message_time||entry?.time).match(/\d{1,2}:\d{2}/)||[])[0]||"";
     for(const entry of normalized){
-      if(!isAudioEntry(entry)||(cleanText(entry.sender)&&cleanText(entry.date)))continue;
+      if(!isAudioEntry(entry)||hasCanonicalAudioIdentity(entry))continue;
       const time=timeKey(entry);if(!time)continue;
-      const complete=result.filter(item=>isAudioEntry(item)&&cleanText(item.sender)&&cleanText(item.date)&&timeKey(item)===time);
+      const complete=result.filter(item=>isAudioEntry(item)&&hasCanonicalAudioIdentity(item)&&timeKey(item)===time);
       if(complete.length!==1)continue;
       const canonical=complete[0];
       const merged=mergeEntryMetadata(entry,canonical);

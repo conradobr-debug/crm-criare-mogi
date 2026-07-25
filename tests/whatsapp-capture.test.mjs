@@ -313,6 +313,18 @@ test("consolida duração do player no único registro completo da mensagem",()=
   assert.equal(entries[0].duration_source,"whatsapp_player");
 });
 
+test("consolida placeholders de data do player com a única bolha canônica",()=>{
+  const entries=core.consolidateAudioEntries([
+    {id:"wa:A5BC0F8C1493682949D17332107ACAA3",message_id:"A5BC0F8C1493682949D17332107ACAA3",type:"Áudio",text:"[Áudio sem transcrição]",sender:"Você",direction:"outgoing",date:"data não identificada",message_time:"10:40",duration_seconds:12,duration_source:"whatsapp_player",duration_valid:true},
+    {id:"wa:1BRK2J2",message_id:"AUDIO:1BRK2J2",type:"Áudio",text:"[Áudio sem transcrição]",sender:"Você",direction:"outgoing",date:"data não identificada",message_time:"10:40"},
+    {id:"wa:1FAK3DA",message_id:"AUDIO:1FAK3DA",type:"Áudio",text:"[Áudio sem transcrição]",sender:"Você",direction:"outgoing",date:"20/07/2026",message_time:"10:40"}
+  ]);
+  assert.equal(entries.length,1);
+  assert.equal(entries[0].message_id,"AUDIO:1FAK3DA");
+  assert.equal(entries[0].duration_seconds,12);
+  assert.equal(entries[0].duration_source,"whatsapp_player");
+});
+
 test("reconstrói prefixo de mídia que continua a mensagem anterior",()=>{
   const prefix = core.continuationPrefix("[15:16, 06/07/2026] Leticia Bougo: ","15:17","");
   assert.equal(prefix,"[15:17, 06/07/2026] Leticia Bougo: ");
