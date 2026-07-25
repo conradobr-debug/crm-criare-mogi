@@ -381,7 +381,9 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(crm,/normalizeWhatsAppMessageId\(item\.entry\.message_id\|\|item\.entry\.id\)===recoveredMessageId/);
   assert.doesNotMatch(crm,/const structural=slots\.filter/);
   assert.match(crm,/select\("\*"\)\.eq\("id",record\.id\)\.single\(\)/);
-  assert.match(crm,/O WhatsApp respondeu, mas não devolveu nenhuma duração válida dos players/);
+  assert.match(crm,/Nenhuma duração foi lida pelo WhatsApp; a associação manual do único áudio permanece disponível/);
+  assert.match(crm,/function canonicalAudioEntries/);
+  assert.match(crm,/entries=canonicalAudioEntries\(record\.whatsapp_message_entries\)/);
   assert.match(crm,/id="btnRefreshAudioMetadata"[^>]*>Atualizar metadados dos áudios/);
   assert.match(crm,/CriareWhatsAppCaptureCore\.mergeEntryMetadata/);
   assert.match(crm,/requestWhatsAppAudioRecovery\(record,\{metadataOnly:true\}\)/);
