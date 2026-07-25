@@ -294,7 +294,7 @@ test("normaliza wa: e remove candidato órfão com o mesmo message_id",()=>{
 
 test("remove áudio interno órfão quando a bolha canônica está completa",()=>{
   const entries=core.pruneOrphanAudioEntries([
-    {id:"wa:1BRK2J2",message_id:"1BRK2J2",type:"Áudio",text:"[Áudio sem transcrição]",direction:"outgoing",message_time:"10:40"},
+    {id:"wa:1BRK2J2",message_id:"1BRK2J2",type:"Áudio",text:"[Áudio sem transcrição]",direction:"incoming",message_time:"10:40"},
     {id:"wa:1FAK3DA",message_id:"1FAK3DA",type:"Áudio",text:"[Áudio sem transcrição]",sender:"Você",direction:"outgoing",date:"20/07/2026",message_time:"10:40"}
   ]);
   assert.equal(entries.length,1);
@@ -322,8 +322,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.reachedStart && history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.13"/);
-  assert.equal(manifest.version,"2.3.13");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.14"/);
+  assert.equal(manifest.version,"2.3.14");
   assert.match(content,/VOICE_MESSAGE_SELECTOR/);
   assert.match(content,/\[data-testid\*="ptt" i\]/);
   assert.match(content,/\[data-icon\*="ptt" i\]/);

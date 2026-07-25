@@ -169,14 +169,13 @@
     return normalized.filter(entry=>{
       if(!isAudioEntry(entry))return true;
       const missingIdentity=!cleanText(entry.sender)||!cleanText(entry.date);
-      const time=cleanText(entry.message_time||entry.time);
+      const time=(cleanText(entry.message_time||entry.time).match(/\d{1,2}:\d{2}/)||[])[0]||"";
       if(!missingIdentity||!time)return true;
-      const direction=cleanText(entry.direction);
-      return !normalized.some(other=>other!==entry&&isAudioEntry(other)
+      const completeAtSameTime=normalized.filter(other=>other!==entry&&isAudioEntry(other)
         &&cleanText(other.sender)&&cleanText(other.date)
-        &&cleanText(other.message_time||other.time)===time
-        &&cleanText(other.direction)===direction
+        &&((cleanText(other.message_time||other.time).match(/\d{1,2}:\d{2}/)||[])[0]||"")===time
         &&normalizeWhatsAppMessageId(other.message_id||other.id)!==normalizeWhatsAppMessageId(entry.message_id||entry.id));
+      return completeAtSameTime.length!==1;
     });
   }
 
