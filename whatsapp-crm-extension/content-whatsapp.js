@@ -674,6 +674,7 @@ async function extractLoadedMessages(request={}){
   await waitForHistoryHydration(main,{timeoutMs:12000,minWaitMs:4500});
   const history = await collectAvailableHistory(main);
   if(!history.entries.length) throw new Error("Não encontrei mensagens carregadas nesta conversa.");
+  if(history.traversalBlocked)throw new Error("Não foi possível identificar o contêiner que move o histórico do WhatsApp Web. Nenhuma captura parcial foi salva.");
   const audioCount = history.entries.filter(entry=>entry.hasVoiceMessage).length;
   const audioTranscribed = history.entries.filter(entry=>entry.audioTranscribed).length;
   const payload={
