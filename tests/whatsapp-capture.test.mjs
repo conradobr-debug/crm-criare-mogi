@@ -12,7 +12,7 @@ const matcherSource = await readFile(new URL("audio-import-matcher.js", root), "
 const matcherContext = {globalThis:{CriareWhatsAppCaptureCore:core}};
 vm.runInNewContext(matcherSource, matcherContext);
 const matcher = matcherContext.globalThis.CriareAudioImportMatcher;
-assert.equal(matcher.version,"2.2.5");
+assert.equal(matcher.version,"2.2.6");
 
 test("preserva mensagens repetidas quando os IDs do WhatsApp são diferentes",()=>{
   const merged = core.mergeEntries([], [
@@ -535,4 +535,21 @@ test("fallback reconhece o campo de busca atual da lista lateral",async()=>{
   assert.match(content,/aria-placeholder\*="Pesquisar"/);
   assert.match(content,/aria-label\*="Pesquisar"/);
   assert.match(content,/data-tab="3"/);
+});
+
+test("matcher decide o ajuste de calendário por arquivo e não invalida datas já corretas",()=>{
+  const inventory=matcher.buildInventory([
+    {message_id:"CRISTINA-1551",type:"Áudio",sender:"Você",direction:"outgoing",date:"30/06/2026",time:"15:51",duration_seconds:27,duration_source:"whatsapp_player",text:"[Áudio sem transcrição]",chronological_position:0},
+    {message_id:"CRISTINA-1635",type:"Áudio",sender:"Você",direction:"outgoing",date:"30/06/2026",time:"16:35",duration_seconds:84,duration_source:"whatsapp_player",text:"[Áudio sem transcrição]",chronological_position:1},
+    {message_id:"CRISTINA-0857",type:"Áudio",sender:"Você",direction:"outgoing",date:"30/06/2026",time:"08:57",duration_seconds:44,duration_source:"whatsapp_player",text:"[Áudio sem transcrição]",chronological_position:2}
+  ]);
+  const matching=matcher.matchFiles([
+    {name:"WhatsApp Ptt 2026-06-30 at 15.51.43.ogg",duration:27,import_order:0},
+    {name:"WhatsApp Ptt 2026-06-30 at 16.35.27.ogg",duration:85,import_order:1},
+    {name:"WhatsApp Ptt 2026-07-01 at 08.57.11.ogg",duration:44,import_order:2}
+  ],inventory,{directionMode:"both",calendarDateShiftMs:-24*60*60*1000});
+  assert.deepEqual(matching.assignments.map(item=>item.message_id),["CRISTINA-1551","CRISTINA-1635","CRISTINA-0857"]);
+  assert(!matching.results[0].assigned.reasons.includes("data ajustada por diferença de calendário confirmada"));
+  assert(!matching.results[1].assigned.reasons.includes("data ajustada por diferença de calendário confirmada"));
+  assert(matching.results[2].assigned.reasons.includes("data ajustada por diferença de calendário confirmada"));
 });

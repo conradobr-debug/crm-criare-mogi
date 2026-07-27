@@ -1,7 +1,7 @@
 (function(global){
   "use strict";
 
-  const VERSION="2.2.5";
+  const VERSION="2.2.6";
   const TIME_TOLERANCE_SECONDS=12*60*60;
   const UNAVAILABLE_STATES=["media_unavailable","legacy_unavailable","nao_localizado_no_dom","arquivo_inexistente"];
   const normalizeWhatsAppMessageId=value=>global.CriareWhatsAppCaptureCore.normalizeWhatsAppMessageId(value);
@@ -97,6 +97,25 @@
     return best&&best[1]>=2&&(ranked.length===1||best[1]>ranked[1][1])?best[0]*DAY_MS:0;
   }
 
+  // Downloads feitos pelo WhatsApp podem ficar um dia à frente da mensagem, mas
+  // esse deslocamento não é uma propriedade da importação inteira. Em um mesmo
+  // lote podem coexistir arquivos com a data correta e arquivos com +/−1 dia.
+  // Portanto, a escolha é feita para cada par arquivo/mensagem.
+  function calendarAlignment(file,candidate,context={}){
+    const dateKey=messageDateKey(candidate),timestamp=messageTimestamp(candidate);
+    if(!Number.isFinite(file.timestamp)||!dateKey)return {shiftMs:0,adjustedTimestamp:file.timestamp,adjustedDateKey:file.date};
+    const preferredShift=Number(context.calendarDateShiftMs||0);
+    const candidateShift=Math.round((timestamp-file.timestamp)/DAY_MS)*DAY_MS;
+    const offsets=[0,preferredShift,candidateShift].filter((value,index,all)=>Number.isFinite(value)&&all.indexOf(value)===index&&Math.abs(value)<=DAY_MS);
+    const options=offsets.map(shiftMs=>{
+      const adjustedTimestamp=file.timestamp+shiftMs;
+      return {shiftMs,adjustedTimestamp,adjustedDateKey:dateKeyFromTimestamp(adjustedTimestamp)||file.date,timeDifference:Number.isFinite(timestamp)?Math.abs(adjustedTimestamp-timestamp)/1000:null};
+    }).filter(option=>option.adjustedDateKey===dateKey);
+    if(!options.length)return {shiftMs:0,adjustedTimestamp:file.timestamp,adjustedDateKey:dateKeyFromTimestamp(file.timestamp)||file.date};
+    options.sort((a,b)=>(a.timeDifference??Infinity)-(b.timeDifference??Infinity)||Math.abs(a.shiftMs)-Math.abs(b.shiftMs));
+    return options[0];
+  }
+
   function evaluatePair(file,candidate,context={}){
     const reserved=context.reservedIds||new Set();const allowReplace=context.allowReplaceIds||new Set();const directionMode=context.directionMode||"";
     const reject=reason=>({...candidate,plausible:false,score:null,reasons:[],comparison_reason:reason,exclusion_reason:reason});
@@ -108,8 +127,7 @@
     if(!file.duration)return reject("duracao_do_arquivo_nao_lida");
     const difference=Math.abs(file.duration-candidate.duration);const tolerance=durationTolerance(file.duration);
     if(difference>tolerance)return reject("duracao_fisicamente_incompativel");
-    const dateKey=messageDateKey(candidate),timestamp=messageTimestamp(candidate);let shiftMs=Number(context.calendarDateShiftMs||0),adjustedFileTimestamp=Number.isFinite(file.timestamp)?file.timestamp+shiftMs:null,adjustedFileDateKey=dateKeyFromTimestamp(adjustedFileTimestamp)||file.date;
-    if(file.date&&dateKey&&adjustedFileDateKey!==dateKey&&Number.isFinite(file.timestamp)&&Number.isFinite(timestamp)&&!shiftMs){const singleDayShift=Math.round((timestamp-file.timestamp)/DAY_MS)*DAY_MS;const aligned=Math.abs((file.timestamp+singleDayShift)-timestamp)<=120*1000;if(Math.abs(singleDayShift)===DAY_MS&&aligned&&difference<=1){shiftMs=singleDayShift;adjustedFileTimestamp=file.timestamp+shiftMs;adjustedFileDateKey=dateKeyFromTimestamp(adjustedFileTimestamp)||file.date;}}
+    const dateKey=messageDateKey(candidate),timestamp=messageTimestamp(candidate);const alignment=calendarAlignment(file,candidate,context);const shiftMs=alignment.shiftMs,adjustedFileTimestamp=alignment.adjustedTimestamp,adjustedFileDateKey=alignment.adjustedDateKey;
     if(file.date&&dateKey&&adjustedFileDateKey!==dateKey)return reject("data_incompativel");
     const timeDifference=Number.isFinite(adjustedFileTimestamp)&&Number.isFinite(timestamp)?Math.abs(adjustedFileTimestamp-timestamp)/1000:null;
     if(Number.isFinite(file.timestamp)&&!Number.isFinite(timestamp))return reject("data_hora_da_mensagem_ausente");
@@ -168,6 +186,6 @@
     return {ok:errors.length===0,errors:[...new Set(errors)]};
   }
 
-  const api={version:VERSION,buildInventory,fileMetadata,messageTimestamp,durationTolerance,evaluatePair,hungarianMax,matchFiles,compareFile,durationInfo,directionOf,unavailableReason,manualCandidates,validateManualAssignments};
+  const api={version:VERSION,buildInventory,fileMetadata,messageTimestamp,durationTolerance,evaluatePair,calendarAlignment,hungarianMax,matchFiles,compareFile,durationInfo,directionOf,unavailableReason,manualCandidates,validateManualAssignments};
   global.CriareAudioImportMatcher=api;if(typeof module!=="undefined"&&module.exports)module.exports=api;
 })(typeof globalThis!=="undefined"?globalThis:this);
