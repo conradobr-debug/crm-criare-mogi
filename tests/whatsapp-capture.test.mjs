@@ -71,6 +71,23 @@ test("uma releitura de texto remove marcador de áudio falso do mesmo message_id
   assert.match(merged.entries[0].text,/certinho/);
 });
 
+test("captura completa remove marcador de áudio técnico quando a bolha recapturada é texto",()=>{
+  const cleaned=core.removeStaleAudioMarkers(
+    [{id:"audio:controle-0929",message_id:"AUDIO:CONTROLE-0929",type:"Áudio",hasVoiceMessage:true,text:"[09:29, 27/07/2026] Criare: [Áudio sem transcrição]",audioMeta:{extractionStatus:"pending"}}],
+    [{id:"wa:MSG-TEXTO-0929",message_id:"MSG-TEXTO-0929",type:"Texto",hasVoiceMessage:false,text:"[09:29, 27/07/2026] Criare: certinho...fico a disposição!"}]
+  );
+  assert.equal(cleaned.length,0);
+});
+
+test("captura completa preserva áudio real sem transcrição quando não há texto correspondente",()=>{
+  const kept=core.removeStaleAudioMarkers(
+    [{id:"wa:AUDIO-0854",message_id:"AUDIO-0854",type:"Áudio",hasVoiceMessage:true,text:"[08:54, 27/07/2026] Cristina: [Áudio sem transcrição]",duration:29,audioMeta:{durationSeconds:29,extractionStatus:"pending"}}],
+    [{id:"wa:TEXTO-0852",message_id:"TEXTO-0852",type:"Texto",text:"[08:52, 27/07/2026] Criare: uma ótima semana!"}]
+  );
+  assert.equal(kept.length,1);
+  assert.equal(kept[0].message_id,"AUDIO-0854");
+});
+
 test("normaliza prefixo wa e preserva o identificador completo",()=>{
   assert.equal(core.normalizeWhatsAppMessageId(" wa:acf748cbdc45c89656b816fbcc3ec5d0 "),"ACF748CBDC45C89656B816FBCC3EC5D0");
 });
@@ -370,8 +387,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.reachedStart && history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.19"/);
-  assert.equal(manifest.version,"2.3.19");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.20"/);
+  assert.equal(manifest.version,"2.3.20");
   assert.match(content,/VOICE_MESSAGE_SELECTOR/);
   assert.match(content,/\[data-testid\*="ptt" i\]/);
   assert.match(content,/function ownMessageContainer/);

@@ -43,6 +43,45 @@
     return entry?.type==="Áudio"||entry?.hasVoiceMessage||Boolean(entry?.audioMeta)||/\[(?:Áudio sem transcrição|Transcrição de áudio)\]/i.test(String(entry?.text||""));
   }
 
+  function entryEnvelope(entry){
+    const parsed=parsePrefix(String(entry?.text||"").match(/^\[[^\]]+\]\s*[^:]+:\s*/)?.[0]||"");
+    return {
+      sender:normalizedUiText(entry?.sender||parsed.author),
+      date:normalizedUiText(entry?.date||parsed.date),
+      time:audioTimeKey(entry)||cleanText(parsed.time),
+      direction:normalizedUiText(entry?.direction)
+    };
+  }
+
+  // Registros antigos podiam nascer da detecção de um ícone de controle, sem
+  // data-id da bolha. Quando uma leitura completa encontra a mensagem de texto
+  // correspondente, esse marcador pendente não representa um áudio real.
+  // Só o removemos se não houver duração/transcrição e o envelope da mensagem
+  // (remetente, data e hora) coincidir com texto efetivamente recapturado.
+  function removeStaleAudioMarkers(storedEntries,incomingEntries){
+    const stored=(Array.isArray(storedEntries)?storedEntries:[]).map(normalizeEntry).filter(Boolean);
+    const incoming=(Array.isArray(incomingEntries)?incomingEntries:[]).map(normalizeEntry).filter(Boolean);
+    const incomingIds=new Set(incoming.map(entry=>normalizeWhatsAppMessageId(entry.message_id||entry.id)).filter(Boolean));
+    return stored.filter(entry=>{
+      if(!isAudioEntry(entry))return true;
+      const transcript=cleanText(entry?.transcript||entry?.audioMeta?.transcription||entry?.audioMeta?.transcriptionText);
+      const duration=Number(entry?.duration_seconds||entry?.duration||entry?.audioMeta?.durationSeconds||0);
+      const isPlaceholder=/^\[[^\]]+\]\s*[^:]+:\s*\[Áudio sem transcrição\]\s*$/i.test(cleanText(entry?.text));
+      if(transcript||duration>0||!isPlaceholder)return true;
+      const id=normalizeWhatsAppMessageId(entry.message_id||entry.id);
+      if(id&&incomingIds.has(id))return true;
+      const envelope=entryEnvelope(entry);
+      if(!envelope.sender||!envelope.date||!envelope.time)return true;
+      const textMatch=incoming.some(candidate=>{
+        if(isAudioEntry(candidate))return false;
+        const other=entryEnvelope(candidate);
+        return other.sender===envelope.sender&&other.date===envelope.date&&other.time===envelope.time
+          &&(!envelope.direction||!other.direction||other.direction===envelope.direction);
+      });
+      return !textMatch;
+    });
+  }
+
   // O leitor pode usar literalmente "data não identificada" enquanto a bolha
   // canônica ainda carrega a data real. Esse texto é um placeholder, não uma
   // identidade suficiente para manter um segundo áudio técnico no inventário.
@@ -306,6 +345,7 @@
     normalizeEntry,
     mergeEntries,
     mergeMessageWindow,
+    removeStaleAudioMarkers,
     isSyntheticAudioMessageId,
     pruneOrphanAudioEntries,
     consolidateAudioEntries,
