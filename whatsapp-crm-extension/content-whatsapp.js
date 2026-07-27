@@ -544,27 +544,55 @@ function scrollContainerSnapshot(container){
   return {top:Math.round(Number(container.scrollTop||0)),height:Math.round(Number(container.scrollHeight||0)),clientHeight:Math.round(Number(container.clientHeight||0))};
 }
 
+function messageViewportSnapshot(main){
+  return messageNodes(main).slice(0,8).map(node=>{
+    const id=messageId(node)||"sem-id";
+    const rect=node.getBoundingClientRect?.();
+    return {id,top:Math.round(rect?.top||0),bottom:Math.round(rect?.bottom||0)};
+  });
+}
+
+function messageViewportMoved(before,after){
+  if(!before?.length||!after?.length)return false;
+  const prior=new Map(before.map(item=>[item.id,item.top]));
+  return after.some(item=>{
+    return prior.has(item.id)&&Math.abs(Number(item.top)-prior.get(item.id))>2;
+  });
+}
+
 async function scrollHistoryOlder(main){
   const containers=messageScrollContainers(main);
   const attempts=[];
   for(const container of containers){
     const before=scrollContainerSnapshot(container);
     if(!before)continue;
+    const beforeViewport=messageViewportSnapshot(main);
+    const beforeSignature=windowSignature(main);
     const amount=Math.max(container.clientHeight*0.85,700);
     const target=Math.max(0,before.top-amount);
     container.scrollTo?.({top:target,behavior:"auto"});
     container.scrollTop=target;
     container.dispatchEvent(new Event("scroll",{bubbles:true}));
     container.dispatchEvent(new WheelEvent("wheel",{bubbles:true,cancelable:true,deltaY:-amount}));
-    await sleep(120);
+    await sleep(260);
     const after=scrollContainerSnapshot(container);
+    const afterViewport=messageViewportSnapshot(main);
     const moved=Boolean(after&&after.top<before.top);
-    attempts.push({before,after,moved,matchedPanel:Boolean(container.matches?.('[data-testid="conversation-panel-messages"]'))});
-    // Mesmo estando no topo, este é o contêiner real se ele contém a janela
-    // de mensagens; o laço principal então verifica o botão de histórico.
-    if(moved||before.top<=2)return {container,before,after,moved,attempts};
+    const contentMoved=messageViewportMoved(beforeViewport,afterViewport)||windowSignature(main)!==beforeSignature;
+    attempts.push({before,after,moved,contentMoved,matchedPanel:Boolean(container.matches?.('[data-testid="conversation-panel-messages"]'))});
+    // Um div externo também pode aceitar scrollTop. Ele só é o histórico se
+    // o movimento deslocar de fato as bolhas (ou substituir a janela virtual).
+    if(moved&&contentMoved)return {container,before,after,moved,contentMoved,attempts};
+    if(moved&&before.top>2){
+      container.scrollTop=before.top;
+      container.dispatchEvent(new Event("scroll",{bubbles:true}));
+    }
+    if(before.top<=2&&container.contains(messageNodes(main)[0])){
+      attempts[attempts.length-1].atTopCandidate=true;
+    }
   }
-  return {container:containers[0]||null,before:null,after:null,moved:false,attempts};
+  const topCandidate=attempts.find(item=>item.atTopCandidate);
+  return {container:null,before:topCandidate?.before||null,after:topCandidate?.after||null,moved:false,contentMoved:false,attempts};
 }
 
 async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={}){
@@ -574,6 +602,7 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
   let stableTopPasses = 0;
   let reachedStart = false;
   let loadedStartReached = false;
+  let traversalBlocked = false;
   const domMessageKeys=new Set(entries.map(entry=>normalizeWhatsAppMessageId(entry.message_id||entry.id)||entry.id||messageHash(entry.text)));
   let windowsCollected=entries.length?1:0;
   let olderLoadAttempts=0;
@@ -593,7 +622,11 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
     scrollPasses += 1;
     const atTop = Number(activeScroller?.scrollTop||0) <= 2;
     const unchanged = beforeSignature === windowSignature(main) && merged.added === 0;
-    traversalDiagnostics.push({pass:scrollPasses,moved:movement.moved,atTop,unchanged,containersTried:movement.attempts.length,added:merged.added});
+    traversalDiagnostics.push({pass:scrollPasses,moved:movement.moved,contentMoved:Boolean(movement.contentMoved),atTop,unchanged,containersTried:movement.attempts.length,added:merged.added});
+    if(!movement.contentMoved&&!movement.attempts.some(item=>item.atTopCandidate)){
+      traversalBlocked=true;
+      break;
+    }
     stableTopPasses = atTop && unchanged ? stableTopPasses + 1 : 0;
     if(atTop && stableTopPasses >= 2){
       const older=olderMessagesButton(main);
@@ -610,11 +643,11 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
     }
   }
 
-  const limited = entries.length >= maximum || (!loadedStartReached && Date.now() >= deadline);
+  const limited = entries.length >= maximum || traversalBlocked || (!loadedStartReached && Date.now() >= deadline);
   if(entries.length > maximum) entries = entries.slice(-maximum);
   const scroller = messageScrollContainer(main);
   if(scroller){ scroller.scrollTop = scroller.scrollHeight; scroller.dispatchEvent(new Event("scroll",{bubbles:true})); }
-  return {entries,reachedStart,loadedStartReached,scrollPasses,limited,audioState,domMessagesFound:domMessageKeys.size,windowsCollected,olderLoadAttempts,traversalDiagnostics};
+  return {entries,reachedStart,loadedStartReached,scrollPasses,limited,traversalBlocked,audioState,domMessagesFound:domMessageKeys.size,windowsCollected,olderLoadAttempts,traversalDiagnostics};
 }
 
 async function processAudioQueue(main,request,history){
@@ -658,7 +691,7 @@ async function extractLoadedMessages(request={}){
     loadedHistoryComplete:history.reachedStart && history.loadedStartReached && !history.limited,
     scrollPasses:history.scrollPasses,
     olderLoadAttempts:history.olderLoadAttempts,
-    traversalDiagnostics:history.traversalDiagnostics,
+    traversalDiagnostics:history.traversalDiagnostics,traversalBlocked:history.traversalBlocked,
     profilePhotoUrl:profilePhotoUrl(main),limited:history.limited
   };
   return payload;
