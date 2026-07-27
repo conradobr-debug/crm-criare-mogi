@@ -1134,7 +1134,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="whatsapp-data-service.js"></script>
 <script src="whatsapp-crm-extension/phone-identity.js?v=2.5.1"></script>
-<script src="whatsapp-crm-extension/capture-core.js?v=2.5.18"></script>
+<script src="whatsapp-crm-extension/capture-core.js?v=2.5.19"></script>
 <script src="audio-import-matcher.js?v=2.5.15"></script>
 <script src="conversation-completeness.js?v=2.5.1-final"></script>
 <script src="batch-analysis.js?v=2.5.1"></script>
@@ -3785,7 +3785,7 @@ function renderReports(){
             <div class="batchWorkflowStep batchWorkflowGpt"><b>2. ANALISAR NO GPT</b><span>Envie ao GPT somente o arquivo que começa com <strong>01-ENVIAR-AO-GPT</strong>.</span><button class="ghost" id="btnCopyBatchGptInstruction" type="button">Copiar instrução para o GPT</button></div>
             <div class="batchWorkflowStep batchWorkflowImport"><b>3. IMPORTAR RESULTADO</b><span>Importe no CRM somente o arquivo que começa com <strong>02-IMPORTAR-NO-CRM</strong>.</span><button class="primary" id="btnOpenBatchImport" type="button">3. Importar resultado da análise</button></div>
           </div>
-          <small>CRM 2.5.18 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
+          <small>CRM 2.5.19 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
         </div>
       </details>
       <div class="formNotice">${escapeHtml(reportPeriod)}</div>
@@ -5391,7 +5391,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=2.5.18").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=2.5.19").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });

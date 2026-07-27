@@ -320,9 +320,21 @@ test("consolida placeholders de data do player com a única bolha canônica",()=
     {id:"wa:1FAK3DA",message_id:"AUDIO:1FAK3DA",type:"Áudio",text:"[Áudio sem transcrição]",sender:"Você",direction:"outgoing",date:"20/07/2026",message_time:"10:40"}
   ]);
   assert.equal(entries.length,1);
-  assert.equal(entries[0].message_id,"AUDIO:1FAK3DA");
+  assert.equal(entries[0].message_id,"A5BC0F8C1493682949D17332107ACAA3");
   assert.equal(entries[0].duration_seconds,12);
   assert.equal(entries[0].duration_source,"whatsapp_player");
+});
+
+test("remove os dois IDs sintéticos do CRM quando o áudio real já tem data e duração",()=>{
+  const entries=core.consolidateAudioEntries([
+    {id:"A5BC0F8C1493682949D17332107ACAA3",message_id:"A5BC0F8C1493682949D17332107ACAA3",type:"Áudio",text:"[Transcrição de áudio] teste",sender:"Você",direction:"outgoing",date:"20/07/2026",message_time:"10:40",duration_seconds:12,duration_source:"whatsapp_player",duration_valid:true,audioTranscribed:true,audioMeta:{transcription:"teste",transcriptionStatus:"completed"}},
+    {id:"AUDIO:1BRK2J2",message_id:"AUDIO:1BRK2J2",type:"Áudio",text:"[Áudio sem transcrição]",sender:"Você",direction:"outgoing",date:"data não identificada",message_time:"10:40"},
+    {id:"AUDIO:1FAK3DA",message_id:"AUDIO:1FAK3DA",type:"Áudio",text:"[Áudio sem transcrição]",sender:"Você",direction:"outgoing",date:"20/07/2026",message_time:"10:40"}
+  ]);
+  assert.equal(entries.length,1);
+  assert.equal(entries[0].message_id,"A5BC0F8C1493682949D17332107ACAA3");
+  assert.equal(entries[0].duration_seconds,12);
+  assert.equal(entries[0].audioTranscribed,true);
 });
 
 test("reconstrói prefixo de mídia que continua a mensagem anterior",()=>{

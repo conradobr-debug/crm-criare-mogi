@@ -53,6 +53,30 @@
     return Boolean(sender)&&!missingDate;
   }
 
+  // IDs que começam com AUDIO: são chaves auxiliares criadas pelo CRM quando
+  // o WhatsApp ainda não expôs o data-id canônico da bolha. Eles nunca devem
+  // vencer um ID real do WhatsApp para a mesma mensagem.
+  function isSyntheticAudioMessageId(entry){
+    return /^AUDIO:/i.test(normalizeWhatsAppMessageId(entry?.message_id||entry?.id));
+  }
+
+  function audioTimeKey(entry){
+    return (cleanText(entry?.message_time||entry?.time).match(/\d{1,2}:\d{2}/)||[])[0]||"";
+  }
+
+  function sameAudioEnvelope(candidate,canonical){
+    if(!isAudioEntry(candidate)||!isAudioEntry(canonical))return false;
+    const candidateTime=audioTimeKey(candidate),canonicalTime=audioTimeKey(canonical);
+    if(!candidateTime||candidateTime!==canonicalTime)return false;
+    const candidateSender=normalizedUiText(candidate?.sender),canonicalSender=normalizedUiText(canonical?.sender);
+    if(candidateSender&&canonicalSender&&candidateSender!==canonicalSender)return false;
+    const candidateDirection=normalizedUiText(candidate?.direction),canonicalDirection=normalizedUiText(canonical?.direction);
+    if(candidateDirection&&canonicalDirection&&candidateDirection!==canonicalDirection)return false;
+    const candidateDate=normalizedUiText(candidate?.date),canonicalDate=normalizedUiText(canonical?.date);
+    const candidateDateKnown=hasCanonicalAudioIdentity(candidate),canonicalDateKnown=hasCanonicalAudioIdentity(canonical);
+    return !(candidateDateKnown&&canonicalDateKnown&&candidateDate!==canonicalDate);
+  }
+
   function mergeEntryMetadata(stored,incoming){
     const canonical=normalizeWhatsAppMessageId(incoming?.message_id||incoming?.id||stored?.message_id||stored?.id);
     if(!isAudioEntry(stored)&&!isAudioEntry(incoming))return {...stored,...incoming,...(canonical?{message_id:canonical}:{})};
@@ -196,11 +220,22 @@
   function consolidateAudioEntries(entries){
     const normalized=(Array.isArray(entries)?entries:[]).map(normalizeEntry).filter(Boolean);
     const result=[...normalized];
-    const timeKey=entry=>(cleanText(entry?.message_time||entry?.time).match(/\d{1,2}:\d{2}/)||[])[0]||"";
+    // Primeiro, elimina chaves sintéticas AUDIO: quando existe exatamente uma
+    // mensagem real com o mesmo remetente/direção/data-hora. Isso cobre o
+    // caso em que a chave auxiliar também recebeu uma data posteriormente.
     for(const entry of normalized){
-      if(!isAudioEntry(entry)||hasCanonicalAudioIdentity(entry))continue;
-      const time=timeKey(entry);if(!time)continue;
-      const complete=result.filter(item=>isAudioEntry(item)&&hasCanonicalAudioIdentity(item)&&timeKey(item)===time);
+      if(!isSyntheticAudioMessageId(entry))continue;
+      const realMatches=result.filter(item=>!isSyntheticAudioMessageId(item)&&sameAudioEnvelope(entry,item));
+      if(realMatches.length!==1)continue;
+      const canonical=realMatches[0];
+      const merged=mergeEntryMetadata(entry,canonical);
+      const at=result.indexOf(canonical);if(at>=0)result[at]=merged;
+      const syntheticAt=result.indexOf(entry);if(syntheticAt>=0)result.splice(syntheticAt,1);
+    }
+    for(const entry of normalized){
+      if(!result.includes(entry)||!isAudioEntry(entry)||hasCanonicalAudioIdentity(entry))continue;
+      const time=audioTimeKey(entry);if(!time)continue;
+      const complete=result.filter(item=>isAudioEntry(item)&&hasCanonicalAudioIdentity(item)&&audioTimeKey(item)===time);
       if(complete.length!==1)continue;
       const canonical=complete[0];
       const merged=mergeEntryMetadata(entry,canonical);
@@ -254,6 +289,7 @@
     normalizeEntry,
     mergeEntries,
     mergeMessageWindow,
+    isSyntheticAudioMessageId,
     pruneOrphanAudioEntries,
     consolidateAudioEntries,
     audioUnavailable,
