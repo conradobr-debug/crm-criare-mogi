@@ -13,6 +13,19 @@ const matcherContext = {globalThis:{CriareWhatsAppCaptureCore:core}};
 vm.runInNewContext(matcherSource, matcherContext);
 const matcher = matcherContext.globalThis.CriareAudioImportMatcher;
 assert.equal(matcher.version,"2.2.6");
+const contentSource = await readFile(new URL("whatsapp-crm-extension/content-whatsapp.js", root), "utf8");
+const hydrationContext = {
+  globalThis:{CriareWhatsAppCaptureCore:core,__CRIARE_WHATSAPP_TEST__:true},
+  chrome:{runtime:{getManifest:()=>({version:"test"}),onMessage:{addListener(){}}}},
+  console
+};
+vm.runInNewContext(contentSource, hydrationContext);
+const hydration = hydrationContext.globalThis.CriareWhatsAppHydrationTest;
+assert.ok(hydration?.createHistoryHydrationTracker);
+
+function hydrationSnapshot(ids,{panelToken="main",scrollerFound=true,reachedStartEvidence=false,loading=false}={}){
+  return {ids,panelToken,scrollerFound,reachedStartEvidence,loading};
+}
 
 test("preserva mensagens repetidas quando os IDs do WhatsApp são diferentes",()=>{
   const merged = core.mergeEntries([], [
@@ -47,6 +60,99 @@ test("preserva múltiplos áudios distintos entre janelas virtualizadas",()=>{
   const second=core.mergeMessageWindow(first.entries,Array.from({length:13},(_,index)=>({message_id:`AUDIO-${index+13}`,id:`wa:AUDIO-${index+13}`,type:"Áudio",text:"[Áudio sem transcrição]"})),{prepend:false});
   assert.equal(second.entries.length,26);
   assert.equal(new Set(second.entries.map(entry=>entry.message_id)).size,26);
+});
+
+test("aguarda a hidratação tardia antes de aceitar o histórico",()=>{
+  const tracker=hydration.createHistoryHydrationTracker({minWaitMs:1000,minStableSamples:3});
+  const transient=["M1"];
+  assert.equal(tracker.observe(hydrationSnapshot(transient),0).hydrated,false);
+  assert.equal(tracker.observe(hydrationSnapshot(transient),400).hydrated,false);
+  assert.equal(tracker.observe(hydrationSnapshot(transient),800).hydrated,false);
+  const complete=[...Array.from({length:37},(_,index)=>`TEXT-${index}`),...Array.from({length:6},(_,index)=>`AUDIO-${index}`)];
+  assert.equal(tracker.observe(hydrationSnapshot(complete),1200).stableSamples,1);
+  assert.equal(tracker.observe(hydrationSnapshot(complete),1600).hydrated,false);
+  const final=tracker.observe(hydrationSnapshot(complete),2000);
+  assert.equal(final.hydrated,true);
+  assert.equal(final.finalCount,43);
+  assert.equal(new Set(complete.filter(id=>id.startsWith("AUDIO-"))).size,6);
+});
+
+test("não aceita uma mensagem estável por mais de 4,5 segundos antes do histórico completo",()=>{
+  const tracker=hydration.createHistoryHydrationTracker({minWaitMs:4500,minStableSamples:3,timeoutMs:12000});
+  const transient=hydrationSnapshot(["TRANSIENT-ONE"],{reachedStartEvidence:true});
+  for(const elapsed of [0,450,900,1350,1800,2250,2700,3150,3600,4050,4500,4950,5400,5850,6300,6750]){
+    assert.equal(tracker.observe(transient,elapsed).hydrated,false,`não deve aceitar uma mensagem em ${elapsed}ms`);
+  }
+  const complete=[...Array.from({length:37},(_,index)=>`TEXT-${index+1}`),...Array.from({length:6},(_,index)=>`AUDIO-${index+1}`)];
+  const snapshot=hydrationSnapshot(complete,{reachedStartEvidence:true});
+  assert.equal(tracker.observe(snapshot,7200).hydrated,false);
+  assert.equal(tracker.observe(snapshot,7650).hydrated,false);
+  const accepted=tracker.observe(snapshot,8100);
+  assert.equal(accepted.hydrated,true);
+  assert.equal(accepted.reason,"stable_canonical_ids");
+  assert.equal(accepted.finalCount,43);
+  assert.equal(complete.filter(id=>id.startsWith("AUDIO-")).length,6);
+});
+
+test("aceita conversa legítima de uma mensagem somente no final do timeout completo",()=>{
+  const tracker=hydration.createHistoryHydrationTracker({minWaitMs:1000,minStableSamples:3});
+  const snapshot=hydrationSnapshot(["ONLY-1"],{reachedStartEvidence:true});
+  assert.equal(tracker.observe(snapshot,0).hydrated,false);
+  assert.equal(tracker.observe(snapshot,500).hydrated,false);
+  const early=tracker.observe(snapshot,1100);
+  assert.equal(early.hydrated,false);
+  assert.equal(early.reason,"single_message_waiting_full_timeout");
+  const accepted=tracker.final(12000);
+  assert.equal(accepted.hydrated,true);
+  assert.equal(accepted.reason,"single_message_start_confirmed_after_full_timeout");
+});
+
+test("painel ambíguo com uma mensagem retorna history_not_hydrated sem payload parcial",()=>{
+  const tracker=hydration.createHistoryHydrationTracker({minWaitMs:900,minStableSamples:3});
+  for(const elapsed of [0,450,1000,1450]) tracker.observe(hydrationSnapshot(["TRANSIENT"],{reachedStartEvidence:false}),elapsed);
+  const failure=tracker.final(1600);
+  assert.equal(failure.hydrated,false);
+  assert.equal(failure.reason,"single_message_start_not_confirmed");
+  const payload=failure.hydrated?{entries:["TRANSIENT"]}:null;
+  assert.equal(payload,null);
+});
+
+test("tentativa não hidratada preserva o histórico anterior",()=>{
+  const previous=Array.from({length:43},(_,index)=>({message_id:`M-${index}`,id:`wa:M-${index}`,text:`mensagem ${index}`}));
+  const tracker=hydration.createHistoryHydrationTracker({minWaitMs:900,minStableSamples:3});
+  [0,450,1000].forEach(elapsed=>tracker.observe(hydrationSnapshot(["TRANSIENT"],{reachedStartEvidence:false}),elapsed));
+  const failed=tracker.final(1400);
+  const persisted=failed.hydrated?core.mergeEntries(previous,[{message_id:"TRANSIENT",text:"parcial"}]).entries:previous;
+  assert.equal(persisted.length,43);
+  assert.equal(persisted[0].message_id,"M-0");
+});
+
+test("reinicia a estabilidade a cada crescimento progressivo do DOM",()=>{
+  const tracker=hydration.createHistoryHydrationTracker({minWaitMs:1000,minStableSamples:3});
+  let elapsed=0;
+  for(const count of [1,8,25,43]){
+    const observed=tracker.observe(hydrationSnapshot(Array.from({length:count},(_,index)=>`M-${index}`)),elapsed);
+    assert.equal(observed.stableSamples,1);
+    assert.equal(observed.hydrated,false);
+    elapsed+=400;
+  }
+  assert.equal(tracker.observe(hydrationSnapshot(Array.from({length:43},(_,index)=>`M-${index}`)),elapsed).hydrated,false);
+  const final=tracker.observe(hydrationSnapshot(Array.from({length:43},(_,index)=>`M-${index}`)),elapsed+400);
+  assert.equal(final.hydrated,true);
+});
+
+test("troca do painel reinicia a observação e descarta a referência antiga",()=>{
+  const tracker=hydration.createHistoryHydrationTracker({minWaitMs:1000,minStableSamples:3});
+  tracker.observe(hydrationSnapshot(["OLD-1"],{panelToken:"old",reachedStartEvidence:false}),0);
+  tracker.observe(hydrationSnapshot(["OLD-1"],{panelToken:"old",reachedStartEvidence:false}),400);
+  const current=Array.from({length:43},(_,index)=>`NEW-${index}`);
+  const replaced=tracker.observe(hydrationSnapshot(current,{panelToken:"new"}),1200);
+  assert.equal(replaced.stableSamples,1);
+  assert.equal(replaced.hydrated,false);
+  tracker.observe(hydrationSnapshot(current,{panelToken:"new"}),1600);
+  const final=tracker.observe(hydrationSnapshot(current,{panelToken:"new"}),2000);
+  assert.equal(final.hydrated,true);
+  assert.equal(final.finalCount,43);
 });
 
 test("atualiza mensagem editada sem duplicar o ID",()=>{
@@ -387,8 +493,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.reachedStart && history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.20"/);
-  assert.equal(manifest.version,"2.3.20");
+  assert.match(crm,new RegExp(`WHATSAPP_EXTENSION_VERSION = "${manifest.version.replace(/\./g,"\\.")}"`));
+  assert.match(manifest.version,/^\d+\.\d+\.\d+$/);
   assert.match(content,/VOICE_MESSAGE_SELECTOR/);
   assert.match(content,/\[data-testid\*="ptt" i\]/);
   assert.match(content,/function ownMessageContainer/);

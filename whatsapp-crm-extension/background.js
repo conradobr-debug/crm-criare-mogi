@@ -167,8 +167,7 @@ async function waitForChat(tabId,request,{timeoutMs=65000}={}){
   const deadline = Date.now() + timeoutMs;
   let unavailableChecks = 0;
   let emptyChecks = 0;
-  let stableChecks = 0;
-  let previousCount = -1;
+  let conversationOpenChecks = 0;
   let lastState = null;
   let mismatchState = null;
   let mismatchChecks = 0;
@@ -183,27 +182,26 @@ async function waitForChat(tabId,request,{timeoutMs=65000}={}){
         mismatchState = state;
         mismatchChecks += 1;
         if(mismatchChecks >= 3) return {ready:false,empty:false,mismatch:true,state};
-        stableChecks = 0;
-        previousCount = -1;
+        conversationOpenChecks = 0;
         await sleep(900);
         continue;
       }
       mismatchChecks = 0;
       if(state?.matches && state?.ready){
-        const count = Number(state.count || 0);
-        stableChecks = count === previousCount ? stableChecks + 1 : 0;
-        previousCount = count;
-        if(stableChecks >= 3) return {ready:true,empty:false,state};
+        // Isto confirma somente que a conversa foi aberta. A hidratação do
+        // histórico é confirmada exclusivamente pelo content script antes da
+        // captura; uma mensagem estável nunca é prova suficiente aqui.
+        conversationOpenChecks += 1;
+        if(conversationOpenChecks >= 2) return {ready:true,empty:false,state};
       }else{
-        stableChecks = 0;
-        previousCount = -1;
+        conversationOpenChecks = 0;
       }
       if(state?.matches && state?.empty){
         emptyChecks += 1;
         if(emptyChecks >= 8) return {ready:true,empty:true,state};
       }else emptyChecks = 0;
     }catch(error){
-      stableChecks = 0;
+      conversationOpenChecks = 0;
       emptyChecks = 0;
     }
     await sleep(900);
@@ -249,11 +247,19 @@ async function captureChatFromTab(tabId,request,loadedState=null){
       extensionVersion,tabUrl:(await chrome.tabs.get(tabId).catch(()=>({}))).url||"",detectedTitle:loadedState.title||"",domCount:0
     },loadedState.profilePhotoUrl);
   }
+  const hydration=await chrome.tabs.sendMessage(tabId,{type:"criare-wait-for-history-hydration",timeoutMs:12000,minWaitMs:4500});
+  const currentTab=await chrome.tabs.get(tabId).catch(()=>({}));
+  if(!hydration?.ok){
+    return {
+      ok:false,code:"history_not_hydrated",hydration:hydration||null,extensionVersion,
+      tabUrl:currentTab.url||"",detectedTitle:loadedState?.title||"",domCount:Number(hydration?.finalCount||loadedState?.count||0),
+      error:"O histórico do WhatsApp Web ainda está carregando. Nenhuma captura parcial foi salva; aguarde e tente novamente."
+    };
+  }
   const extraction = chrome.tabs.sendMessage(tabId,{type:"criare-extract-active-chat",request});
   const timeout = new Promise(resolve=>setTimeout(()=>resolve({ok:false,error:"A leitura completa ultrapassou o tempo de segurança. O histórico anterior foi preservado."}),CAPTURE_TIMEOUT_MS));
   const result = await Promise.race([extraction,timeout]);
-  const currentTab=await chrome.tabs.get(tabId).catch(()=>({}));
-  if(!result?.ok) return {...(result || {}),ok:false,extensionVersion,tabUrl:currentTab.url||"",detectedTitle:result?.title||loadedState?.title||"",domCount:Number(result?.count||loadedState?.count||0),error:result?.error || "A conversa não devolveu mensagens."};
+  if(!result?.ok) return {...(result || {}),ok:false,extensionVersion,tabUrl:currentTab.url||"",detectedTitle:result?.title||loadedState?.title||"",domCount:Number(result?.count||hydration?.finalCount||loadedState?.count||0),error:result?.error || "A conversa não devolveu mensagens."};
   return withProfilePhoto({...result,extensionVersion,tabUrl:currentTab.url||"",detectedTitle:result.title||loadedState?.title||"",domCount:Number(result.count||0)},result.profilePhotoUrl || loadedState?.profilePhotoUrl);
 }
 
@@ -285,7 +291,7 @@ async function captureCustomerChat(request,sender){
   if(!target?.tabId) return {ok:false,error:"Abra primeiro a conversa deste cliente pelo CRM."};
   try{
     await chrome.tabs.get(target.tabId);
-    return await chrome.tabs.sendMessage(target.tabId,{type:"criare-extract-active-chat",request});
+    return await captureChatFromTab(target.tabId,request);
   }catch(error){
     delete targets[phone];
     await chrome.storage.session.set({[TARGETS_KEY]:targets});

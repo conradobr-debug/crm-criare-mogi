@@ -152,13 +152,6 @@ function sameCustomer(title, request){
   const activeDigits = active.replace(/\D/g, "");
   const expectedDigits = globalThis.CriarePhoneIdentity.comparableDigits(request?.phone);
   if(expectedDigits && activeDigits && activeDigits.endsWith(expectedDigits.slice(-10))) return true;
-  // O WhatsApp normalmente mostra apenas o nome do contato no cabeçalho.  Não
-  // exigimos que a lista lateral repita o telefone: a rota /send já recebeu o
-  // E.164 e, quando o título contém todos os termos relevantes do lead, esta é
-  // uma confirmação adicional da conversa aberta.
-  const expectedName = comparableText(request?.customerName || request?.name || "");
-  const expectedTerms = expectedName.split(" ").filter(term=>term.length >= 3);
-  if(expectedTerms.length && active && expectedTerms.every(term=>active.split(" ").includes(term))) return true;
   return Boolean(expectedDigits&&request?.phoneIdentityConfirmed===true&&globalThis.CriarePhoneIdentity.comparableDigits(request?.confirmedPhone)===expectedDigits);
 }
 
@@ -227,18 +220,77 @@ async function waitForMessagesToSettle(main, {timeoutMs=12000,minWaitMs=1800}={}
   return messageNodes(main).length;
 }
 
-async function waitForHistoryHydration(main,{timeoutMs=12000,minWaitMs=4500}={}){
-  const startedAt=Date.now(),deadline=startedAt+timeoutMs;let previous="",stable=0,bestCount=0;
-  while(Date.now()<deadline){
-    const scroller=messageScrollContainer(main);const count=messageNodes(main).length;
-    const signature=`${windowSignature(main)}:${scroller?.scrollHeight||0}:${scroller?.clientHeight||0}`;
-    bestCount=Math.max(bestCount,count);stable=signature&&signature===previous?stable+1:0;previous=signature;
-    const hydrated=count>1&&Number(scroller?.scrollHeight||0)>Number(scroller?.clientHeight||0);
-    if(Date.now()-startedAt>=minWaitMs&&stable>=4&&(hydrated||bestCount>1))break;
-    await sleep(450);
-  }
-  return {count:messageNodes(main).length,bestCount};
+function historyLoadingIndicator(main){
+  return main?.querySelector?.('[aria-busy="true"],[role="progressbar"],[data-testid*="loading" i],[data-testid*="spinner" i]') || null;
 }
+
+function canonicalHistoryIds(main){
+  return [...new Set(messageNodes(main).map(node=>normalizeWhatsAppMessageId(messageId(node))||messageId(node)).filter(Boolean))].sort();
+}
+
+function createHistoryHydrationTracker({minWaitMs=4500,minStableSamples=3,timeoutMs=12000}={}){
+  let samples=0,initialCount=null,previousSignature="",previousPanel=null,stableSamples=0;
+  let panelReplaced=false,singleEvidenceContinuous=true,singleIdContinuous=true,lastSnapshot=null;
+  const result=(snapshot,elapsedMs,hydrated=false,reason="history_not_stable")=>({
+    hydrated,reason,elapsedMs,samples,initialCount:initialCount||0,finalCount:snapshot.ids.length,
+    uniqueIds:snapshot.ids.length,stableSamples,scrollerFound:Boolean(snapshot.scrollerFound),
+    reachedStartEvidence:Boolean(snapshot.reachedStartEvidence)
+  });
+  return {
+    observe(snapshot,elapsedMs){
+      samples+=1;
+      if(initialCount===null) initialCount=snapshot.ids.length;
+      const signature=snapshot.ids.join("|");
+      const changedPanel=previousPanel!==null&&snapshot.panelToken!==previousPanel;
+      const changedSet=signature!==previousSignature;
+      if(changedPanel||changedSet) stableSamples=1;
+      else stableSamples+=1;
+      panelReplaced=panelReplaced||changedPanel;
+      const singleEvidence= snapshot.ids.length===1 && Boolean(snapshot.reachedStartEvidence) && !snapshot.loading && !changedPanel;
+      singleEvidenceContinuous=singleEvidenceContinuous&&singleEvidence;
+      singleIdContinuous=singleIdContinuous&&(!previousSignature||!changedSet);
+      previousPanel=snapshot.panelToken;
+      previousSignature=signature;
+      lastSnapshot=snapshot;
+      const observedLongEnough=elapsedMs>=minWaitMs;
+      const stableEnough=stableSamples>=minStableSamples;
+      const multiMessageReady=snapshot.ids.length>1&&snapshot.scrollerFound&&stableEnough&&observedLongEnough;
+      if(multiMessageReady) return result(snapshot,elapsedMs,true,"stable_canonical_ids");
+      const reason=!snapshot.scrollerFound?"history_scroller_not_found":snapshot.ids.length===0?"no_messages_loaded":snapshot.ids.length===1&&!snapshot.reachedStartEvidence?"single_message_start_not_confirmed":snapshot.ids.length===1?"single_message_waiting_full_timeout":snapshot.loading?"history_still_loading":changedPanel?"history_panel_replaced":"history_not_stable";
+      return result(snapshot,elapsedMs,false,reason);
+    },
+    final(elapsedMs){
+      const snapshot=lastSnapshot||{ids:[],scrollerFound:false,reachedStartEvidence:false,loading:false};
+      const singleMessageReadyAfterFullTimeout=snapshot.ids.length===1&&snapshot.scrollerFound&&Boolean(snapshot.reachedStartEvidence)&&!snapshot.loading&&singleEvidenceContinuous&&singleIdContinuous&&!panelReplaced&&stableSamples>=minStableSamples&&elapsedMs>=timeoutMs;
+      if(singleMessageReadyAfterFullTimeout) return result(snapshot,elapsedMs,true,"single_message_start_confirmed_after_full_timeout");
+      const reason=!snapshot.scrollerFound?"history_scroller_not_found":snapshot.ids.length===0?"no_messages_loaded":snapshot.ids.length===1?"single_message_start_not_confirmed":"history_not_hydrated";
+      return result(snapshot,elapsedMs,false,reason);
+    }
+  };
+}
+
+async function waitForHistoryHydration(_main,{timeoutMs=12000,minWaitMs=4500,sampleMs=450,minStableSamples=3}={}){
+  const startedAt=Date.now(),deadline=startedAt+timeoutMs;
+  const tracker=createHistoryHydrationTracker({minWaitMs,minStableSamples,timeoutMs});
+  while(Date.now()<deadline){
+    // O WhatsApp troca o #main durante a transição SPA. Nunca mantenha uma
+    // referência antiga: cada amostra deve refletir o painel atual.
+    const main=activeMain();
+    const scroller=messageScrollContainer(main);
+    const scrollHeight=Number(scroller?.scrollHeight||0),clientHeight=Number(scroller?.clientHeight||0),scrollTop=Number(scroller?.scrollTop||0);
+    const noScrollableRange=Boolean(scroller)&&scrollHeight<=clientHeight+2;
+    const reachedStartEvidence=Boolean(scroller)&&((scrollTop<=2)||noScrollableRange)&&!olderMessagesButton(main)&&!historyLoadingIndicator(main);
+    const status=tracker.observe({
+      ids:canonicalHistoryIds(main),panelToken:main,scrollerFound:Boolean(scroller),
+      reachedStartEvidence,loading:Boolean(historyLoadingIndicator(main))
+    },Date.now()-startedAt);
+    if(status.hydrated) return status;
+    await sleep(sampleMs);
+  }
+  return tracker.final(Date.now()-startedAt);
+}
+
+if(globalThis.__CRIARE_WHATSAPP_TEST__) globalThis.CriareWhatsAppHydrationTest={createHistoryHydrationTracker};
 
 function olderMessagesButton(main=activeMain()){
   const phrases = [
@@ -702,7 +754,7 @@ async function processAudioQueue(main,request,history){
   }
 }
 async function extractLoadedMessages(request={}){
-  const main = activeMain();
+  let main = activeMain();
   if(!main) throw new Error("Abra uma conversa no WhatsApp Web antes de capturar.");
   await waitForMessagesToSettle(main);
   const olderHistory = await loadOlderMessagesFromPhone(main);
@@ -713,7 +765,20 @@ async function extractLoadedMessages(request={}){
     loadedScroller.dispatchEvent(new Event("scroll",{bubbles:true}));
     await waitForMessagesToSettle(main,{timeoutMs:8000,minWaitMs:900});
   }
-  await waitForHistoryHydration(main,{timeoutMs:12000,minWaitMs:4500});
+  const hydration=await waitForHistoryHydration(main,{timeoutMs:12000,minWaitMs:4500});
+  if(!hydration.hydrated){
+    const error=new Error("O histórico do WhatsApp Web ainda está carregando. A captura anterior foi preservada; aguarde e tente novamente.");
+    error.code="history_not_hydrated";
+    error.hydration=hydration;
+    throw error;
+  }
+  main=activeMain();
+  if(!main){
+    const error=new Error("O painel da conversa foi substituído durante a hidratação. A captura anterior foi preservada.");
+    error.code="history_not_hydrated";
+    error.hydration={...hydration,hydrated:false,reason:"history_panel_replaced"};
+    throw error;
+  }
   const history = await collectAvailableHistory(main);
   if(!history.entries.length) throw new Error("Não encontrei mensagens carregadas nesta conversa.");
   // A falha ao avançar além da janela virtualizada não invalida as mensagens
@@ -824,6 +889,14 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
       .catch(error=>sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,code:"spa_timeout",error:error.message||"Tempo esgotado na transição interna do WhatsApp Web."}));
     return true;
   }
+  if(message?.type === "criare-wait-for-history-hydration"){
+    waitForHistoryHydration(activeMain(),{
+      timeoutMs:Number(message.timeoutMs)||12000,
+      minWaitMs:Number(message.minWaitMs)||4500
+    }).then(result=>sendResponse({ok:result.hydrated,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...result}))
+      .catch(error=>sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,code:"history_not_hydrated",error:error.message||"Não foi possível confirmar a hidratação do histórico."}));
+    return true;
+  }
   if(message?.type === "criare-open-conversation-fallback"){
     openConversationFromSidebar(message.request || {})
       .then(result=>sendResponse({contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...result}))
@@ -847,7 +920,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
       }
       sendResponse({ok:true,title,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...await extractLoadedMessages(message.request || {})});
     }catch(error){
-      sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,error:error.message || "Não foi possível ler a conversa aberta."});
+      sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,code:error.code||"capture_failed",hydration:error.hydration||null,error:error.message || "Não foi possível ler a conversa aberta."});
     }
   })();
   return true;
