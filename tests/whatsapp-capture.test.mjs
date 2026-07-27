@@ -59,6 +59,18 @@ test("atualiza mensagem editada sem duplicar o ID",()=>{
   assert.match(merged.entries[0].text,/terça/);
 });
 
+test("uma releitura de texto remove marcador de áudio falso do mesmo message_id",()=>{
+  const merged=core.mergeEntries(
+    [{id:"wa:MSG-0929",message_id:"MSG-0929",type:"Áudio",hasVoiceMessage:true,text:"[Áudio sem transcrição]",audioMeta:{extractionStatus:"pending"},duration:null}],
+    [{id:"wa:MSG-0929",message_id:"MSG-0929",type:"Texto",hasVoiceMessage:false,text:"[09:29, 27/07/2026] Criare: certinho...fico a disposição!"}]
+  );
+  assert.equal(merged.entries.length,1);
+  assert.equal(merged.entries[0].type,"Texto");
+  assert.equal(merged.entries[0].hasVoiceMessage,undefined);
+  assert.equal(merged.entries[0].audioMeta,undefined);
+  assert.match(merged.entries[0].text,/certinho/);
+});
+
 test("normaliza prefixo wa e preserva o identificador completo",()=>{
   assert.equal(core.normalizeWhatsAppMessageId(" wa:acf748cbdc45c89656b816fbcc3ec5d0 "),"ACF748CBDC45C89656B816FBCC3EC5D0");
 });
@@ -358,11 +370,12 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert.match(content,/loadedHistoryComplete:history\.reachedStart && history\.loadedStartReached/);
   assert.match(content,/span\.selectable-text/);
   assert.doesNotMatch(content,/img\[src\^=\"data:image\"\]/);
-  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.18"/);
-  assert.equal(manifest.version,"2.3.18");
+  assert.match(crm,/WHATSAPP_EXTENSION_VERSION = "2\.3\.19"/);
+  assert.equal(manifest.version,"2.3.19");
   assert.match(content,/VOICE_MESSAGE_SELECTOR/);
   assert.match(content,/\[data-testid\*="ptt" i\]/);
-  assert.match(content,/\[data-icon\*="ptt" i\]/);
+  assert.match(content,/function ownMessageContainer/);
+  assert.match(content,/signal\.closest\?\.\('\[data-testid="msg-container"\]'\)===container/);
   assert.match(content,/\[data-testid\^="conv-msg-"\],\[data-id\]/);
   assert.match(content,/const voiceRoots=\[\.\.\.main\.querySelectorAll\(VOICE_MESSAGE_SELECTOR\)\]/);
   assert.match(content,/function canonicalMessageRoot/);

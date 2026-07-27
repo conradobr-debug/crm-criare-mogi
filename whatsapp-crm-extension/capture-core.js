@@ -80,6 +80,23 @@
   function mergeEntryMetadata(stored,incoming){
     const canonical=normalizeWhatsAppMessageId(incoming?.message_id||incoming?.id||stored?.message_id||stored?.id);
     if(!isAudioEntry(stored)&&!isAudioEntry(incoming))return {...stored,...incoming,...(canonical?{message_id:canonical}:{})};
+    // Uma leitura completa posterior pode revelar que o mesmo data-id é texto,
+    // não áudio. Não mantenha audioMeta/hasVoiceMessage antigos nesse caso:
+    // isso transformava texto real em "[Áudio sem transcrição]" no CRM.
+    const incomingIsExplicitText=!isAudioEntry(incoming)&&cleanText(incoming?.text);
+    if(incomingIsExplicitText){
+      const cleaned={...stored,...incoming};
+      delete cleaned.audioMeta;
+      delete cleaned.audioTranscribed;
+      delete cleaned.hasVoiceMessage;
+      delete cleaned.duration;
+      delete cleaned.duration_text;
+      delete cleaned.duration_seconds;
+      delete cleaned.duration_source;
+      delete cleaned.duration_valid;
+      if(canonical)cleaned.message_id=canonical;
+      return cleaned;
+    }
     const merged={...stored,...incoming,audioMeta:{...(stored?.audioMeta||{}),...(incoming?.audioMeta||{})}};
     const storedPriority=audioDurationPriority(stored),incomingPriority=audioDurationPriority(incoming);const durationWinner=incomingPriority>storedPriority?incoming:stored;
     for(const key of ["duration","duration_text","duration_seconds","duration_source","duration_valid"]){if(durationWinner?.[key]!==undefined)merged[key]=durationWinner[key];else delete merged[key];}

@@ -8,8 +8,25 @@ function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 
 const LOCAL_TRANSCRIBER_URL = "http://127.0.0.1:32123/v1/transcribe";
 const AUDIO_MAX_BYTES = 15 * 1024 * 1024;
-const VOICE_MESSAGE_SELECTOR='[aria-label*="mensagem de voz" i],[aria-label*="voice message" i],[data-testid*="audio" i],[data-testid*="ptt" i],[data-icon*="audio" i],[data-icon*="ptt" i],audio';
-function hasVoiceMessage(node){return Boolean(node?.querySelector(VOICE_MESSAGE_SELECTOR));}
+// `data-icon` é usado em controles auxiliares do WhatsApp e não identifica
+// sozinho uma mensagem de voz. A leitura anterior buscava esses ícones em uma
+// raiz ampla e, em alguns layouts, classificava a bolha de texto seguinte como
+// áudio. Só aceitamos sinais pertencentes ao msg-container da própria bolha.
+const VOICE_MESSAGE_SELECTOR='[aria-label*="mensagem de voz" i],[aria-label*="voice message" i],[data-testid*="audio" i],[data-testid*="ptt" i],[role="slider"],audio';
+function ownMessageContainer(node){
+  if(!node)return null;
+  if(node.matches?.('[data-testid="msg-container"]'))return node;
+  const direct=node.querySelector?.(':scope > [data-testid="msg-container"]');
+  if(direct)return direct;
+  const containers=[...(node.querySelectorAll?.('[data-testid="msg-container"]')||[])];
+  return containers.length===1?containers[0]:null;
+}
+function voiceSignals(node){
+  const container=ownMessageContainer(node);
+  if(!container)return [];
+  return [...container.querySelectorAll(VOICE_MESSAGE_SELECTOR)].filter(signal=>signal.closest?.('[data-testid="msg-container"]')===container);
+}
+function hasVoiceMessage(node){return voiceSignals(node).length>0;}
 function voiceMessageNodes(main=activeMain()){return messageNodes(main).filter(hasVoiceMessage);}
 function audioElement(node){return node.querySelector("audio")||null;}
 function audioSource(node){const audio=audioElement(node);const candidates=[audio?.currentSrc,audio?.src,audio?.getAttribute("src"),node.querySelector("a[download],a[href*='blob:'],[data-url],[data-download-url]")?.getAttribute("href"),node.querySelector("[data-url],[data-download-url]")?.getAttribute("data-url")];return candidates.map(value=>String(value||"").trim()).find(value=>/^(blob:|data:|https?:)/i.test(value))||"";}
@@ -158,7 +175,7 @@ function canonicalMessageRoot(node){
 
 function messageNodes(main=activeMain()){
   if(!main) return [];
-  const voiceRoots=[...main.querySelectorAll(VOICE_MESSAGE_SELECTOR)].map(node=>node.closest('[data-testid^="conv-msg-"],[data-id],[role="row"]')||node.closest('[data-testid="msg-container"]')||node);
+  const voiceRoots=[...main.querySelectorAll(VOICE_MESSAGE_SELECTOR)].map(node=>node.closest('[data-testid="msg-container"]')).filter(Boolean);
   const roots=[...main.querySelectorAll('[data-testid^="conv-msg-"],[data-id]'),...voiceRoots];
   const containers=[...main.querySelectorAll('[data-testid="msg-container"]')];
   const candidates=[...roots,...containers].map((node,order)=>({node:canonicalMessageRoot(node),order})).filter(({node})=>Boolean(node&&(node.matches?.('[data-testid^="conv-msg-"]')||node.querySelector?.('[data-testid="msg-container"],[data-pre-plain-text]')||hasVoiceMessage(node))));
