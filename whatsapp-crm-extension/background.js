@@ -127,17 +127,24 @@ async function ensureConversationOpened(request,{active=false,operationId=null}=
     await saveTarget(phone,tab.id);
     await waitForTabComplete(tab.id);
     await ensureCurrentContentScript(tab.id);
-    const phoneConfirmation=await chrome.tabs.sendMessage(tab.id,{type:"criare-confirm-conversation-phone",request:{...request,phone,request_id:requestId}});
-    if(!phoneConfirmation?.ok){
-      const currentTab=await chrome.tabs.get(tab.id).catch(()=>({}));
-      return {ok:false,code:phoneConfirmation?.code||"contact_mismatch",error:phoneConfirmation?.error||"O telefone da conversa aberta não corresponde ao lead.",tabId:tab.id,tabUrl:currentTab.url||"",detectedTitle:"",domCount:0};
-    }
-    const conversationRequest = {...request,phone,request_id:requestId,phoneIdentityConfirmed:true,confirmedPhone:phoneConfirmation.confirmedPhone||phone};
-    // A primeira abertura da sessão pode não criar #main só com a rota /send.
-    // Primeiro observamos a transição SPA; se ela não montar o painel, usamos a
-    // busca/lista lateral e somente então aguardamos a conversa estabilizar.
+    // A rota /send recebe o telefone E.164. Esperamos primeiro a transição SPA
+    // e a conversa aberta; procurar imediatamente na lista lateral falhava em
+    // contatos cujo item exibe só o nome e abortava uma conversa já carregada.
+    let phoneConfirmation=await chrome.tabs.sendMessage(tab.id,{type:"criare-confirm-conversation-phone",request:{...request,phone,request_id:requestId}});
+    let conversationRequest = {...request,phone,request_id:requestId};
+    if(phoneConfirmation?.ok) conversationRequest={...conversationRequest,phoneIdentityConfirmed:true,confirmedPhone:phoneConfirmation.confirmedPhone||phone};
     let ready = await chrome.tabs.sendMessage(tab.id,{type:"criare-wait-for-conversation",request:conversationRequest,timeoutMs:14000});
     const needsSidebarFallback = ["panel_not_created","header_not_found","messages_not_loaded","spa_timeout"].includes(ready?.code);
+    if(!ready?.ok && needsSidebarFallback){
+      // Uma aba pode já estar com a conversa correta renderizada, mas a primeira
+      // confirmação ocorreu antes do DOM estabilizar. Reconfirme antes de usar
+      // a busca lateral como último recurso.
+      phoneConfirmation=await chrome.tabs.sendMessage(tab.id,{type:"criare-confirm-conversation-phone",request:conversationRequest});
+      if(phoneConfirmation?.ok){
+        conversationRequest={...conversationRequest,phoneIdentityConfirmed:true,confirmedPhone:phoneConfirmation.confirmedPhone||phone};
+        ready=await chrome.tabs.sendMessage(tab.id,{type:"criare-wait-for-conversation",request:conversationRequest,timeoutMs:9000});
+      }
+    }
     if(!ready?.ok && needsSidebarFallback){
       const fallback = await chrome.tabs.sendMessage(tab.id,{type:"criare-open-conversation-fallback",request:conversationRequest});
       if(!fallback?.ok){
@@ -148,7 +155,7 @@ async function ensureConversationOpened(request,{active=false,operationId=null}=
     }
     const currentTab = await chrome.tabs.get(tab.id).catch(()=>({}));
     if(!ready?.ok) return {ok:false,code:ready?.code||"spa_timeout",error:ready?.error||"Tempo esgotado na transição interna do WhatsApp Web.",tabId:tab.id,tabUrl:currentTab.url||"",detectedTitle:ready?.title||"",domCount:Number(ready?.count||0)};
-    return {ok:true,tabId:tab.id,tabUrl:currentTab.url||"",requestId,confirmedPhone:phoneConfirmation.confirmedPhone||phone,loadedState:ready,extensionVersion:chrome.runtime.getManifest().version};
+    return {ok:true,tabId:tab.id,tabUrl:currentTab.url||"",requestId,confirmedPhone:phoneConfirmation?.confirmedPhone||phone,loadedState:ready,extensionVersion:chrome.runtime.getManifest().version};
   }catch(error){
     return {ok:false,code:"spa_navigation_failed",error:error.message||"Não foi possível abrir a conversa correta no WhatsApp Web."};
   }finally{

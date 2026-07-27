@@ -152,7 +152,25 @@ function sameCustomer(title, request){
   const activeDigits = active.replace(/\D/g, "");
   const expectedDigits = globalThis.CriarePhoneIdentity.comparableDigits(request?.phone);
   if(expectedDigits && activeDigits && activeDigits.endsWith(expectedDigits.slice(-10))) return true;
+  // O WhatsApp normalmente mostra apenas o nome do contato no cabeçalho.  Não
+  // exigimos que a lista lateral repita o telefone: a rota /send já recebeu o
+  // E.164 e, quando o título contém todos os termos relevantes do lead, esta é
+  // uma confirmação adicional da conversa aberta.
+  const expectedName = comparableText(request?.customerName || request?.name || "");
+  const expectedTerms = expectedName.split(" ").filter(term=>term.length >= 3);
+  if(expectedTerms.length && active && expectedTerms.every(term=>active.split(" ").includes(term))) return true;
   return Boolean(expectedDigits&&request?.phoneIdentityConfirmed===true&&globalThis.CriarePhoneIdentity.comparableDigits(request?.confirmedPhone)===expectedDigits);
+}
+
+function confirmConversationPhone(request={}){
+  const expected = globalThis.CriarePhoneIdentity.comparableDigits(request?.phone);
+  if(!expected) return {ok:false,code:"invalid_phone",error:"Telefone inválido ou incompleto."};
+  let routePhone = "";
+  try{ routePhone = globalThis.CriarePhoneIdentity.comparableDigits(new URL(location.href).searchParams.get("phone") || ""); }catch(error){}
+  if(routePhone && routePhone === expected) return {ok:true,confirmedPhone:expected,identitySource:"send_route"};
+  const state = chatLoadState(request);
+  if(state.ready && state.matches) return {ok:true,confirmedPhone:expected,identitySource:"visible_chat_title",title:state.title};
+  return {ok:false,code:"identity_pending",error:"A conversa solicitada ainda está sendo aberta no WhatsApp Web.",title:state.title||""};
 }
 
 function canonicalMessageRoot(node){
@@ -691,7 +709,9 @@ async function extractLoadedMessages(request={}){
   await waitForHistoryHydration(main,{timeoutMs:12000,minWaitMs:4500});
   const history = await collectAvailableHistory(main);
   if(!history.entries.length) throw new Error("Não encontrei mensagens carregadas nesta conversa.");
-  if(history.traversalBlocked)throw new Error("Não foi possível identificar o contêiner que move o histórico do WhatsApp Web. Nenhuma captura parcial foi salva.");
+  // A falha ao avançar além da janela virtualizada não invalida as mensagens
+  // que já foram identificadas com IDs canônicos. Elas são salvas de forma
+  // incremental; o CRM mantém o aviso de histórico possivelmente incompleto.
   const audioCount = history.entries.filter(entry=>entry.hasVoiceMessage).length;
   const audioTranscribed = history.entries.filter(entry=>entry.audioTranscribed).length;
   const payload={
@@ -804,10 +824,8 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
     return true;
   }
   if(message?.type === "criare-confirm-conversation-phone"){
-    openConversationFromSidebar(message.request || {})
-      .then(result=>sendResponse({contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...result}))
-      .catch(error=>sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,code:"contact_mismatch",error:error.message||"Não foi possível confirmar o telefone exato da conversa."}));
-    return true;
+    sendResponse({contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...confirmConversationPhone(message.request || {})});
+    return false;
   }
   if(message?.type === "criare-recover-audios"){
     recoverAudioEntries(message.request||{}).then(result=>sendResponse({contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...result})).catch(error=>sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,error:error.message||"Não foi possível recuperar os áudios."}));
