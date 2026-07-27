@@ -511,12 +511,60 @@ function mergeWindow(currentEntries, visibleEntries){
   return {entries:merged.entries,added:merged.addedCount,updated:merged.updatedCount};
 }
 
-function messageScrollContainer(main){
-  return main.querySelector('[data-testid="conversation-panel-messages"]')
-    || [...main.querySelectorAll("div")].find(element=>{
-      const style = getComputedStyle(element);
-      return /auto|scroll/i.test(style.overflowY) && element.scrollHeight > element.clientHeight + 200;
-    }) || null;
+function messageScrollContainers(main){
+  if(!main)return [];
+  const visibleMessages=messageNodes(main);
+  const candidates=new Set([main.querySelector('[data-testid="conversation-panel-messages"]')]);
+  for(const message of visibleMessages){
+    let cursor=message?.parentElement;
+    while(cursor&&cursor!==main){candidates.add(cursor);cursor=cursor.parentElement;}
+  }
+  for(const node of main.querySelectorAll("div")){
+    const style=getComputedStyle(node);
+    if(/auto|scroll/i.test(style.overflowY)&&node.scrollHeight>node.clientHeight+8)candidates.add(node);
+  }
+  return [...candidates].filter(node=>{
+    if(!node||node.clientHeight<80)return false;
+    const style=getComputedStyle(node);
+    return node.scrollHeight>node.clientHeight+8&&(/auto|scroll/i.test(style.overflowY)||node.querySelector('[data-testid="msg-container"],[data-pre-plain-text]'));
+  }).sort((left,right)=>{
+    const score=node=>{
+      const range=Math.max(0,node.scrollHeight-node.clientHeight);
+      const contains=visibleMessages.reduce((total,message)=>total+(node.contains(message)?1:0),0);
+      return (node.matches?.('[data-testid="conversation-panel-messages"]')?1000000:0)+(contains*10000)+range;
+    };
+    return score(right)-score(left);
+  });
+}
+
+function messageScrollContainer(main){return messageScrollContainers(main)[0]||null;}
+
+function scrollContainerSnapshot(container){
+  if(!container)return null;
+  return {top:Math.round(Number(container.scrollTop||0)),height:Math.round(Number(container.scrollHeight||0)),clientHeight:Math.round(Number(container.clientHeight||0))};
+}
+
+async function scrollHistoryOlder(main){
+  const containers=messageScrollContainers(main);
+  const attempts=[];
+  for(const container of containers){
+    const before=scrollContainerSnapshot(container);
+    if(!before)continue;
+    const amount=Math.max(container.clientHeight*0.85,700);
+    const target=Math.max(0,before.top-amount);
+    container.scrollTo?.({top:target,behavior:"auto"});
+    container.scrollTop=target;
+    container.dispatchEvent(new Event("scroll",{bubbles:true}));
+    container.dispatchEvent(new WheelEvent("wheel",{bubbles:true,cancelable:true,deltaY:-amount}));
+    await sleep(120);
+    const after=scrollContainerSnapshot(container);
+    const moved=Boolean(after&&after.top<before.top);
+    attempts.push({before,after,moved,matchedPanel:Boolean(container.matches?.('[data-testid="conversation-panel-messages"]'))});
+    // Mesmo estando no topo, este é o contêiner real se ele contém a janela
+    // de mensagens; o laço principal então verifica o botão de histórico.
+    if(moved||before.top<=2)return {container,before,after,moved,attempts};
+  }
+  return {container:containers[0]||null,before:null,after:null,moved:false,attempts};
 }
 
 async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={}){
@@ -529,22 +577,23 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
   const domMessageKeys=new Set(entries.map(entry=>normalizeWhatsAppMessageId(entry.message_id||entry.id)||entry.id||messageHash(entry.text)));
   let windowsCollected=entries.length?1:0;
   let olderLoadAttempts=0;
+  const traversalDiagnostics=[];
 
   while(Date.now() < deadline && entries.length < maximum && scrollPasses < 220){
     const scroller = messageScrollContainer(main);
     if(!scroller){ loadedStartReached = true; reachedStart = !olderMessagesButton(main); break; }
     const beforeSignature = windowSignature(main);
-    const beforeTop = scroller.scrollTop;
-    scroller.scrollTop = Math.max(0, beforeTop - Math.max(scroller.clientHeight * 0.85, 700));
-    scroller.dispatchEvent(new Event("scroll",{bubbles:true}));
+    const movement=await scrollHistoryOlder(main);
+    const activeScroller=movement.container||scroller;
     await sleep(550);
     await waitForMessagesToSettle(main,{timeoutMs:3500,minWaitMs:450});
     const visible=readVisibleMessageWindow(main,audioState);visible.forEach(entry=>domMessageKeys.add(normalizeWhatsAppMessageId(entry.message_id||entry.id)||entry.id||messageHash(entry.text)));windowsCollected+=1;
     const merged = mergeWindow(entries, visible);
     entries = merged.entries;
     scrollPasses += 1;
-    const atTop = scroller.scrollTop <= 2;
+    const atTop = Number(activeScroller?.scrollTop||0) <= 2;
     const unchanged = beforeSignature === windowSignature(main) && merged.added === 0;
+    traversalDiagnostics.push({pass:scrollPasses,moved:movement.moved,atTop,unchanged,containersTried:movement.attempts.length,added:merged.added});
     stableTopPasses = atTop && unchanged ? stableTopPasses + 1 : 0;
     if(atTop && stableTopPasses >= 2){
       const older=olderMessagesButton(main);
@@ -565,7 +614,7 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
   if(entries.length > maximum) entries = entries.slice(-maximum);
   const scroller = messageScrollContainer(main);
   if(scroller){ scroller.scrollTop = scroller.scrollHeight; scroller.dispatchEvent(new Event("scroll",{bubbles:true})); }
-  return {entries,reachedStart,loadedStartReached,scrollPasses,limited,audioState,domMessagesFound:domMessageKeys.size,windowsCollected,olderLoadAttempts};
+  return {entries,reachedStart,loadedStartReached,scrollPasses,limited,audioState,domMessagesFound:domMessageKeys.size,windowsCollected,olderLoadAttempts,traversalDiagnostics};
 }
 
 async function processAudioQueue(main,request,history){
@@ -609,6 +658,7 @@ async function extractLoadedMessages(request={}){
     loadedHistoryComplete:history.reachedStart && history.loadedStartReached && !history.limited,
     scrollPasses:history.scrollPasses,
     olderLoadAttempts:history.olderLoadAttempts,
+    traversalDiagnostics:history.traversalDiagnostics,
     profilePhotoUrl:profilePhotoUrl(main),limited:history.limited
   };
   return payload;
