@@ -1348,7 +1348,7 @@ function openWhatsAppFor(record=null){
   const webUrl=`https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
   window.open(webUrl,"_blank","noopener,noreferrer");
 }
-const WHATSAPP_EXTENSION_VERSION = "2.3.21";
+const WHATSAPP_EXTENSION_VERSION = "2.3.22";
 const WHATSAPP_BATCH_AUDIO_ENABLED = false;
 const WHATSAPP_BATCH_APPROVAL_KEY = "crm_whatsapp_full_batch_unlocked";
 const WHATSAPP_BATCH_FLOW_VERSION = "capture-flow-2.1.8";
@@ -1562,7 +1562,10 @@ async function writeWhatsAppCapturePatch(record,fullPatch){
 async function saveWhatsAppCapture(record,result){
   const merged=mergeWhatsAppMessages(record,result);
   const continuity=Boolean(result.reachedStart||(record.whatsapp_capture_complete&&merged.overlapCount>0));
-  const complete=Boolean(continuity&&!result.limited&&!merged.storageLimited);
+  // Nunca aceitar uma captura como integral se o leitor não conseguiu
+  // percorrer o histórico virtualizado. A conversa continua salva, mas fica
+  // explicitamente pendente de confirmação em vez de aparecer como completa.
+  const complete=Boolean(continuity&&!result.limited&&!result.traversalBlocked&&!merged.storageLimited);
   const loadedHistoryReady=Boolean(result.loadedHistoryComplete&&merged.totalCount>1&&!result.limited&&!merged.storageLimited);
   let photoPath=record.whatsapp_profile_photo_path||null,photoUpdatedAt=record.whatsapp_profile_photo_updated_at||null;
   if(result.profilePhotoDataUrl){try{photoPath=await uploadWhatsAppProfilePhoto(record.id,result.profilePhotoDataUrl);photoUpdatedAt=nowISO();}catch(error){console.warn("[CRM WhatsApp] Foto não atualizada.",error);}}
@@ -3791,7 +3794,7 @@ function renderReports(){
             <div class="batchWorkflowStep batchWorkflowGpt"><b>2. ANALISAR NO GPT</b><span>Envie ao GPT somente o arquivo que começa com <strong>01-ENVIAR-AO-GPT</strong>.</span><button class="ghost" id="btnCopyBatchGptInstruction" type="button">Copiar instrução para o GPT</button></div>
             <div class="batchWorkflowStep batchWorkflowImport"><b>3. IMPORTAR RESULTADO</b><span>Importe no CRM somente o arquivo que começa com <strong>02-IMPORTAR-NO-CRM</strong>.</span><button class="primary" id="btnOpenBatchImport" type="button">3. Importar resultado da análise</button></div>
           </div>
-          <small>CRM 2.5.26 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
+          <small>CRM 2.5.27 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
         </div>
       </details>
       <div class="formNotice">${escapeHtml(reportPeriod)}</div>
@@ -5397,7 +5400,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=2.5.26").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=2.5.27").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });

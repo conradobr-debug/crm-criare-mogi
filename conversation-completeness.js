@@ -77,11 +77,16 @@
     const dated=entries.map(entry=>entry.timestamp).filter(Boolean).sort();
     const lastSync=record?.whatsapp_transcript_updated_at||record?.whatsapp_last_sync_at||record?.whatsapp_synced_at||null;
     const identity=clean(options.identity_status||record?.whatsapp_identity_status).toLowerCase();
+    // Uma única mensagem não oferece evidência suficiente para afirmar que uma
+    // conversa do WhatsApp foi percorrida integralmente. É uma proteção
+    // conservadora: conversas realmente curtas podem ser revisadas, mas uma
+    // captura parcial nunca é promovida a "Completa".
+    const singleMessageNeedsVerification=entries.length===1&&record?.whatsapp_capture_complete===true&&record?.whatsapp_channel_status!=="not_available";
     let conversation_status;
     if(identity&&!new Set(["ready","valid","conversation_linked","whatsapp_ready"]).has(identity))conversation_status="verification_required";
     else if(record?.whatsapp_sync_error)conversation_status="sync_error";
     else if(!entries.length&&!clean(record?.whatsapp_transcript))conversation_status="not_captured";
-    else if(record?.whatsapp_capture_complete===false)conversation_status="capture_incomplete";
+    else if(record?.whatsapp_capture_complete===false||singleMessageNeedsVerification)conversation_status="capture_incomplete";
     else conversation_status="captured";
     const counts={transcribed:0,pending_download:0,pending_import:0,transcription_error:0,media_unavailable:0,verification_required:0};audios.forEach(item=>counts[item.audio_status]++);
     const analysis_status=analysisStatus(record,lastSync),pending=counts.pending_download+counts.pending_import+counts.verification_required;
@@ -98,6 +103,7 @@
     const reasons=[];
     if(conversation_status==="not_captured")reasons.push("Conversa ainda não capturada.");
     if(conversation_status==="capture_incomplete")reasons.push("O WhatsApp Web não confirmou a captura integral do histórico disponível.");
+    if(singleMessageNeedsVerification)reasons.push("A captura retornou somente uma mensagem; atualize a conversa antes de classificá-la como completa.");
     if(conversation_status==="sync_error")reasons.push(`Falha na última sincronização: ${clean(record.whatsapp_sync_error)}.`);
     if(conversation_status==="verification_required")reasons.push("A identidade do telefone precisa ser confirmada antes de usar o WhatsApp.");
     if(pending)reasons.push(`${pending} áudio(s) ainda sem transcrição.`);
