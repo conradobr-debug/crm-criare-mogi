@@ -19,6 +19,60 @@
       .trim();
   }
 
+
+  const WHATSAPP_SYSTEM_MESSAGE_PATTERNS=[
+    /\b(?:as )?mensagens e ligacoes sao protegidas com (?:a )?criptografia de ponta a ponta\b/,
+    /\b(?:messages and calls (?:are )?(?:end to end encrypted|protected with end to end encryption)|messages and calls are protected by end to end encryption)\b/,
+    /\b(?:los )?mensajes y (?:las )?llamadas estan protegidos con (?:el )?cifrado de extremo a extremo\b/,
+    /\b(?:somente|apenas) as pessoas que fazem parte (?:da|desta) conversa podem (?:ler|ouvir|compartilhar)\b/,
+    /\bonly (?:the )?people (?:who are )?(?:in|part of) (?:this |the )?(?:chat|conversation) can (?:read|listen|share)\b/,
+    /\bsolo las personas que forman parte de (?:esta |la )?conversacion pueden (?:leer|escuchar|compartir)\b/,
+    /\b(?:clique|toque) para (?:saber|saiba) mais\b/,
+    /\bclick (?:to )?(?:learn|know) more\b/,
+    /\b(?:haz clic|toque) para (?:obtener|saber) mas(?: informacion)?\b/,
+    /\b(?:codigo de seguranca|security code|codigo de seguridad).*(?:mudou|changed|cambio)\b/
+  ];
+
+  function normalizedWhatsAppSystemText(value){
+    return normalizedUiText(value)
+      .replace(/(?:ic[-_ ]*)?lock[-_ ]*filled/g," ")
+      .replace(/^(?:autor nao identificado\s*)+/,"")
+      .replace(/^(?:data nao identificada\s*horario nao identificado\s*)+/,"")
+      .trim();
+  }
+
+  function isKnownWhatsAppSystemText(value){
+    const text=normalizedWhatsAppSystemText(value);
+    return Boolean(text)&&WHATSAPP_SYSTEM_MESSAGE_PATTERNS.some(pattern=>pattern.test(text));
+  }
+
+  function hasStrongCanonicalMessageId(entry){
+    const raw=cleanText(entry?.message_id||entry?.id);
+    const normalized=normalizeWhatsAppMessageId(raw);
+    return /^(?:true|false)_[^_]+(?:@(?:c\.us|g\.us))?_[A-Z0-9_-]{6,}$/i.test(raw)
+      ||/^[A-F0-9]{16,}$/i.test(normalized);
+  }
+
+  function isKnownWhatsAppSystemEntry(entry){
+    if(!isKnownWhatsAppSystemText(entry?.text))return false;
+    const parsed=parsePrefix(String(entry?.text||"").match(/^\[[^\]]+\]\s*[^:]+:\s*/)?.[0]||"");
+    const author=normalizedUiText(entry?.sender||parsed.author);
+    const date=normalizedUiText(entry?.date||parsed.date);
+    const time=cleanText(entry?.message_time||entry?.time||parsed.time);
+    const placeholderAuthor=!author||/^(?:autor|remetente|contato) nao identificado$|^mensagem$/.test(author);
+    const placeholderDate=!date||/nao identificada|sem data|desconhecida/.test(date);
+    const placeholderTime=!time||/nao identificado|sem horario|desconhecido/.test(normalizedUiText(time));
+    if(placeholderAuthor||placeholderDate||placeholderTime)return true;
+    if(hasStrongCanonicalMessageId(entry))return false;
+    const rawId=cleanText(entry?.message_id||entry?.id);
+    return !rawId||/^(?:fp:|node:|system:|legacy:)/i.test(rawId);
+  }
+
+  function removeKnownWhatsAppSystemMessages(entries,{completeHistory=false}={}){
+    const normalized=(Array.isArray(entries)?entries:[]).map(normalizeEntry).filter(Boolean);
+    return completeHistory?normalized.filter(entry=>!isKnownWhatsAppSystemEntry(entry)):normalized;
+  }
+
   function normalizeWhatsAppMessageId(value){
     return cleanText(value).replace(/^(?:wa:)+/i,"").toUpperCase();
   }
@@ -53,25 +107,43 @@
     };
   }
 
-  // Registros antigos podiam nascer da detecção de um ícone de controle, sem
-  // data-id da bolha. Quando uma leitura completa encontra a mensagem de texto
-  // correspondente, esse marcador pendente não representa um áudio real.
-  // Só o removemos se não houver duração/transcrição e o envelope da mensagem
-  // (remetente, data e hora) coincidir com texto efetivamente recapturado.
-  function removeStaleAudioMarkers(storedEntries,incomingEntries){
+  function hasConfirmedAudioEvidence(entry){
+    const transcript=cleanText(entry?.transcript||entry?.audioMeta?.transcription||entry?.audioMeta?.transcriptionText);
+    const duration=Number(entry?.duration_seconds||entry?.duration||entry?.audioMeta?.durationSeconds||0);
+    const durationSource=audioDurationSource(entry);
+    const validDuration=Number.isFinite(duration)&&duration>0&&duration<600&&durationSource!=="legacy_invalid";
+    const sourceAvailable=Boolean(entry?.audioMeta?.sourceAvailable
+      ||/[a-z]/i.test(cleanText(entry?.audioMeta?.source))&&cleanText(entry?.audioMeta?.source)!=="none"
+      ||["whatsapp_player","manual_confirmed","imported_confirmed","imported_file","confirmed"].includes(durationSource));
+    const fileAvailable=Boolean(Number(entry?.audioMeta?.sizeBytes||0)>0||cleanText(entry?.audioMeta?.sha256));
+    return Boolean(transcript||validDuration||sourceAvailable||fileAvailable);
+  }
+
+  // Um marcador técnico só pode ser retirado por uma captura manual que tenha
+  // efetivamente alcançado o início do histórico. Em qualquer outra leitura,
+  // inclusive incremental/parcial, o histórico existente é intocável.
+  function removeStaleAudioMarkers(storedEntries,incomingEntries,{completeHistory=false,currentCanonicalIds=[]}={}){
     const stored=(Array.isArray(storedEntries)?storedEntries:[]).map(normalizeEntry).filter(Boolean);
     const incoming=(Array.isArray(incomingEntries)?incomingEntries:[]).map(normalizeEntry).filter(Boolean);
-    const incomingIds=new Set(incoming.map(entry=>normalizeWhatsAppMessageId(entry.message_id||entry.id)).filter(Boolean));
+    if(!completeHistory)return stored;
+    const incomingById=new Map(incoming.map(entry=>[normalizeWhatsAppMessageId(entry.message_id||entry.id),entry]).filter(([id])=>id));
+    const currentIds=new Set([
+      ...currentCanonicalIds,
+      ...incoming.map(entry=>entry.message_id||entry.id)
+    ].map(normalizeWhatsAppMessageId).filter(Boolean));
     return stored.filter(entry=>{
       if(!isAudioEntry(entry))return true;
-      const transcript=cleanText(entry?.transcript||entry?.audioMeta?.transcription||entry?.audioMeta?.transcriptionText);
-      const duration=Number(entry?.duration_seconds||entry?.duration||entry?.audioMeta?.durationSeconds||0);
       const isPlaceholder=/^\[[^\]]+\]\s*[^:]+:\s*\[Áudio sem transcrição\]\s*$/i.test(cleanText(entry?.text));
-      if(transcript||duration>0||!isPlaceholder)return true;
+      if(hasConfirmedAudioEvidence(entry)||!isPlaceholder)return true;
       const id=normalizeWhatsAppMessageId(entry.message_id||entry.id);
-      if(id&&incomingIds.has(id))return true;
+      const current=incomingById.get(id);
+      if(current)return !(!isAudioEntry(current)&&cleanText(current.text));
+      if(id&&currentIds.has(id))return true;
       const envelope=entryEnvelope(entry);
-      if(!envelope.sender||!envelope.date||!envelope.time)return true;
+      // IDs auxiliares sem mensagem canônica correspondente são justamente os
+      // órfãos que esta limpeza defensiva corrige.
+      if(!id||/^AUDIO:/i.test(id))return false;
+      if(!envelope.sender||!envelope.date||!envelope.time)return false;
       const textMatch=incoming.some(candidate=>{
         if(isAudioEntry(candidate))return false;
         const other=entryEnvelope(candidate);
@@ -336,6 +408,10 @@
     cleanText,
     normalizedUiText,
     normalizeWhatsAppMessageId,
+    normalizedWhatsAppSystemText,
+    isKnownWhatsAppSystemText,
+    isKnownWhatsAppSystemEntry,
+    removeKnownWhatsAppSystemMessages,
     audioDurationPriority,
     mergeEntryMetadata,
     messageHash,

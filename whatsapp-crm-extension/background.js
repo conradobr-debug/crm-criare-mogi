@@ -308,7 +308,7 @@ async function captureOpenWhatsAppChat(request,sender){
   if(!tab?.id) return {ok:false,extensionVersion,error:"Nenhuma aba do WhatsApp Web está aberta. Abra a conversa correta e tente novamente."};
   try{
     await ensureCurrentContentScript(tab.id);
-    return captureChatFromTab(tab.id,request);
+    return captureChatFromTab(tab.id,{...request,captureMode:"opened",openCapture:true,identityOverrideConfirmed:request?.identityOverrideConfirmed===true});
   }catch(error){
     return {ok:false,extensionVersion,tabUrl:tab.url||"",detectedTitle:"",domCount:0,error:error.message || "Não foi possível capturar a conversa aberta."};
   }

@@ -2,7 +2,7 @@
 
 const CRIARE_CONTENT_SCRIPT_VERSION = chrome.runtime.getManifest().version;
 const CaptureCore = globalThis.CriareWhatsAppCaptureCore;
-const {cleanText, normalizedUiText, normalizeWhatsAppMessageId, messageHash, continuationPrefix, playerDurationSeconds, mergeMessageWindow} = CaptureCore;
+const {cleanText, normalizedUiText, normalizeWhatsAppMessageId, messageHash, continuationPrefix, playerDurationSeconds, mergeMessageWindow, isKnownWhatsAppSystemText} = CaptureCore;
 
 function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 
@@ -12,7 +12,7 @@ const AUDIO_MAX_BYTES = 15 * 1024 * 1024;
 // sozinho uma mensagem de voz. A leitura anterior buscava esses ícones em uma
 // raiz ampla e, em alguns layouts, classificava a bolha de texto seguinte como
 // áudio. Só aceitamos sinais pertencentes ao msg-container da própria bolha.
-const VOICE_MESSAGE_SELECTOR='[aria-label*="mensagem de voz" i],[aria-label*="voice message" i],[data-testid*="audio" i],[data-testid*="ptt" i],[role="slider"],audio';
+const VOICE_MESSAGE_SELECTOR='[aria-label*="mensagem de voz" i],[aria-label*="voice message" i],[aria-label*="mensaje de voz" i],[aria-label*="nota de voz" i],[data-testid*="audio" i],[data-testid*="ptt" i],audio';
 function ownMessageContainer(node){
   if(!node)return null;
   if(node.matches?.('[data-testid="msg-container"]'))return node;
@@ -21,10 +21,21 @@ function ownMessageContainer(node){
   const containers=[...(node.querySelectorAll?.('[data-testid="msg-container"]')||[])];
   return containers.length===1?containers[0]:null;
 }
+function hasAudioEvidence({audioElementPresent=false,voiceAriaPresent=false,pttTestIdPresent=false,playControlPresent=false,durationValid=false}={}){
+  // Um slider aparece em outros controles do WhatsApp. Ele só confirma PTT
+  // quando está acompanhado de um identificador de áudio e play ou duração.
+  return Boolean(audioElementPresent||voiceAriaPresent||(pttTestIdPresent&&(playControlPresent||durationValid)));
+}
 function voiceSignals(node){
   const container=ownMessageContainer(node);
   if(!container)return [];
-  return [...container.querySelectorAll(VOICE_MESSAGE_SELECTOR)].filter(signal=>signal.closest?.('[data-testid="msg-container"]')===container);
+  const signals=[...container.querySelectorAll(VOICE_MESSAGE_SELECTOR)].filter(signal=>signal.closest?.('[data-testid="msg-container"]')===container);
+  const voiceAriaPresent=signals.some(signal=>/mensagem de voz|voice message|mensaje de voz|nota de voz/i.test(signal.getAttribute?.("aria-label")||""));
+  const audioElementPresent=signals.some(signal=>signal.matches?.("audio"));
+  const pttTestIdPresent=signals.some(signal=>/audio|ptt/i.test(signal.getAttribute?.("data-testid")||""));
+  const playControlPresent=Boolean(container.querySelector('[data-testid*="play" i],[aria-label*="reproduzir" i],[aria-label*="play" i],button[title*="play" i]'));
+  const durationValid=Boolean(audioDurationText(container));
+  return hasAudioEvidence({audioElementPresent,voiceAriaPresent,pttTestIdPresent,playControlPresent,durationValid})?signals:[];
 }
 function hasVoiceMessage(node){return voiceSignals(node).length>0;}
 function voiceMessageNodes(main=activeMain()){return messageNodes(main).filter(hasVoiceMessage);}
@@ -155,6 +166,14 @@ function sameCustomer(title, request){
   return Boolean(expectedDigits&&request?.phoneIdentityConfirmed===true&&globalThis.CriarePhoneIdentity.comparableDigits(request?.confirmedPhone)===expectedDigits);
 }
 
+function openCaptureIdentityDecision(title,request={}){
+  if(sameCustomer(title,request))return {ok:true,identitySource:"phone_confirmed"};
+  const explicitOpenCapture=request?.captureMode==="opened"||request?.openCapture===true;
+  if(explicitOpenCapture&&request?.identityOverrideConfirmed===true)return {ok:true,identitySource:"manual_open_capture_confirmation",identityOverrideUsed:true};
+  if(explicitOpenCapture)return {ok:false,code:"identity_confirmation_required",title:cleanText(title),error:"O telefone da conversa aberta não pôde ser confirmado. Confirme manualmente que esta é a conversa correta."};
+  return {ok:false,code:"contact_mismatch",title:cleanText(title),error:"O contato aberto é diferente do lead solicitado."};
+}
+
 function confirmConversationPhone(request={}){
   const expected = globalThis.CriarePhoneIdentity.comparableDigits(request?.phone);
   if(!expected) return {ok:false,code:"invalid_phone",error:"Telefone inválido ou incompleto."};
@@ -184,14 +203,52 @@ function canonicalMessageRoot(node){
   })[0]||container||node;
 }
 
+function isWhatsAppSystemMessageText(value){
+  return isKnownWhatsAppSystemText(value);
+}
+function hasCanonicalWhatsAppMessageId(node){
+  const raw=messageId(node);const normalized=normalizeWhatsAppMessageId(raw);
+  return /^(?:true|false)_[^_]+(?:@(?:c\.us|g\.us))?_[A-Z0-9_-]{6,}$/i.test(raw)
+    ||/^[A-F0-9]{16,}$/i.test(normalized);
+}
+function hasConfirmedMediaEvidence(node){
+  const container=ownMessageContainer(node)||node;
+  return Boolean(container?.querySelector?.([
+    '[data-testid="image-thumb"]',
+    '[data-testid*="document" i]',
+    '[data-testid*="video" i]',
+    '[data-testid*="location" i]',
+    '[data-testid*="contact" i]',
+    '[data-testid*="sticker" i]',
+    'video',
+    '[aria-label*="abrir imagem" i]',
+    '[aria-label*="open image" i]',
+    'img[src^="blob:"]'
+  ].join(',')));
+}
+function hasStrongMessageEvidence(node){
+  const hasPrePlainText=Boolean(node?.getAttribute?.("data-pre-plain-text")||node?.querySelector?.("[data-pre-plain-text]"));
+  return hasPrePlainText||hasCanonicalWhatsAppMessageId(node)||hasVoiceMessage(node)||hasConfirmedMediaEvidence(node);
+}
+function isWhatsAppSystemMessage(node){
+  if(!node)return false;
+  const text=cleanText(node.innerText||node.textContent||"");
+  const marker=Boolean(node.matches?.('[role="separator"],[data-testid*="e2e" i],[data-testid*="encryption" i],[data-testid*="notification" i],[data-testid*="system" i]')
+    ||node.querySelector?.('[role="separator"],[data-testid*="e2e" i],[data-testid*="encryption" i],[data-testid*="notification" i],[data-testid*="system" i]'));
+  const strongEvidence=hasStrongMessageEvidence(node);
+  return !strongEvidence&&(marker||isWhatsAppSystemMessageText(text));
+}
+function isRealMessageNode(node){
+  return Boolean(node&&!isWhatsAppSystemMessage(node)&&hasStrongMessageEvidence(node));
+}
 function messageNodes(main=activeMain()){
   if(!main) return [];
   const voiceRoots=[...main.querySelectorAll(VOICE_MESSAGE_SELECTOR)].map(node=>node.closest('[data-testid="msg-container"]')).filter(Boolean);
-  const roots=[...main.querySelectorAll('[data-testid^="conv-msg-"],[data-id]'),...voiceRoots];
+  const roots=[...main.querySelectorAll('[data-testid^="conv-msg-"],[data-id],[data-pre-plain-text]'),...voiceRoots];
   const containers=[...main.querySelectorAll('[data-testid="msg-container"]')];
-  const candidates=[...roots,...containers].map((node,order)=>({node:canonicalMessageRoot(node),order})).filter(({node})=>Boolean(node&&(node.matches?.('[data-testid^="conv-msg-"]')||node.querySelector?.('[data-testid="msg-container"],[data-pre-plain-text]')||hasVoiceMessage(node))));
+  const candidates=[...roots,...containers].map((node,order)=>({node:canonicalMessageRoot(node),order})).filter(({node})=>isRealMessageNode(node));
   const selectedMessages=new Map();
-  const score=node=>(node.querySelector('[data-pre-plain-text]')?100:0)+(messageId(node)?20:0)+(node.matches('[data-testid^="conv-msg-"]')?10:0);
+  const score=node=>(node.querySelector?.('[data-pre-plain-text]')?100:0)+(hasCanonicalWhatsAppMessageId(node)?20:0)+(node.matches?.('[data-testid^="conv-msg-"]')?10:0);
   for(const candidate of candidates){const id=messageId(candidate.node)||`node:${candidate.order}`;const prior=selectedMessages.get(id);if(!prior||score(candidate.node)>score(prior.node))selectedMessages.set(id,candidate);}
   return [...selectedMessages.values()].sort((left,right)=>left.order-right.order).map(item=>item.node);
 }
@@ -290,7 +347,10 @@ async function waitForHistoryHydration(_main,{timeoutMs=12000,minWaitMs=4500,sam
   return tracker.final(Date.now()-startedAt);
 }
 
-if(globalThis.__CRIARE_WHATSAPP_TEST__) globalThis.CriareWhatsAppHydrationTest={createHistoryHydrationTracker};
+if(globalThis.__CRIARE_WHATSAPP_TEST__){
+  globalThis.CriareWhatsAppHydrationTest={createHistoryHydrationTracker};
+  globalThis.CriareWhatsAppCaptureTest={isWhatsAppSystemMessage,isWhatsAppSystemMessageText,isRealMessageNode,messageNodes,hasAudioEvidence,shortNonScrollableHistoryDecision,openCaptureIdentityDecision};
+}
 
 function olderMessagesButton(main=activeMain()){
   const phrases = [
@@ -626,6 +686,34 @@ function messageScrollContainers(main){
 
 function messageScrollContainer(main){return messageScrollContainers(main)[0]||null;}
 
+
+function shortNonScrollableHistoryDecision({panelFound=false,mainConnected=false,panelConnected=false,loading=false,olderMessagesAvailable=false,messageCount=0,allCanonicalIds=false,panelContainsAll=false,scrollHeight=0,clientHeight=0,panelStable=false}={}){
+  const nonScrollable=Number(clientHeight)>=80&&Number(scrollHeight)<=Number(clientHeight)+12;
+  const complete=Boolean(panelFound&&mainConnected&&panelConnected&&panelStable&&!loading&&!olderMessagesAvailable&&messageCount>0&&allCanonicalIds&&panelContainsAll&&nonScrollable);
+  return {complete,reason:complete?"short_non_scrollable_history_complete":"short_history_not_confirmed",nonScrollable};
+}
+
+function shortNonScrollableHistoryState(main,entries=[]){
+  const panel=main?.querySelector?.('[data-testid="conversation-panel-messages"]')||null;
+  const nodes=messageNodes(main);
+  const currentIds=(Array.isArray(entries)?entries:[]).map(entry=>normalizeWhatsAppMessageId(entry?.message_id||entry?.id)).filter(Boolean);
+  const allCanonicalIds=Boolean(nodes.length&&currentIds.length===nodes.length&&nodes.every(hasCanonicalWhatsAppMessageId));
+  const state={
+    panelFound:Boolean(panel),
+    mainConnected:Boolean(main&&main.isConnected!==false&&activeMain()===main),
+    panelConnected:Boolean(panel&&panel.isConnected!==false),
+    panelStable:Boolean(panel&&main?.contains?.(panel)),
+    loading:Boolean(historyLoadingIndicator(main)),
+    olderMessagesAvailable:Boolean(olderMessagesButton(main)),
+    messageCount:nodes.length,
+    allCanonicalIds,
+    panelContainsAll:Boolean(panel&&nodes.every(node=>panel.contains?.(node))),
+    scrollHeight:Number(panel?.scrollHeight||0),
+    clientHeight:Number(panel?.clientHeight||0)
+  };
+  return {...shortNonScrollableHistoryDecision(state),...state,panel};
+}
+
 function scrollContainerSnapshot(container){
   if(!container)return null;
   return {top:Math.round(Number(container.scrollTop||0)),height:Math.round(Number(container.scrollHeight||0)),clientHeight:Math.round(Number(container.clientHeight||0))};
@@ -701,8 +789,15 @@ async function collectAvailableHistory(main,{maximum=10000,timeoutMs=120000}={})
     // início. Tratar isso como fim do histórico promovia capturas parciais a
     // "completas" quando o WhatsApp não expunha o contêiner esperado.
     if(!scroller){
+      const shortHistory=shortNonScrollableHistoryState(main,entries);
+      if(shortHistory.complete){
+        loadedStartReached=true;
+        reachedStart=true;
+        traversalDiagnostics.push({pass:scrollPasses,reason:shortHistory.reason,messageCount:shortHistory.messageCount,scrollHeight:shortHistory.scrollHeight,clientHeight:shortHistory.clientHeight});
+        break;
+      }
       traversalBlocked=true;
-      traversalDiagnostics.push({pass:scrollPasses,reason:"history_scroller_not_found"});
+      traversalDiagnostics.push({pass:scrollPasses,reason:"history_scroller_not_found",shortHistory:{panelFound:shortHistory.panelFound,loading:shortHistory.loading,olderMessagesAvailable:shortHistory.olderMessagesAvailable,messageCount:shortHistory.messageCount,allCanonicalIds:shortHistory.allCanonicalIds,panelContainsAll:shortHistory.panelContainsAll,nonScrollable:shortHistory.nonScrollable}});
       break;
     }
     const beforeSignature = windowSignature(main);
@@ -915,12 +1010,16 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
   (async()=>{
     try{
       const title = activeChatTitle();
-      if(!sameCustomer(title,message.request || {})){
-        throw new Error(`A conversa aberta é “${title || "não identificada"}”, mas o cliente solicitado é “${cleanText(message.request?.customerName) || "o lead do CRM"}”.`);
+      const identity=openCaptureIdentityDecision(title,message.request||{});
+      if(!identity.ok){
+        const error=new Error(identity.code==="identity_confirmation_required"
+          ?`A conversa aberta é “${title||"não identificada"}”, mas o telefone não pôde ser confirmado para “${cleanText(message.request?.customerName)||"o lead do CRM"}”.`
+          :`A conversa aberta é “${title||"não identificada"}”, mas o cliente solicitado é “${cleanText(message.request?.customerName)||"o lead do CRM"}”.`);
+        error.code=identity.code;error.title=title;error.identity=identity;throw error;
       }
-      sendResponse({ok:true,title,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...await extractLoadedMessages(message.request || {})});
+      sendResponse({ok:true,title,identitySource:identity.identitySource,identityOverrideUsed:Boolean(identity.identityOverrideUsed),contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,...await extractLoadedMessages(message.request || {})});
     }catch(error){
-      sendResponse({ok:false,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,code:error.code||"capture_failed",hydration:error.hydration||null,error:error.message || "Não foi possível ler a conversa aberta."});
+      sendResponse({ok:false,title:error.title||activeChatTitle()||"",identity:error.identity||null,contentScriptVersion:CRIARE_CONTENT_SCRIPT_VERSION,code:error.code||"capture_failed",hydration:error.hydration||null,error:error.message || "Não foi possível ler a conversa aberta."});
     }
   })();
   return true;

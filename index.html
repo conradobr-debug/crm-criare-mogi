@@ -1429,12 +1429,12 @@ function requestWhatsAppAutomaticSync(record,{batch=false}={}){
     document.dispatchEvent(new CustomEvent("criare-whatsapp-auto-sync"));
   });
 }
-function requestWhatsAppOpenCapture(record,{batch=false}={}){
+function requestWhatsAppOpenCapture(record,{batch=false,identityOverrideConfirmed=false}={}){
   return new Promise(resolve=>{
     try{requireWhatsAppIdentity(record);}catch(error){return resolve({ok:false,error:error.message,code:error.code});}
     const phone=whatsappNumber(record?.phone);if(!phone)return resolve({ok:false,error:"Telefone inválido ou sem DDD."});
     const requestId=crypto.randomUUID();
-    const request={requestId,requestedAt:nowISO(),phone,customerName:`${record?.first_name||""} ${record?.last_name||""}`.trim(),batch,disableAudio:batch&&!WHATSAPP_BATCH_AUDIO_ENABLED};
+    const request={requestId,requestedAt:nowISO(),phone,customerName:`${record?.first_name||""} ${record?.last_name||""}`.trim(),batch,disableAudio:batch&&!WHATSAPP_BATCH_AUDIO_ENABLED,captureMode:"opened",openCapture:true,identityOverrideConfirmed:identityOverrideConfirmed===true};
     const timer=setTimeout(()=>{whatsappOpenCaptureWaiters.delete(requestId);resolve({ok:false,requestId,error:"A captura da conversa aberta ultrapassou o tempo de segurança."});},225000);
     whatsappOpenCaptureWaiters.set(requestId,{resolve,timer});
     document.documentElement.dataset.criareWhatsAppOpenCaptureRequest=JSON.stringify(request);
@@ -1512,8 +1512,10 @@ function mergeWhatsAppMessages(record,result){
   // Uma varredura completa é a única ocasião segura para retirar marcadores
   // provisórios de áudio que não reaparecem e cuja própria bolha é texto.
   // Capturas parciais continuam estritamente incrementais e não removem nada.
-  if((result?.reachedStart||result?.loadedHistoryComplete)&&incoming.length){
-    stored=CriareWhatsAppCaptureCore.removeStaleAudioMarkers(stored,incoming);
+  const manualCompleteCapture=result?.captureMode==="opened"&&Boolean(result?.reachedStart||result?.loadedHistoryComplete);
+  if(manualCompleteCapture&&incoming.length){
+    stored=CriareWhatsAppCaptureCore.removeKnownWhatsAppSystemMessages(stored,{completeHistory:true});
+    stored=CriareWhatsAppCaptureCore.removeStaleAudioMarkers(stored,incoming,{completeHistory:true,currentCanonicalIds:incoming.map(entry=>entry.message_id||entry.id)});
   }
   if((result?.reachedStart||result?.loadedHistoryComplete)&&incoming.length&&incoming.length>=stored.length){
     const storedById=new Map(stored.map(entry=>[normalizeWhatsAppMessageId(entry.message_id||entry.id),entry]).filter(([id])=>id));const storedTexts=new Set(stored.map(entry=>entry.text));
@@ -1728,9 +1730,18 @@ async function captureFreeWhatsAppConversation(record,{openOnly=false}={}){
     setStage("Localizando WhatsApp Web");
     await requireCurrentWhatsAppExtension();
     setStage(openOnly?"Lendo conversa aberta no WhatsApp Web":"Abrindo conversa no WhatsApp Web");
-    const result=await openAndCaptureLeadConversation(record,{openOnly});context.result=result;
+    let result={...(await openAndCaptureLeadConversation(record,{openOnly})),captureMode:openOnly?"opened":"automatic"};context.result=result;
+    if(openOnly&&!result.ok&&result.code==="identity_confirmation_required"){
+      const openedTitle=String(result.detectedTitle||result.title||result.identity?.title||"não identificada").trim();
+      const leadName=fullName(record)||"lead selecionado";
+      const phoneLabel=canonicalPhoneDisplay(record);
+      const confirmed=window.confirm(`Conversa aberta: ${openedTitle}\nLead selecionado: ${leadName}\nTelefone do lead: ${phoneLabel}\n\nO telefone da conversa aberta não pôde ser confirmado. Confirme manualmente que esta é a conversa correta.`);
+      if(!confirmed){const cancellation=new Error("A captura da conversa aberta foi cancelada porque a identidade não foi confirmada.");cancellation.code="identity_confirmation_cancelled";throw cancellation;}
+      setStage("Confirmando manualmente a conversa aberta");
+      result={...(await requestWhatsAppOpenCapture(record,{identityOverrideConfirmed:true})),captureMode:"opened",identityManuallyConfirmed:true};context.result=result;
+    }
     if(result.ok&&result.extensionVersion!==WHATSAPP_EXTENSION_VERSION)throw new Error(`Atualize a extensão para a versão ${WHATSAPP_EXTENSION_VERSION}.`);
-    if(!result.ok)throw new Error(result.error||"Não foi possível capturar a conversa.");
+    if(!result.ok){const failure=new Error(result.error||"Não foi possível capturar a conversa.");failure.code=result.code||"capture_failed";throw failure;}
     if(result.empty)throw new Error(result.noConversation?"Nenhuma conversa foi encontrada para este telefone no WhatsApp Web.":"Nenhuma mensagem foi encontrada na conversa.");
     setStage("Salvando mensagens capturadas");
     const saved=await saveWhatsAppCapture(record,result);context.savedCount=saved.totalCount;

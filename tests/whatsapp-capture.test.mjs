@@ -15,13 +15,17 @@ const matcher = matcherContext.globalThis.CriareAudioImportMatcher;
 assert.equal(matcher.version,"2.2.6");
 const contentSource = await readFile(new URL("whatsapp-crm-extension/content-whatsapp.js", root), "utf8");
 const hydrationContext = {
-  globalThis:{CriareWhatsAppCaptureCore:core,__CRIARE_WHATSAPP_TEST__:true},
+  globalThis:{CriareWhatsAppCaptureCore:core,__CRIARE_WHATSAPP_TEST__:true,CriarePhoneIdentity:{comparableDigits:value=>String(value||"").replace(/\D/g,""),normalizePhone:value=>({normalized_e164:`+${String(value||"").replace(/\D/g,"")}`})}},
   chrome:{runtime:{getManifest:()=>({version:"test"}),onMessage:{addListener(){}}}},
+  document:{body:null},
   console
 };
 vm.runInNewContext(contentSource, hydrationContext);
 const hydration = hydrationContext.globalThis.CriareWhatsAppHydrationTest;
+const capture = hydrationContext.globalThis.CriareWhatsAppCaptureTest;
 assert.ok(hydration?.createHistoryHydrationTracker);
+assert.ok(capture?.isWhatsAppSystemMessage);
+assert.ok(capture?.hasAudioEvidence);
 
 function hydrationSnapshot(ids,{panelToken="main",scrollerFound=true,reachedStartEvidence=false,loading=false}={}){
   return {ids,panelToken,scrollerFound,reachedStartEvidence,loading};
@@ -177,21 +181,204 @@ test("uma releitura de texto remove marcador de áudio falso do mesmo message_id
   assert.match(merged.entries[0].text,/certinho/);
 });
 
+function fakeCaptureNode({text="",prePlainText="",dataId="",systemMarker=false}={}){
+  return {
+    textContent:text,
+    innerText:text,
+    getAttribute(name){return name==="data-pre-plain-text"?prePlainText:name==="data-id"?dataId:"";},
+    matches(selector){return systemMarker&&/system|notification|encryption|e2e|separator/.test(selector);},
+    closest(){return null;},
+    querySelector(){return null;},
+    querySelectorAll(){return [];}
+  };
+}
+
+test("aviso de criptografia não entra no transcript: três mensagens reais permanecem três",()=>{
+  const encryption=fakeCaptureNode({
+    text:"As mensagens e ligações são protegidas com a criptografia de ponta a ponta. Somente as pessoas que fazem parte desta conversa podem ler, ouvir ou compartilhar.",
+    systemMarker:true
+  });
+  const messages=["primeira","segunda","terceira"].map((text,index)=>fakeCaptureNode({text,prePlainText:`[10:0${index}, 27/07/2026] Você: `,dataId:`true_5519999999999@c.us_MSG${index}ABC`}));
+  const transcript=[...messages,encryption].filter(node=>!capture.isWhatsAppSystemMessage(node)).map(node=>node.textContent).join("\n");
+  assert.equal(capture.isWhatsAppSystemMessage(encryption),true);
+  assert.equal(transcript.split("\n").length,3);
+  assert.doesNotMatch(transcript,/criptografia de ponta a ponta/i);
+  assert.equal(["primeira","segunda","terceira"].filter(text=>/\[Áudio sem transcrição\]/.test(text)).length,0);
+});
+
+test("linha portuguesa de criptografia é reconhecida isoladamente após normalização",()=>{
+  assert.equal(capture.isWhatsAppSystemMessageText("As mensagens e ligações são protegidas com a criptografia de ponta a ponta."),true);
+});
+
+test("linha portuguesa de participantes é reconhecida isoladamente após normalização",()=>{
+  assert.equal(capture.isWhatsAppSystemMessageText("Somente as pessoas que fazem parte da conversa podem ler, ouvir e compartilhar o conteúdo dessas conversas."),true);
+});
+
+test("clique para saber mais isolado é reconhecido como aviso do WhatsApp",()=>{
+  assert.equal(capture.isWhatsAppSystemMessageText("Clique para saber mais"),true);
+});
+
+test("aviso completo em português é reconhecido",()=>{
+  assert.equal(capture.isWhatsAppSystemMessageText("As mensagens e ligações são protegidas com a criptografia de ponta a ponta. Somente as pessoas que fazem parte da conversa podem ler, ouvir e compartilhar o conteúdo dessas conversas. Clique para saber mais."),true);
+});
+
+test("avisos equivalentes em inglês e espanhol são reconhecidos",()=>{
+  assert.equal(capture.isWhatsAppSystemMessageText("Messages and calls are end-to-end encrypted. Only people in this chat can read, listen to, or share them."),true);
+  assert.equal(capture.isWhatsAppSystemMessageText("Los mensajes y las llamadas están protegidos con el cifrado de extremo a extremo. Solo las personas que forman parte de esta conversación pueden leer, escuchar y compartir el contenido."),true);
+});
+
+test("mensagem comercial com segurança não é confundida com aviso do WhatsApp",()=>{
+  assert.equal(capture.isWhatsAppSystemMessageText("Nossa segurança no projeto é prioridade; posso explicar as opções para sua cozinha."),false);
+});
+
+
+test("messageNodes retorna somente as três mensagens reais e exclui o aviso estrutural",()=>{
+  const makeNode=(id,text,{system=false}={})=>{
+    const detail={getAttribute:name=>name==="data-pre-plain-text"?`[10:00, 27/07/2026] Você: `:""};
+    return {
+      textContent:text,innerText:text,parentElement:null,children:[],
+      hasAttribute(name){return name==="data-id"&&Boolean(id);},
+      getAttribute(name){return name==="data-id"?id:name==="data-pre-plain-text"&&id?detail.getAttribute(name):"";},
+      matches(selector){return selector.includes('[data-testid="msg-container"]')||(!system&&selector.includes('[data-pre-plain-text]'));},
+      closest(){return null;},
+      contains(other){return other===this;},
+      querySelector(selector){return !system&&selector.includes('[data-pre-plain-text]')?detail:null;},
+      querySelectorAll(){return [];}
+    };
+  };
+  const real=[0,1,2].map(index=>makeNode(`true_5519999999999@c.us_3A5FBC1234567890ABCDEF12345678${index}`,`mensagem ${index}`));
+  const system=makeNode("","ic-lock-filledAs mensagens e ligações são protegidas com a criptografia de ponta a ponta. Clique para saber mais.",{system:true});
+  const all=[...real,system];
+  const main={querySelectorAll(selector){if(selector===capture.voiceSelector)return[];if(selector.includes('conv-msg')||selector.includes('[data-testid="msg-container"]'))return all;return[];}};
+  const selected=capture.messageNodes(main);
+  assert.equal(selected.length,3);
+  assert.deepEqual(Array.from(selected,node=>node.textContent),["mensagem 0","mensagem 1","mensagem 2"]);
+});
+
+test("aviso real dentro de msg-container continua sendo sistema sem evidência forte",()=>{
+  const node={
+    textContent:"ic-lock-filledAs mensagens e ligações são protegidas com a criptografia de ponta a ponta. Somente as pessoas que fazem parte da conversa podem ler, ouvir e compartilhar o conteúdo dessas conversas. Clique para saber mais.",
+    innerText:"ic-lock-filledAs mensagens e ligações são protegidas com a criptografia de ponta a ponta. Somente as pessoas que fazem parte da conversa podem ler, ouvir e compartilhar o conteúdo dessas conversas. Clique para saber mais.",
+    parentElement:null,
+    children:[],
+    hasAttribute(){return false;},
+    getAttribute(){return "";},
+    matches(selector){return selector.includes('[data-testid="msg-container"]')||selector.includes('.message-in');},
+    closest(){return null;},
+    querySelector(){return null;},
+    querySelectorAll(){return [];}
+  };
+  assert.equal(capture.isWhatsAppSystemMessage(node),true);
+});
+
+test("mensagem real com ID e pre-plain-text não é excluída mesmo citando criptografia",()=>{
+  const detail={getAttribute:name=>name==="data-pre-plain-text"?"[10:00, 27/07/2026] Você: ":""};
+  const node={
+    textContent:"As mensagens e ligações são protegidas com criptografia; posso explicar a segurança do projeto.",
+    innerText:"As mensagens e ligações são protegidas com criptografia; posso explicar a segurança do projeto.",
+    parentElement:null,
+    children:[],
+    hasAttribute(name){return name==="data-id";},
+    getAttribute(name){return name==="data-id"?"true_5519999999999@c.us_3A5FBC1234567890ABCDEF1234567890":name==="data-pre-plain-text"?"[10:00, 27/07/2026] Você: ":"";},
+    matches(selector){return selector.includes('[data-testid="msg-container"]')||selector.includes('[data-pre-plain-text]');},
+    closest(){return null;},
+    querySelector(selector){return selector.includes('[data-pre-plain-text]')?detail:null;},
+    querySelectorAll(){return [];}
+  };
+  assert.equal(capture.isWhatsAppSystemMessage(node),false);
+});
+
+test("conversa curta não rolável só é completa com evidências fortes",()=>{
+  const complete=capture.shortNonScrollableHistoryDecision({panelFound:true,mainConnected:true,panelConnected:true,panelStable:true,loading:false,olderMessagesAvailable:false,messageCount:3,allCanonicalIds:true,panelContainsAll:true,scrollHeight:600,clientHeight:600});
+  assert.equal(complete.complete,true);
+  assert.equal(complete.reason,"short_non_scrollable_history_complete");
+  const ambiguous=capture.shortNonScrollableHistoryDecision({panelFound:true,mainConnected:true,panelConnected:true,panelStable:true,loading:false,olderMessagesAvailable:false,messageCount:3,allCanonicalIds:false,panelContainsAll:true,scrollHeight:600,clientHeight:600});
+  assert.equal(ambiguous.complete,false);
+});
+
+test("captura aberta exige confirmação manual quando o telefone não aparece e nunca aprova só pelo nome",()=>{
+  const pending=capture.openCaptureIdentityDecision("Graziele (Araras)",{captureMode:"opened",phone:"5519997377797",customerName:"Graziele Souza"});
+  assert.equal(pending.ok,false);
+  assert.equal(pending.code,"identity_confirmation_required");
+  const confirmed=capture.openCaptureIdentityDecision("Graziele (Araras)",{captureMode:"opened",phone:"5519997377797",customerName:"Graziele Souza",identityOverrideConfirmed:true});
+  assert.equal(confirmed.ok,true);
+  assert.equal(confirmed.identityOverrideUsed,true);
+  const automatic=capture.openCaptureIdentityDecision("Graziele (Araras)",{captureMode:"automatic",phone:"5519997377797",customerName:"Graziele Souza"});
+  assert.equal(automatic.ok,false);
+  assert.equal(automatic.code,"contact_mismatch");
+});
+
+test("telefone E.164 confirmado vence qualquer diferença de título",()=>{
+  const decision=capture.openCaptureIdentityDecision("Apelido qualquer",{captureMode:"opened",phone:"5519997377797",phoneIdentityConfirmed:true,confirmedPhone:"+5519997377797"});
+  assert.equal(decision.ok,true);
+});
+
+test("Fernanda e Rose removem somente sistema e áudio órfão em captura aberta completa",()=>{
+  const makeReal=(prefix,count)=>Array.from({length:count},(_,index)=>({id:`wa:${prefix}-${index}`,message_id:`AABBCCDDEEFF${String(index).padStart(4,"0")}`,type:"Texto",text:`[10:0${index}, 27/07/2026] Criare: mensagem ${index}`}));
+  for(const [name,count] of [["FERNANDA",3],["ROSE",4]]){
+    const incoming=makeReal(name,count);
+    const stored=[...incoming,{id:`wa:DEADBEEFDEADBEEFDEADBEEFDEADBEEF`,message_id:"DEADBEEFDEADBEEFDEADBEEFDEADBEEF",text:"Autor não identificado data não identificada horário não identificado ic-lock-filledAs mensagens e ligações são protegidas com a criptografia de ponta a ponta. Clique para saber mais."},{id:`audio:${name}-ORPHAN`,message_id:`AUDIO:${name}-ORPHAN`,type:"Áudio",hasVoiceMessage:true,text:"[10:09, 27/07/2026] Criare: [Áudio sem transcrição]",audioMeta:{extractionStatus:"pending"}}];
+    const withoutSystem=core.removeKnownWhatsAppSystemMessages(stored,{completeHistory:true});
+    const cleaned=core.removeStaleAudioMarkers(withoutSystem,incoming,{completeHistory:true,currentCanonicalIds:incoming.map(entry=>entry.message_id)});
+    assert.equal(cleaned.length,count);
+    assert.equal(cleaned.filter(entry=>entry.type==="Áudio").length,0);
+  }
+});
+
+test("Graziele preserva os dois áudios reais de 107 e 13 segundos",()=>{
+  const texts=Array.from({length:16},(_,index)=>({message_id:`GRAZIELE-TEXT-${index}`,type:"Texto",text:`[14:${String(index).padStart(2,"0")}, 06/07/2026] Graziele: texto ${index}`}));
+  const audios=[
+    {message_id:"GRAZIELE-AUDIO-107",type:"Áudio",hasVoiceMessage:true,text:"[18:04, 06/07/2026] Você: [Áudio sem transcrição]",duration_seconds:107,duration_source:"whatsapp_player",duration_valid:true,audioMeta:{durationSeconds:107,durationSource:"whatsapp_player"}},
+    {message_id:"GRAZIELE-AUDIO-13",type:"Áudio",hasVoiceMessage:true,text:"[08:57, 07/07/2026] Você: [Áudio sem transcrição]",duration_seconds:13,duration_source:"whatsapp_player",duration_valid:true,audioMeta:{durationSeconds:13,durationSource:"whatsapp_player"}}
+  ];
+  const system={id:"fp:GRAZIELE-SYSTEM",text:"ic-lock-filledAs mensagens e ligações são protegidas com a criptografia de ponta a ponta. Clique para saber mais."};
+  const incoming=[...texts,...audios];
+  const cleanedSystem=core.removeKnownWhatsAppSystemMessages([...incoming,system],{completeHistory:true});
+  const cleaned=core.removeStaleAudioMarkers(cleanedSystem,incoming,{completeHistory:true,currentCanonicalIds:incoming.map(entry=>entry.message_id)});
+  assert.equal(cleaned.length,18);
+  assert.deepEqual(cleaned.filter(entry=>entry.type==="Áudio").map(entry=>entry.duration_seconds),[107,13]);
+});
+
+test("slider isolado não cria áudio, mas player de áudio real continua reconhecido",()=>{
+  assert.equal(capture.hasAudioEvidence({playControlPresent:true,durationValid:true}),false);
+  assert.equal(capture.hasAudioEvidence({pttTestIdPresent:true,playControlPresent:false,durationValid:false}),false);
+  assert.equal(capture.hasAudioEvidence({pttTestIdPresent:true,playControlPresent:true}),true);
+  assert.equal(capture.hasAudioEvidence({audioElementPresent:true}),true);
+  assert.equal(capture.hasAudioEvidence({voiceAriaPresent:true}),true);
+});
+
 test("captura completa remove marcador de áudio técnico quando a bolha recapturada é texto",()=>{
   const cleaned=core.removeStaleAudioMarkers(
     [{id:"audio:controle-0929",message_id:"AUDIO:CONTROLE-0929",type:"Áudio",hasVoiceMessage:true,text:"[09:29, 27/07/2026] Criare: [Áudio sem transcrição]",audioMeta:{extractionStatus:"pending"}}],
-    [{id:"wa:MSG-TEXTO-0929",message_id:"MSG-TEXTO-0929",type:"Texto",hasVoiceMessage:false,text:"[09:29, 27/07/2026] Criare: certinho...fico a disposição!"}]
+    [{id:"wa:MSG-TEXTO-0929",message_id:"MSG-TEXTO-0929",type:"Texto",hasVoiceMessage:false,text:"[09:29, 27/07/2026] Criare: certinho...fico a disposição!"}],
+    {completeHistory:true,currentCanonicalIds:["MSG-TEXTO-0929"]}
   );
   assert.equal(cleaned.length,0);
+});
+
+test("captura parcial nunca remove marcador de áudio histórico",()=>{
+  const stored=[{id:"audio:controle-0929",message_id:"AUDIO:CONTROLE-0929",type:"Áudio",hasVoiceMessage:true,text:"[09:29, 27/07/2026] Criare: [Áudio sem transcrição]",audioMeta:{extractionStatus:"pending"}}];
+  const cleaned=core.removeStaleAudioMarkers(stored,[{id:"wa:MSG-TEXTO-0929",message_id:"MSG-TEXTO-0929",type:"Texto",text:"[09:29, 27/07/2026] Criare: texto"}],{completeHistory:false});
+  assert.equal(cleaned.length,1);
 });
 
 test("captura completa preserva áudio real sem transcrição quando não há texto correspondente",()=>{
   const kept=core.removeStaleAudioMarkers(
     [{id:"wa:AUDIO-0854",message_id:"AUDIO-0854",type:"Áudio",hasVoiceMessage:true,text:"[08:54, 27/07/2026] Cristina: [Áudio sem transcrição]",duration:29,audioMeta:{durationSeconds:29,extractionStatus:"pending"}}],
-    [{id:"wa:TEXTO-0852",message_id:"TEXTO-0852",type:"Texto",text:"[08:52, 27/07/2026] Criare: uma ótima semana!"}]
+    [{id:"wa:TEXTO-0852",message_id:"TEXTO-0852",type:"Texto",text:"[08:52, 27/07/2026] Criare: uma ótima semana!"}],
+    {completeHistory:true,currentCanonicalIds:["AUDIO-0854","TEXTO-0852"]}
   );
   assert.equal(kept.length,1);
   assert.equal(kept[0].message_id,"AUDIO-0854");
+});
+
+test("caso Paty preserva 43 mensagens e seis áudios reais na captura completa",()=>{
+  const texts=Array.from({length:37},(_,index)=>({message_id:`PATY-TEXT-${index}`,type:"Texto",text:`[10:${String(index).padStart(2,"0")}, 27/07/2026] Paty: texto ${index}`}));
+  const audios=Array.from({length:6},(_,index)=>({message_id:`PATY-AUDIO-${index}`,type:"Áudio",hasVoiceMessage:true,text:`[11:${String(index).padStart(2,"0")}, 27/07/2026] Você: [Áudio sem transcrição]`,duration_seconds:20+index,duration_source:"whatsapp_player",duration_valid:true,audioMeta:{durationSeconds:20+index,durationSource:"whatsapp_player",extractionStatus:"pending"}}));
+  const all=[...texts,...audios];
+  const cleaned=core.removeStaleAudioMarkers(all,all,{completeHistory:true,currentCanonicalIds:all.map(entry=>entry.message_id)});
+  assert.equal(cleaned.length,43);
+  assert.equal(cleaned.filter(entry=>entry.type==="Áudio").length,6);
 });
 
 test("normaliza prefixo wa e preserva o identificador completo",()=>{
@@ -519,6 +706,11 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert(!crm.includes("whatsapp://"));
   assert.match(crm,/id="btnCaptureOpenWhatsApp"[^>]*>Capturar conversa aberta/);
   assert.match(background,/criare-capture-open-whatsapp/);
+  assert.match(background,/captureMode:"opened"/);
+  assert.match(content,/identity_confirmation_required/);
+  assert.match(crm,/identityOverrideConfirmed:true/);
+  assert.match(crm,/removeKnownWhatsAppSystemMessages/);
+  assert.match(content,/short_non_scrollable_history_complete/);
   assert.match(background,/criare-audio-transcription-complete/);
   assert.match(contentCrm,/criare-whatsapp-open-capture/);
   assert.match(crm,/id="btnWhatsAppBatch"[^>]*>Atualizar conversas do WhatsApp/);
