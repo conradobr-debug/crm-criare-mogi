@@ -15,8 +15,8 @@
   }
   function downloadBlob(blob,name){const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function fileStamp(){const d=new Date(),pad=value=>String(value).padStart(2,"0");return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;}
-  function hasConversation(record){return engine.canonicalMessages(record).length>0;}
-  function lastMessageDate(record){const value=engine.lastMessageTimestamp(record);const date=value?new Date(value):null;return date&&!Number.isNaN(date.getTime())?date:null;}
+  function hasUsablePhone(record){try{return typeof phoneIdentityState==="function"&&phoneIdentityState(record).ready;}catch(error){return Boolean(String(record?.phone||"").replace(/\D/g,""));}}
+  function lastMessageDate(record){const value=engine.lastMessageTimestamp(record)||record?.whatsapp_analysis_updated_at||record?.whatsapp_summary_updated_at;const date=value?new Date(value):null;return date&&!Number.isNaN(date.getTime())?date:null;}
   function commitmentsFor(record){
     const stored=Array.isArray(record.appointments)?record.appointments.filter(item=>item?.starts_at).map(item=>({starts_at:item.starts_at,kind:item.kind||"Follow-up",details:item.details||null,status:item.status||"scheduled"})):[];
     if(stored.length)return stored;
@@ -31,7 +31,7 @@
     const scope=$("batchExportScope").value,owner=$("batchExportOwner").value,stage=$("batchExportStage").value,from=$("batchExportDateFrom").value,to=$("batchExportDateTo").value;
     const includeClosed=$("batchExportClosed").checked,includeLost=$("batchExportLost").checked;
     return records.filter(record=>{
-      if(isSpecifier(record)||!hasConversation(record))return false;
+      if(isSpecifier(record)||!hasUsablePhone(record))return false;
       if(record.pipeline==="closed"&&!includeClosed)return false;
       if(record.stage==="Perdido"&&!includeLost)return false;
       if(!includeClosed&&!includeLost&&!(record.pipeline==="lead"&&record.stage!=="Perdido"))return false;
@@ -55,26 +55,24 @@
     const ids=new Set(state.candidates.map(record=>String(record.id)));
     if(resetSelection)state.selected=new Set(ids);else state.selected=new Set([...state.selected].filter(id=>ids.has(id)));
     if(!state.selected.size&&state.candidates.length)state.selected=new Set(ids);
-    $("batchExportLeadPicker").innerHTML=state.candidates.length?state.candidates.map(record=>{const date=lastMessageDate(record),summary=window.CriareConversationCompleteness.calculate(record,{identity_status:typeof phoneIdentityState==="function"?phoneIdentityState(record).code:"ready"});return `<label class="batchLeadRow"><input type="checkbox" data-batch-lead="${escapeHtml(record.id)}" ${state.selected.has(String(record.id))?"checked":""}/><b>${escapeHtml(fullName(record))}<small>${escapeHtml(completenessStatus(summary))}</small></b><span>${escapeHtml(profileNameById(record.owner_id))}</span><span>${escapeHtml(record.stage||"—")}</span><small>${date?escapeHtml(fmtBRDateTime(date.toISOString())):"Sem data"}</small></label>`;}).join(""):'<div class="empty">Nenhuma conversa corresponde aos filtros.</div>';
-    setPanel("batchExportPanel","batchExportCount","batchExportStatus",`${state.selected.size} conversa(s) selecionada(s)`,state.candidates.length?"Confira a seleção ou gere o pacote.":"Ajuste os filtros para localizar conversas capturadas.");
+    $("batchExportLeadPicker").innerHTML=state.candidates.length?state.candidates.map(record=>{const partial=Boolean(record.whatsapp_analysis_last_message_id);return `<label class="batchLeadRow"><input type="checkbox" data-batch-lead="${escapeHtml(record.id)}" ${state.selected.has(String(record.id))?"checked":""}/><b>${escapeHtml(fullName(record))}<small>${partial?"Parcial desde a última análise":"Histórico completo"}</small></b><span>${escapeHtml(profileNameById(record.owner_id))}</span><span>${escapeHtml(record.stage||"—")}</span><small>${escapeHtml(record.phone||"Sem telefone")}</small></label>`;}).join(""):'<div class="empty">Nenhum cliente com telefone válido corresponde aos filtros.</div>';
+    setPanel("batchExportPanel","batchExportCount","batchExportStatus",`${state.selected.size} contato(s) selecionado(s)`,state.candidates.length?"Confira a seleção e baixe a fila para a extensão.":"Ajuste os filtros para localizar clientes com telefone válido.");
     $("btnGenerateBatchZip").disabled=!state.selected.size;
-    refreshCompletenessWarning();
+    $("batchCompletenessChoice").hidden=true;
   }
   async function buildSelectedBatch(selection=null){
     const selected=selection||state.candidates.filter(record=>state.selected.has(String(record.id)));
     if(!selected.length)throw new Error("Selecione ao menos uma conversa.");
-    return engine.buildBatch(selected,contextFor);
+    return engine.buildDownloadRequest(selected,contextFor);
   }
   async function exportBatch(){
     const button=$("btnGenerateBatchZip"),original=button.textContent;
     state.cancelled=false;button.disabled=true;button.textContent="Preparando…";
-    setPanel("batchExportPanel","batchExportCount","batchExportStatus",`Preparando ${state.selected.size} conversa(s)`,"Montando mensagens canônicas e hashes determinísticos.");
+    setPanel("batchExportPanel","batchExportCount","batchExportStatus",`Preparando ${state.selected.size} contato(s)`,"Montando uma fila leve, sem conversas ou mídias.");
     try{
-      const chosen=selectedCompleteness(),incomplete=chosen.filter(item=>item.summary.conversation_completeness_status!=="complete");let selected=chosen.map(item=>item.record);
-      if(incomplete.length){const action=document.querySelector('input[name="batchCompletenessAction"]:checked')?.value;if(!action)throw new Error("Escolha exportar todos, exportar somente conversas completas ou revisar as incompletas primeiro.");if(action==="review"){window.setTab?.("completeness");$("batchExportModal").close();return;}if(action==="complete")selected=chosen.filter(item=>item.summary.conversation_completeness_status==="complete").map(item=>item.record);if(!selected.length)throw new Error("Nenhuma conversa completa permaneceu na seleção.");}
-      const batch=await buildSelectedBatch(selected);if(state.cancelled)return;
+      const batch=await buildSelectedBatch();if(state.cancelled)return;
       state.lastBatch=batch;
-      const zip=engine.zipFiles(engine.packageFiles(batch)),input=engine.inputFilename(batch.batch_id),output=engine.outputFilename(batch.batch_id);downloadBlob(new Blob([zip],{type:"application/zip"}),input);setPanel("batchExportPanel","batchExportCount","batchExportStatus",`Arquivo criado: ${input}`,`Próximo passo: envie este ZIP ao GPT personalizado. Não tente importá-lo no CRM. Depois, o GPT deverá devolver: ${output}`,"success");
+      const filename=engine.downloadRequestFilename(batch.batch_id);downloadBlob(new Blob([JSON.stringify(batch,null,2)],{type:"application/json"}),filename);setPanel("batchExportPanel","batchExportCount","batchExportStatus",`Fila criada: ${filename}`,`Próximo passo: abra o WhatsApp Web, carregue esta fila na extensão e aguarde o pacote ${batch.expected_input_filename}.`,"success");
     }catch(error){setPanel("batchExportPanel","batchExportCount","batchExportStatus","Não foi possível gerar o pacote",error.message||String(error),"error");}
     finally{button.disabled=false;button.textContent=original;}
   }
@@ -104,7 +102,7 @@
     try{const payload=JSON.parse(text);const classification=engine.classifyImportPayload(payload,meta);state.importPayload=payload;renderSelectedFile(classification);if(classification.code==="input_payload")return rejectWrongInput(classification);if(classification.code!=="analysis_result"){state.validation=null;state.importPhase="error";$("batchImportPreview").innerHTML='<tr><td colspan="9">Arquivo incompatível.</td></tr>';$("btnImportValidatedBatch").hidden=true;$("btnLoadAnotherBatch").hidden=false;return setPanel("batchImportPanel","batchImportTitle","batchImportStatus",classification.label,classification.reason||"O conteúdo não corresponde ao resultado esperado do GPT.","error");}const validation=await engine.validateImport(payload,records);state.validation=validation;state.importResults=[];state.importMachine.load(payload,validation);state.importPhase=state.importMachine.phase;renderImportPreview();}
     catch(error){state.importPayload=null;state.validation=null;state.importPhase="error";renderSelectedFile({label:"JSON inválido",analysis_count:0});$("batchImportPreview").innerHTML='<tr><td colspan="9">JSON inválido.</td></tr>';$("btnImportValidatedBatch").hidden=true;$("btnLoadAnotherBatch").hidden=false;setPanel("batchImportPanel","batchImportTitle","batchImportStatus","JSON inválido",error.message||String(error),"error");}
   }
-  function handleImportFile(file){const meta={name:file.name,type:file.type||(/\.zip$/i.test(file.name)?"application/zip":"application/json")};state.importFile=meta;if(/\.zip$/i.test(file.name)||meta.type.includes("zip")){const classification=engine.classifyImportPayload(null,meta);return rejectWrongInput(classification);}return file.text().then(text=>parseImportText(text,meta));}
+  async function handleImportFile(file){const meta={name:file.name,type:file.type||(/\.zip$/i.test(file.name)?"application/zip":"application/json")};state.importFile=meta;if(/\.zip$/i.test(file.name)||meta.type.includes("zip")){try{const payload=await engine.readResultZip(await file.arrayBuffer());return parseImportText(JSON.stringify(payload),meta);}catch(error){state.importPhase="error";return setPanel("batchImportPanel","batchImportTitle","batchImportStatus","ZIP incompatível",error.message||String(error),"error");}}return file.text().then(text=>parseImportText(text,meta));}
   function verifySavedAnalysis(record,result,payload){const meta=record?.whatsapp_analysis_structured?.batch_metadata;return record?.whatsapp_analysis_status==="current"&&record?.whatsapp_analysis_hard_boss===engine.clean(result.item.chefe_duro)&&meta?.import_key===result.import_key&&meta?.conversation_hash===result.item.conversation_hash&&meta?.prompt_version===payload.prompt_version;}
   function replaceRecord(reloaded){const at=records.findIndex(record=>record.id===reloaded.id);if(at>=0)records[at]=reloaded;}
   function importValidated(){
@@ -131,7 +129,7 @@
     return operation.then(result=>{if(!result?.blocked){state.importPhase="completed";button.textContent="Importar análises válidas";$("btnDownloadBatchFailures").hidden=!(state.validation?.results||[]).some(item=>!["imported","already_imported","duplicate"].includes(item.status));renderImportPreview();}return result;}).catch(error=>{state.importPhase="error";button.textContent="Importar análises válidas";setPanel("batchImportPanel","batchImportTitle","batchImportStatus","Falha na importação",error.message||String(error),"error");return {error};});
   }
   function loadAnotherImport(){if(!state.importMachine.reset())return;state.importPhase="idle";state.importPayload=null;state.importFile=null;state.validation=null;state.importResults=[];state.actualWrites=0;$("batchImportPaste").value="";$("batchSelectedFile").hidden=true;$("batchSelectedFile").textContent="";$("batchImportPreview").innerHTML='<tr><td colspan="9">Aguardando JSON.</td></tr>';$("btnImportValidatedBatch").hidden=false;$("btnImportValidatedBatch").disabled=true;$("btnLoadAnotherBatch").hidden=true;$("btnDownloadBatchFailures").hidden=true;setPanel("batchImportPanel","batchImportTitle","batchImportStatus","Nenhum arquivo validado","Selecione, arraste ou cole um novo JSON retornado pelo GPT.");}
-  async function copyGptInstruction(){const input=state.lastBatch?engine.inputFilename(state.lastBatch.batch_id):"o arquivo que começa com 01-ENVIAR-AO-GPT",output=state.lastBatch?engine.outputFilename(state.lastBatch.batch_id):"um arquivo que começa com 02-IMPORTAR-NO-CRM";const message=`Analise o pacote ${input} seguindo integralmente as instruções internas. Devolva somente o resultado como arquivo JSON baixável chamado exatamente ${output}. Não devolva batch_input.json e não use nome genérico.`;try{await navigator.clipboard.writeText(message);toast("Instrução para o GPT copiada.");}catch(error){toast("Não foi possível copiar a instrução.",{error:true});}}
+  async function copyGptInstruction(){const input=state.lastBatch?.expected_input_filename||"o arquivo que começa com 01-ENVIAR-AO-GPT",output=state.lastBatch?.expected_output_filename||"um ZIP que começa com 02-IMPORTAR-NO-CRM";const message=`Analise o pacote ${input} seguindo integralmente as instruções internas. Leia também as mídias disponíveis nas pastas de cada cliente. Devolva somente o ZIP ${output}, com um resultado.json dentro da pasta de cada cliente e o result_manifest.json na raiz. Cada resultado deve conter apenas Chefe Duro, Análise Completa e os identificadores exigidos.`;try{await navigator.clipboard.writeText(message);toast("Instrução para o GPT copiada.");}catch(error){toast("Não foi possível copiar a instrução.",{error:true});}}
   function downloadFailures(){const failures=(state.validation?.results||[]).filter(result=>!['imported','already_imported'].includes(result.status)).map(result=>({lead_id:result.lead_id,status:result.status,reason:result.reason,analysis:result.item||null}));downloadBlob(new Blob([JSON.stringify({crm_version:CRM_BATCH_VERSION,generated_at:nowISO(),failures},null,2)],{type:"application/json"}),`criare-batch-import-falhas-${fileStamp()}.json`);}
 
   window.wireBatchAnalysisReport=function(){
@@ -141,10 +139,13 @@
     if(copyButton&&!copyButton.dataset.batchWired){copyButton.dataset.batchWired="1";copyButton.addEventListener("click",copyGptInstruction);}
   };
 
+  const headerExportButton=$("btnOpenBatchExportHeader");
+  if(headerExportButton&&!headerExportButton.dataset.batchWired){headerExportButton.dataset.batchWired="1";headerExportButton.addEventListener("click",()=>{populateExportFilters();refreshExportPicker(true);$("batchExportModal").showModal();});}
+
   if(window.__criareBatchAnalysisStaticListenersRegistered)return;
   window.__criareBatchAnalysisStaticListenersRegistered=true;
   ["batchExportScope","batchExportOwner","batchExportStage","batchExportDateFrom","batchExportDateTo","batchExportClosed","batchExportLost"].forEach(id=>$(id).addEventListener("change",()=>refreshExportPicker(true)));
-  $("batchExportLeadPicker").addEventListener("change",event=>{const input=event.target.closest("[data-batch-lead]");if(!input)return;input.checked?state.selected.add(input.dataset.batchLead):state.selected.delete(input.dataset.batchLead);setPanel("batchExportPanel","batchExportCount","batchExportStatus",`${state.selected.size} conversa(s) selecionada(s)`,"Confira a seleção ou gere o pacote.");$("btnGenerateBatchZip").disabled=!state.selected.size;refreshCompletenessWarning();});
+  $("batchExportLeadPicker").addEventListener("change",event=>{const input=event.target.closest("[data-batch-lead]");if(!input)return;input.checked?state.selected.add(input.dataset.batchLead):state.selected.delete(input.dataset.batchLead);setPanel("batchExportPanel","batchExportCount","batchExportStatus",`${state.selected.size} contato(s) selecionado(s)`,"Confira a seleção e baixe a fila.");$("btnGenerateBatchZip").disabled=!state.selected.size;});
   $("btnGenerateBatchZip").addEventListener("click",exportBatch);
   window.CriareBatchAnalysisUI={openForRecords(ids=[]){populateExportFilters();refreshExportPicker(true);if(ids.length)state.selected=new Set(ids.map(String));refreshExportPicker(false);$("batchExportModal").showModal();}};
   $("btnCancelBatchExport").addEventListener("click",()=>{state.cancelled=true;$("batchExportModal").close();});$("btnCloseBatchExport").addEventListener("click",()=>$("batchExportModal").close());

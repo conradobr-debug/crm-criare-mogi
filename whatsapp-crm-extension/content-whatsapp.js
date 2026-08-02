@@ -187,20 +187,20 @@ function confirmConversationPhone(request={}){
 
 function canonicalMessageRoot(node){
   if(!node)return null;
-  const container=(node.matches?.('[data-testid="msg-container"]')?node:null)
-    ||node.closest?.('[data-testid="msg-container"]')
-    ||node.querySelector?.('[data-testid="msg-container"]');
-  const start=container||node;const candidates=[];let cursor=start;
-  while(cursor&&cursor!==document.body){
-    if(cursor.hasAttribute?.("data-id"))candidates.push(cursor);
+  const container=ownMessageContainer(node);
+  // System notices are rendered inside virtualizer wrappers. Those wrappers
+  // can expose a neighbouring message's data-id/pre-plain-text, so they are
+  // never evidence of a message unless this node has its own msg-container.
+  if(!container)return node;
+  const main=(typeof document!=="undefined"&&typeof document.querySelector==="function")?activeMain():null;let cursor=container;
+  while(cursor&&cursor!==main&&cursor!==document.body){
+    const nested=cursor.querySelectorAll?.('[data-testid="msg-container"]')||[];
+    const ownsOnlyThisMessage=cursor===container||(nested.length===1&&nested[0]===container);
+    const hasDataId=Boolean(cleanText(cursor.getAttribute?.("data-id")||""));
+    if(ownsOnlyThisMessage&&(hasDataId||cursor.matches?.('[data-testid^="conv-msg-"]')))return cursor;
     cursor=cursor.parentElement;
   }
-  for(const child of start.querySelectorAll?.('[data-id]')||[])candidates.push(child);
-  const unique=[...new Set(candidates)];
-  return unique.sort((left,right)=>{
-    const score=item=>(item.matches?.('[data-testid^="conv-msg-"]')?100:0)+(item.querySelector?.('[data-testid="msg-container"]')?50:0)+(item.querySelector?.('[data-pre-plain-text]')?40:0)+(item.contains?.(start)?20:0);
-    return score(right)-score(left);
-  })[0]||container||node;
+  return container;
 }
 
 function isWhatsAppSystemMessageText(value){
@@ -212,7 +212,8 @@ function hasCanonicalWhatsAppMessageId(node){
     ||/^[A-F0-9]{16,}$/i.test(normalized);
 }
 function hasConfirmedMediaEvidence(node){
-  const container=ownMessageContainer(node)||node;
+  const container=ownMessageContainer(node);
+  if(!container)return false;
   return Boolean(container?.querySelector?.([
     '[data-testid="image-thumb"]',
     '[data-testid*="document" i]',
@@ -227,7 +228,9 @@ function hasConfirmedMediaEvidence(node){
   ].join(',')));
 }
 function hasStrongMessageEvidence(node){
-  const hasPrePlainText=Boolean(node?.getAttribute?.("data-pre-plain-text")||node?.querySelector?.("[data-pre-plain-text]"));
+  const container=ownMessageContainer(node);
+  if(!container)return false;
+  const hasPrePlainText=Boolean(container.getAttribute?.("data-pre-plain-text")||container.querySelector?.("[data-pre-plain-text]"));
   return hasPrePlainText||hasCanonicalWhatsAppMessageId(node)||hasVoiceMessage(node)||hasConfirmedMediaEvidence(node);
 }
 function isWhatsAppSystemMessage(node){

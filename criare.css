@@ -182,8 +182,19 @@ label{color:#625d57;font-weight:600}
 .hardBossEyebrow{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#806c59}
 .hardBossPinned p{margin:0;color:#3f3730;font-size:13px;line-height:1.65;white-space:pre-wrap}
 .hardBossPinned.isEmpty p{color:#716b64;font-style:italic}
-.viewFullAnalysis{margin-top:8px}.whatsappAnalysisModal{width:min(820px,94vw)}
-.fullAnalysisText{min-height:240px;padding:18px;border:1px solid #d8d2ca;background:#fff;color:#302c28;font-size:12px;line-height:1.65;white-space:pre-wrap}
+.viewFullAnalysis{margin-top:8px}.whatsappAnalysisModal{width:min(1040px,96vw)}
+.analysisReaderTools{position:sticky;top:0;z-index:2;padding:12px;border:1px solid #d8d2ca;background:#f7f3ed;box-shadow:0 8px 18px rgba(40,32,25,.08)}
+.analysisReaderTools input{margin:0 0 9px;background:#fff}
+.analysisReaderTools small{display:block;margin-top:7px;color:#746b62}
+.analysisNavigation{display:flex;gap:6px;overflow-x:auto;padding-bottom:3px;scrollbar-width:thin}
+.analysisNavigation button{flex:0 0 auto;padding:7px 9px;font-size:11px}
+.fullAnalysisText{min-height:240px;padding:14px;border:1px solid #d8d2ca;background:#f7f5f1;color:#302c28;font-size:13px;line-height:1.6}
+.analysisSection{scroll-margin-top:140px;margin:0 0 14px;padding:18px 20px;border:1px solid #ddd5cc;background:#fff}
+.analysisSection:last-child{margin-bottom:0}.analysisSection h2{margin:0 0 14px;padding-bottom:8px;border-bottom:2px solid #a58c73;color:#352b24;font-size:18px;line-height:1.25}
+.analysisSection p{margin:8px 0}.analysisSection ul,.analysisSection ol{margin:8px 0;padding-left:22px}.analysisSection li{margin:5px 0}
+.analysisFact{display:grid;grid-template-columns:minmax(130px,190px) 1fr;gap:10px;padding:7px 0;border-bottom:1px dashed #e5ded6}.analysisFact strong{color:#5a4636}.analysisFact span{min-width:0}
+.analysisMessageOption{margin:12px 0;padding:14px;border-left:4px solid #73917b;background:#f2f7f3}.analysisMessageOption>strong{display:block;margin-bottom:5px;color:#385642}.analysisMessageOption p{margin:0}
+@media(max-width:700px){.analysisSection{padding:14px}.analysisFact{grid-template-columns:1fr;gap:2px}.whatsappAnalysisModal{width:98vw}.analysisReaderTools{padding:9px}}
 
 @media (hover:hover) and (pointer:fine){
   .board.horizontalDragScroll{cursor:grab;user-select:none}

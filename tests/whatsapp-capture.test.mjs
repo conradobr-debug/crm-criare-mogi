@@ -271,6 +271,29 @@ test("aviso real dentro de msg-container continua sendo sistema sem evidência f
   assert.equal(capture.isWhatsAppSystemMessage(node),true);
 });
 
+test("aviso do sistema não vira mensagem real ao herdar data-id e pre-plain-text de um wrapper",()=>{
+  const inheritedDetail={getAttribute:name=>name==="data-pre-plain-text"?"[10:40, 27/07/2026] Você: ":""};
+  const wrapper={
+    getAttribute:name=>name==="data-id"?"true_5519999999999@c.us_3A5FBC1234567890ABCDEF1234567890":"",
+    querySelector:selector=>selector.includes('[data-pre-plain-text]')?inheritedDetail:null,
+    querySelectorAll:()=>[],parentElement:null
+  };
+  const notice={
+    textContent:"As mensagens e ligações são protegidas com a criptografia de ponta a ponta.",
+    innerText:"As mensagens e ligações são protegidas com a criptografia de ponta a ponta.",
+    parentElement:wrapper,
+    children:[],
+    getAttribute(){return "";},
+    hasAttribute(){return false;},
+    matches(){return false;},
+    closest(){return null;},
+    querySelector(selector){return selector.includes('[data-pre-plain-text]')?inheritedDetail:null;},
+    querySelectorAll(){return [];}
+  };
+  assert.equal(capture.isWhatsAppSystemMessage(notice),true);
+  assert.equal(capture.isRealMessageNode(notice),false);
+});
+
 test("mensagem real com ID e pre-plain-text não é excluída mesmo citando criptografia",()=>{
   const detail={getAttribute:name=>name==="data-pre-plain-text"?"[10:00, 27/07/2026] Você: ":""};
   const node={

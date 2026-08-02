@@ -451,6 +451,12 @@
     .whatsappBatchStats span{padding:5px 8px;border:1px solid #C6D7EE;border-radius:999px;background:#fff}
     .whatsappBatchActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
     .whatsappBatchErrors{margin-top:8px;max-height:160px;overflow:auto;white-space:pre-wrap;font-size:11px;color:#6F2C2C;background:#FFF8F7;border:1px solid #E6B7B0;border-radius:9px;padding:8px}
+    .headerMaintenance{position:relative}
+    .headerMaintenance>summary{list-style:none;cursor:pointer}
+    .headerMaintenance>summary::-webkit-details-marker{display:none}
+    .headerMaintenanceMenu{position:absolute;right:0;top:calc(100% + 8px);z-index:40;display:grid;gap:7px;min-width:210px;padding:10px;border:1px solid rgba(255,255,255,.22);border-radius:12px;background:#151515;box-shadow:0 16px 34px rgba(0,0,0,.35)}
+    .headerMaintenanceMenu button,.headerMaintenanceMenu .btn{width:100%;box-sizing:border-box;text-align:left;justify-content:flex-start}
+    @media(max-width:700px){.headerMaintenanceMenu{position:fixed;left:14px;right:14px;top:auto;min-width:0}}
   </style>
   <link rel="stylesheet" href="criare.css" />
   <link rel="manifest" href="manifest.webmanifest" />
@@ -473,16 +479,28 @@
   <div class="actions">
     <button class="primary" id="btnNew">+ Novo lead</button>
     <button class="ghost" id="btnSync">Sincronizar</button>
-    <button class="ghost desktopUtility" id="btnSyncWhatsAppAll" type="button">Extensão WhatsApp</button>
-    <button class="ghost desktopUtility" id="btnWhatsAppBatchTest" type="button">Testar atualização em 3 leads</button>
-    <button class="ghost desktopUtility" id="btnWhatsAppBatch" type="button">Atualizar conversas do WhatsApp</button>
+    <button class="ghost" id="btnOpenBatchExportHeader" type="button">Preparar fila WhatsApp</button>
+    <button class="primary" id="btnImportLocalWhatsAppBatch" type="button">Importar análises (ZIP)</button>
     <button class="ghost mobileUtility" id="btnInstall" hidden>Instalar aplicativo</button>
-    <button class="ghost desktopUtility" id="btnSound">Som: OFF</button>
-    <button class="ghost desktopUtility" id="btnExportJson">Exportar backup</button>
-    <label class="btn ghost desktopUtility" for="importJson">Importar</label>
-    <input id="importJson" type="file" accept="application/json" style="display:none" />
-    <button class="danger desktopUtility" id="btnWipe">Limpar local</button>
+    <details class="headerMaintenance desktopUtility">
+      <summary class="btn ghost">Opções</summary>
+      <div class="headerMaintenanceMenu">
+        <button class="ghost" id="btnSound">Som: OFF</button>
+        <button class="ghost" id="btnExportJson">Exportar backup</button>
+        <label class="btn ghost" for="importJson">Importar backup</label>
+        <input id="importJson" type="file" accept="application/json" style="display:none" />
+        <button class="danger" id="btnWipe">Limpar dados locais</button>
+      </div>
+    </details>
     <button class="ghost" id="btnSignOut">Sair</button>
+    <div hidden aria-hidden="true">
+      <button id="btnSyncWhatsAppAll" type="button">Extensão WhatsApp</button>
+      <button id="btnWhatsAppBatchTest" type="button">Testar atualização em 3 leads</button>
+      <button id="btnWhatsAppBatch" type="button">Atualizar conversas do WhatsApp</button>
+      <button id="btnExportWhatsAppIndex" type="button">Exportar índice WhatsApp</button>
+      <button id="btnCompareWhatsAppExports" type="button">Comparar exportações</button>
+      <button id="btnRevertLocalWhatsAppBatch" type="button">Desfazer último lote WhatsApp</button>
+    </div>
   </div>
 </header>
 
@@ -492,7 +510,6 @@
     <div class="tab" data-tab="closed" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">✓</span><span>Fechados</span></div>
     <div class="tab" data-tab="specifiers" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">◇</span><span>Parceiros</span></div>
     <div class="tab" data-tab="pending" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">!</span><span>Pendências</span></div>
-    <div class="tab" data-tab="completeness" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">◉</span><span>Completude</span></div>
     <div class="tab" data-tab="reports" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">↗</span><span>Relatórios</span></div>
     <div class="tab" data-tab="config" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">⚙</span><span>Config</span></div>
   </div>
@@ -845,7 +862,7 @@
             <div class="whatsappSummaryMeta" id="hardBossPinnedMeta"></div>
         </div>
 
-        <section class="col-12 leadSection" id="whatsappSection">
+        <section class="col-12 leadSection" id="whatsappSection" hidden aria-hidden="true">
           <div class="leadSectionHd whatsappSectionHd">
             <button class="leadSectionToggle" type="button" data-toggle-section="whatsappSection" aria-expanded="false">
               <span>WhatsApp do cliente</span><small id="whatsappSectionSummary">Conversa ainda não capturada</small>
@@ -953,7 +970,7 @@
         <button class="ghost" id="btnCancel">Cancelar</button>
         <button class="primary" id="btnSave">Salvar</button>
         <button class="primary" id="btnOutlook">Salvar e criar compromisso</button>
-        <button class="whatsappAction" id="btnWhatsAppFooter" type="button">WhatsApp</button>
+        <button class="whatsappAction" id="btnWhatsAppFooter" type="button">Abrir WhatsApp</button>
         <button class="ghost" id="btnLogContact">Registrar contato agora</button>
         <button class="primary" id="btnQuickClosed" style="border-color: rgba(76,237,187,.75); background: rgba(76,237,187,.14)">Fechou</button>
         <button class="ghost" id="btnQuickLost" style="border-color: rgba(255,216,138,.65); background: rgba(255,216,138,.10)">Perdeu</button>
@@ -980,18 +997,18 @@
   </dialog>
 
   <dialog id="batchExportModal" class="batchAnalysisModal">
-    <div class="modalHd"><div><div class="modalTitle">Exportar conversas para análise</div><div class="modalSub">Gera um pacote local para o seu GPT, sem chamada automática de API.</div></div><button class="ghost" id="btnCloseBatchExport" type="button">Fechar</button></div>
+    <div class="modalHd"><div><div class="modalTitle">Preparar fila para a extensão</div><div class="modalSub">O CRM informa quais contatos precisam de histórico completo ou parcial, sem incluir conversas.</div></div><button class="ghost" id="btnCloseBatchExport" type="button">Fechar</button></div>
     <div class="modalBd">
       <div class="batchFilterGrid">
-        <label>Conversas <select id="batchExportScope"><option value="pending" selected>Somente análises ausentes ou desatualizadas</option><option value="all">Todas com conversa capturada</option></select></label>
+        <label>Clientes <select id="batchExportScope"><option value="pending" selected>Somente análises ausentes ou desatualizadas</option><option value="all">Todos com telefone válido</option></select></label>
         <label>Vendedor <select id="batchExportOwner"><option value="">Todos</option></select></label>
         <label>Etapa <select id="batchExportStage"><option value="">Todas</option></select></label>
-        <label>Última mensagem — início <input id="batchExportDateFrom" type="date" /></label>
-        <label>Última mensagem — fim <input id="batchExportDateTo" type="date" /></label>
+        <label>Última análise — início <input id="batchExportDateFrom" type="date" /></label>
+        <label>Última análise — fim <input id="batchExportDateTo" type="date" /></label>
         <label class="batchCheck"><input id="batchExportClosed" type="checkbox" /> Incluir fechados</label>
         <label class="batchCheck"><input id="batchExportLost" type="checkbox" /> Incluir perdidos</label>
       </div>
-      <div class="batchPersistentPanel" id="batchExportPanel" role="status"><strong id="batchExportCount">0 conversas selecionadas</strong><span id="batchExportStatus">Ajuste os filtros e confira os leads antes de exportar.</span></div>
+      <div class="batchPersistentPanel" id="batchExportPanel" role="status"><strong id="batchExportCount">0 contatos selecionados</strong><span id="batchExportStatus">Ajuste os filtros e confira os clientes antes de baixar a fila.</span></div>
       <fieldset class="batchCompletenessChoice" id="batchCompletenessChoice" hidden>
         <legend id="batchCompletenessWarning">Há conversas incompletas na seleção.</legend>
         <label><input type="radio" name="batchCompletenessAction" value="all" /> Exportar todos os leads</label>
@@ -1000,7 +1017,7 @@
       </fieldset>
       <div class="batchLeadPicker" id="batchExportLeadPicker"></div>
     </div>
-    <div class="modalFt"><button class="ghost" id="btnCancelBatchExport" type="button">Cancelar</button><button class="primary" id="btnGenerateBatchZip" type="button">1. Baixar pacote para o GPT</button></div>
+    <div class="modalFt"><button class="ghost" id="btnCancelBatchExport" type="button">Cancelar</button><button class="primary" id="btnGenerateBatchZip" type="button">Baixar fila para a extensão</button></div>
   </dialog>
 
   <dialog id="pendingAudioDetailsModal" class="batchAnalysisModal">
@@ -1012,15 +1029,15 @@
   <dialog id="batchImportModal" class="batchAnalysisModal">
     <div class="modalHd"><div><div class="modalTitle">Importar análises em lote</div><div class="modalSub">O CRM valida tudo antes de gravar e importa somente hashes exatos.</div></div><button class="ghost" id="btnCloseBatchImport" type="button">Fechar</button></div>
     <div class="modalBd">
-      <div class="whatsappActions"><button class="ghost" id="btnChooseBatchImport" type="button">Selecionar arquivo</button><input id="batchImportFile" type="file" accept="application/json,application/zip,.json,.zip" hidden /></div>
-      <div class="batchDropZone" id="batchImportDropZone">Arraste aqui o JSON que começa com 02-IMPORTAR-NO-CRM</div>
+      <div class="whatsappActions"><button class="ghost" id="btnChooseBatchImport" type="button">Selecionar ZIP de resultados</button><input id="batchImportFile" type="file" accept=".zip,application/zip,application/x-zip-compressed,.json,application/json" hidden /></div>
+      <div class="batchDropZone" id="batchImportDropZone">Arraste aqui o ZIP que começa com 02-IMPORTAR-NO-CRM</div>
       <label>Ou cole o JSON<textarea id="batchImportPaste" rows="7" placeholder='{"schema_version":"1.1", "batch_id":"...", ...}'></textarea></label>
       <button class="ghost" id="btnPreviewBatchPaste" type="button">Validar JSON colado</button>
       <div class="batchSelectedFile" id="batchSelectedFile" hidden></div>
       <div class="batchPersistentPanel" id="batchImportPanel" role="status"><strong id="batchImportTitle">Nenhum arquivo validado</strong><span id="batchImportStatus">Selecione, arraste ou cole o JSON retornado pelo GPT.</span></div>
       <div class="batchPreviewWrap"><table class="audioImportTable"><thead><tr><th>Lead</th><th>Vendedor</th><th>Etapa</th><th>Hash</th><th>Status da análise</th><th>Risco</th><th>Urgência</th><th>Aguardando</th><th>Resultado</th></tr></thead><tbody id="batchImportPreview"><tr><td colspan="9">Aguardando JSON.</td></tr></tbody></table></div>
     </div>
-    <div class="modalFt"><button class="ghost" id="btnDownloadBatchFailures" type="button" hidden>Baixar falhas</button><button class="ghost" id="btnLoadAnotherBatch" type="button" hidden>Carregar outro JSON</button><button class="primary" id="btnImportValidatedBatch" type="button" disabled>Importar análises válidas</button></div>
+    <div class="modalFt"><button class="ghost" id="btnDownloadBatchFailures" type="button" hidden>Baixar falhas</button><button class="ghost" id="btnLoadAnotherBatch" type="button" hidden>Carregar outro ZIP</button><button class="primary" id="btnImportValidatedBatch" type="button" disabled>Importar análises válidas</button></div>
   </dialog>
 
   <!-- Pending item modal -->
@@ -1118,6 +1135,11 @@
       <button class="ghost" id="btnCloseFullAnalysisTop" type="button">Fechar</button>
     </div>
     <div class="modalBd">
+      <div class="analysisReaderTools">
+        <input id="whatsappAnalysisSearch" type="search" placeholder="Buscar tópico ou palavra na análise…" autocomplete="off" />
+        <div class="analysisNavigation" id="whatsappAnalysisNavigation" aria-label="Tópicos da análise"></div>
+        <small id="whatsappAnalysisSearchStatus"></small>
+      </div>
       <div class="fullAnalysisText" id="whatsappFullAnalysisText"></div>
     </div>
     <div class="modalFt">
@@ -1137,7 +1159,7 @@
 <script src="whatsapp-crm-extension/capture-core.js?v=2.5.25"></script>
 <script src="audio-import-matcher.js?v=2.5.25"></script>
 <script src="conversation-completeness.js?v=2.5.1-final"></script>
-<script src="batch-analysis.js?v=2.5.1"></script>
+<script src="batch-analysis.js?v=2.5.3"></script>
 
 <script>
 /*
@@ -1464,11 +1486,26 @@ async function openAndCaptureLeadConversation(record,{openOnly=false,batch=false
   return openOnly?requestWhatsAppOpenCapture(record,{batch}):requestWhatsAppAutomaticSync(record,{batch});
 }
 function normalizeWhatsAppMessageId(value){return CriareWhatsAppCaptureCore.normalizeWhatsAppMessageId(value);}
+function isEncodedWhatsAppMediaPayload(value){
+  const raw=String(value||"").trim(),compact=raw.replace(/\s+/g,"");
+  return compact.length>256&&(/^data:[^,]+;base64,/i.test(raw)||/^[A-Za-z0-9+/_=-]+$/.test(compact));
+}
+function capturedMediaPlaceholder(entry){
+  const media=Array.isArray(entry?.media)?entry.media:[];
+  if(!media.length)return "[Mídia]";
+  return `[${media.map(item=>String(item?.kind||"arquivo")).join(", ")}]`;
+}
+function sanitizeCapturedWhatsAppText(entry,text){
+  const value=String(text||"").trim();
+  const marker=value.match(/^(\[[^\]]+\]\s*[^:]+:\s*)([\s\S]*)$/);
+  if(marker&&isEncodedWhatsAppMediaPayload(marker[2]))return `${marker[1]}${capturedMediaPlaceholder(entry)}`;
+  return isEncodedWhatsAppMediaPayload(value)?capturedMediaPlaceholder(entry):value;
+}
 function normalizeCapturedEntry(entry){
   if(entry&&typeof entry==="object"){
-    const text=String(entry.text||"").trim();if(!text)return null;const messageId=normalizeWhatsAppMessageId(entry.message_id||entry.id);return {...entry,id:String(entry.id||"").trim()||null,message_id:messageId||null,text};
+    const text=sanitizeCapturedWhatsAppText(entry,entry.text);if(!text)return null;const messageId=normalizeWhatsAppMessageId(entry.message_id||entry.id);return {...entry,id:String(entry.id||"").trim()||null,message_id:messageId||null,text};
   }
-  const text=String(entry||"").trim();return text?{id:null,text}:null;
+  const text=sanitizeCapturedWhatsAppText(null,entry);return text?{id:null,text}:null;
 }
 function legacyTranscriptEntries(record){
   return String(record?.whatsapp_transcript||"").split("\n").map(normalizeCapturedEntry).filter(Boolean);
@@ -1482,6 +1519,7 @@ function normalizeLegacyWhatsAppRecord(record){
   const count=Number(record.whatsapp_sync_message_count||record.whatsapp_analysis_message_count||entries.length||0);
   return {...record,
     whatsapp_message_entries:entries,
+    whatsapp_transcript:entries.length?entries.map(entry=>entry.text).join("\n"):(record.whatsapp_transcript||null),
     whatsapp_sync_message_count:count,
     whatsapp_analysis_hard_boss:hardBoss||null,
     whatsapp_analysis_full:full||null,
@@ -2191,9 +2229,57 @@ function applyWhatsAppSummary(result){
   $("whatsappSummaryMeta").textContent = `Chefe Duro gerado por ${result.model || "IA"}.`;
   renderWhatsAppAnalysis();
 }
+function normalizeAnalysisMarkdownSource(value){
+  let text=String(value||"").replace(/\r\n?/g,"\n").trim();
+  const knownTitles=["Resumo executivo","Painel do cliente","Perfil e comportamento","Linha do tempo","Promessas e prazos","Pendências","Riscos e alertas","Falhas e inconsistências","Oportunidades","Próxima melhor ação","Mensagem sugerida","Mensagens sugeridas","Dados faltantes","Classificação final","CHEFE DURO"];
+  knownTitles.forEach(title=>{
+    const escaped=title.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+    text=text.replace(new RegExp(`\\s*#{1,6}\\s*(?:\\d+\\.\\s*)?${escaped}\\s*`,"gi"),`\n\n## ${title}\n\n`);
+  });
+  const fieldLabels=["Cliente","Cidade","Ambientes","Tipo de imóvel","Estágio da obra","Etapa da jornada","Etapa secundária","Temperatura","Potencial","Urgência","Nível de confiança","Responsável interno","Último contato","Próximo passo","Responsável","Ação","Canal","Prazo","Objetivo","Resultado esperado","Status","Evidência","Atraso","Impacto","Próxima ação","Consequência provável","O que deveria ter ocorrido","O que ocorreu","Ação corretiva","Prioridade gerencial","Probabilidade de avanço","Risco de perda/desgaste","Confiança da análise","Fatos","Inferências","Dados ausentes","Ações complementares"];
+  const fieldPattern=fieldLabels.map(label=>label.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|");
+  text=text.replace(new RegExp(`\\s+(${fieldPattern}):\\s*`,"g"),"\n$1: ")
+    .replace(/\s+\[(Opção[^\]]+)\]\s*/gi,"\n\n[$1] ")
+    .replace(/\s+-\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ])/g,"\n- ")
+    .replace(/\s+(?=\d+[.)]\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ])/g,"\n");
+  return text.replace(/\n{3,}/g,"\n\n").trim();
+}
+function analysisInlineHtml(value){
+  return escapeHtml(String(value||""))
+    .replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>")
+    .replace(/`([^`]+)`/g,"<code>$1</code>");
+}
+function analysisBodyHtml(lines){
+  let html="",listType="";
+  const closeList=()=>{if(listType){html+=`</${listType}>`;listType="";}};
+  for(const rawLine of lines){
+    const line=rawLine.trim();
+    if(!line){closeList();continue;}
+    const bullet=line.match(/^[-*]\s+(.+)/),numbered=line.match(/^\d+[.)]\s+(.+)/);
+    if(bullet||numbered){const type=bullet?"ul":"ol";if(listType!==type){closeList();listType=type;html+=`<${type}>`;}html+=`<li>${analysisInlineHtml((bullet||numbered)[1])}</li>`;continue;}
+    closeList();
+    const option=line.match(/^\[(Opção[^\]]*)\]\s*(.*)$/i);
+    if(option){html+=`<div class="analysisMessageOption"><strong>${analysisInlineHtml(option[1])}</strong>${option[2]?`<p>${analysisInlineHtml(option[2])}</p>`:""}</div>`;continue;}
+    const fact=line.match(/^([^:]{1,52}):\s+(.+)$/);
+    if(fact){html+=`<div class="analysisFact"><strong>${analysisInlineHtml(fact[1])}</strong><span>${analysisInlineHtml(fact[2])}</span></div>`;continue;}
+    html+=`<p>${analysisInlineHtml(line)}</p>`;
+  }
+  closeList();return html;
+}
+function renderFullAnalysisDocument(value){
+  const source=normalizeAnalysisMarkdownSource(value),lines=source.split("\n"),sections=[];
+  let section={title:"Visão geral",level:2,lines:[]};
+  for(const line of lines){const heading=line.trim().match(/^(#{1,6})\s+(.+)$/);if(heading){if(section.lines.length||sections.length)sections.push(section);section={title:heading[2].replace(/^\d+\.\s*/,"").trim(),level:heading[1].length,lines:[]};}else section.lines.push(line);}
+  if(section.lines.length||section.title!=="Visão geral")sections.push(section);
+  const unique=new Set();
+  sections.forEach((item,index)=>{let id=`analysis-${String(item.title).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||index}`;while(unique.has(id))id+=`-${index}`;unique.add(id);item.id=id;});
+  $("whatsappFullAnalysisText").innerHTML=sections.map(item=>`<section class="analysisSection" id="${item.id}" data-analysis-section><h2>${analysisInlineHtml(item.title)}</h2>${analysisBodyHtml(item.lines)}</section>`).join("");
+  $("whatsappAnalysisNavigation").innerHTML=sections.map(item=>`<button class="ghost" type="button" data-analysis-target="${item.id}">${analysisInlineHtml(item.title)}</button>`).join("");
+  $("whatsappAnalysisSearch").value="";$("whatsappAnalysisSearchStatus").textContent=`${sections.length} tópico(s)`;
+}
 function openFullWhatsAppAnalysis(){
   if(!currentWhatsAppAnalysis.full) return toast("Ainda não há análise completa salva neste lead.");
-  $("whatsappFullAnalysisText").textContent = currentWhatsAppAnalysis.full;
+  renderFullAnalysisDocument(currentWhatsAppAnalysis.full);
   $("whatsappAnalysisModalMeta").textContent = currentWhatsAppAnalysis.updatedAt
     ? `${fmtBRDateTime(currentWhatsAppAnalysis.updatedAt)}${currentWhatsAppAnalysis.model ? ` • ${currentWhatsAppAnalysis.model}` : ""}`
     : "Análise do GPT Criare";
@@ -2506,7 +2592,7 @@ function sessionFromLocalFallback(){
 }
 
 function setAuthenticatedActionsEnabled(enabled){
-  ["btnNew","btnSync","btnSyncWhatsAppAll","btnWhatsAppBatchTest","btnWhatsAppBatch","btnExportJson","btnWipe"].forEach(id=>{
+  ["btnNew","btnSync","btnSyncWhatsAppAll","btnWhatsAppBatchTest","btnWhatsAppBatch","btnExportJson","btnExportWhatsAppIndex","btnCompareWhatsAppExports","btnWipe"].forEach(id=>{
     const element = $(id);
     if(element) element.disabled = !enabled;
   });
@@ -3796,16 +3882,16 @@ function renderReports(){
 
   return `
     <div style="display:flex; flex-direction:column; gap:10px; width:100%; min-width:0;">
-      <details class="batchAnalysisSection">
-        <summary>Análise em lote das conversas</summary>
+      <details class="batchAnalysisSection" open>
+        <summary>WhatsApp e IA — processo atual</summary>
         <div class="batchAnalysisSectionBody">
           <p>Siga os três passos abaixo. O pacote enviado ao GPT e o resultado importado no CRM possuem nomes diferentes e identificados.</p>
           <div class="batchWorkflowSteps">
-            <div class="batchWorkflowStep batchWorkflowExport"><b>1. BAIXAR ARQUIVO PARA ENVIAR AO GPT</b><span>O arquivo criado começa com <strong>01-ENVIAR-AO-GPT</strong>.</span><button class="ghost" id="btnOpenBatchExport" type="button">1. Baixar pacote para o GPT</button></div>
-            <div class="batchWorkflowStep batchWorkflowGpt"><b>2. ANALISAR NO GPT</b><span>Envie ao GPT somente o arquivo que começa com <strong>01-ENVIAR-AO-GPT</strong>.</span><button class="ghost" id="btnCopyBatchGptInstruction" type="button">Copiar instrução para o GPT</button></div>
-            <div class="batchWorkflowStep batchWorkflowImport"><b>3. IMPORTAR RESULTADO</b><span>Importe no CRM somente o arquivo que começa com <strong>02-IMPORTAR-NO-CRM</strong>.</span><button class="primary" id="btnOpenBatchImport" type="button">3. Importar resultado da análise</button></div>
+            <div class="batchWorkflowStep batchWorkflowExport"><b>1. CRM → EXTENSÃO</b><span>Baixe a fila de contatos e carregue-a na extensão do WhatsApp.</span><button class="ghost" id="btnOpenBatchExport" type="button">1. Baixar fila para a extensão</button></div>
+            <div class="batchWorkflowStep batchWorkflowGpt"><b>2. EXTENSÃO → GPT</b><span>A extensão cria um único ZIP com as conversas e mídias separadas por cliente.</span><button class="ghost" id="btnCopyBatchGptInstruction" type="button">Copiar instrução para o GPT</button></div>
+            <div class="batchWorkflowStep batchWorkflowImport"><b>3. GPT → CRM</b><span>Importe o ZIP retornado; somente Chefe Duro e Análise Completa serão gravados.</span><button class="primary" id="btnOpenBatchImport" type="button">3. Importar ZIP de resultados</button></div>
           </div>
-          <small>CRM 2.5.27 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
+          <small>CRM 2.5.28 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
         </div>
       </details>
       <div class="formNotice">${escapeHtml(reportPeriod)}</div>
@@ -4897,6 +4983,8 @@ $("btnSummarizeWhatsApp").addEventListener("click", async ()=>{
 
 $("btnViewFullAnalysis").addEventListener("click", openFullWhatsAppAnalysis);
 $("btnViewFullAnalysisPinned").addEventListener("click", openFullWhatsAppAnalysis);
+$("whatsappAnalysisNavigation").addEventListener("click",event=>{const button=event.target.closest("[data-analysis-target]");if(!button)return;$(button.dataset.analysisTarget)?.scrollIntoView({behavior:"smooth",block:"start"});});
+$("whatsappAnalysisSearch").addEventListener("input",event=>{const query=String(event.target.value||"").trim().toLocaleLowerCase("pt-BR"),sections=[...$("whatsappFullAnalysisText").querySelectorAll("[data-analysis-section]")];let visible=0;sections.forEach(section=>{const show=!query||section.textContent.toLocaleLowerCase("pt-BR").includes(query);section.hidden=!show;if(show)visible+=1;});$("whatsappAnalysisSearchStatus").textContent=query?`${visible} tópico(s) encontrado(s)`:`${sections.length} tópico(s)`;});
 function enableHorizontalDragScroll(container){
   if(!window.matchMedia("(hover:hover) and (pointer:fine)").matches) return;
   let drag=null;
@@ -5214,6 +5302,74 @@ $("btnExportJson").addEventListener("click", ()=>{
   toast("Backup exportado.");
 });
 
+function downloadLocalJson(payload, filename){
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+$("btnExportWhatsAppIndex").addEventListener("click", ()=>{
+  const integration = window.CriareWhatsAppLocalIntegration;
+  if(!integration) return toast("Integração local indisponível. Recarregue a página.");
+  const payload = integration.buildCrmIndex(records, {workspaceId: config?.workspace_id || ""});
+  downloadLocalJson(payload, `indice_whatsapp_crm_${new Date().toISOString().slice(0,10)}.json`);
+  toast(`${payload.records.length} registro(s) exportados no índice local.`);
+});
+
+$("btnCompareWhatsAppExports").addEventListener("click", ()=>{
+  window.open("whatsapp-local-comparison.html", "_blank", "noopener");
+});
+
+const LOCAL_WHATSAPP_IMPORT_RUN_KEY="criare_local_whatsapp_last_import_run";
+function chooseLocalWhatsAppImportFile(){
+  const input=document.createElement("input");input.type="file";input.accept="application/json,.json";
+  input.addEventListener("change",async()=>{const file=input.files?.[0];if(!file)return;try{await importLocalWhatsAppBatch(JSON.parse(await file.text()),file.name);}catch(error){toast(`Lote não importado: ${error.message||error}`,{error:true,duration:10000});}});input.click();
+}
+function validateLocalWhatsAppBatch(batch){
+  if(!batch||batch.schema_version!=="criare-whatsapp-review-batch-1.1")throw new Error("Use um lote confirmado criado pela tela de comparação atual.");
+  if(batch.state!=="confirmed_not_applied"||!batch.immutable_after_confirmation)throw new Error("O lote ainda não foi confirmado localmente.");
+  if(!/^[a-f0-9]{64}$/i.test(String(batch.source_hash||"")))throw new Error("Hash de origem inválido.");
+  if(!Array.isArray(batch.items)||!batch.items.length)throw new Error("O lote não possui conversas.");
+  if(!batch.workspace_id||batch.items.some(item=>item.workspace_id!==batch.workspace_id||!item.record_id||!item.conversation_id||!Array.isArray(item.messages)||!item.messages.length))throw new Error("Vínculo do lote incompleto ou fora do workspace.");
+  const ids=new Set();for(const item of batch.items)for(const message of item.messages){const id=String(message?.message_id||"").trim();if(!id||!message?.sent_at||!["incoming","outgoing"].includes(message?.direction))throw new Error("Há mensagem incompleta no lote.");const key=`${item.workspace_id}:${item.conversation_id}:${id}`;if(ids.has(key))throw new Error("O lote contém mensagem duplicada.");ids.add(key);}
+  return batch;
+}
+async function refreshRecordsAfterLocalWhatsAppImport(ids){
+  const {data,error}=await sb.from(TBL_RECORDS).select("*").in("id",ids);if(error)throw error;
+  for(const fresh of data||[]){const at=records.findIndex(record=>record.id===fresh.id);if(at>=0)records[at]=normalizeLegacyWhatsAppRecord(fresh);}
+  buildFilters();render();
+}
+async function importLocalWhatsAppBatch(raw,filename){
+  const batch=validateLocalWhatsAppBatch(raw);if(!sb||!session?.user)throw new Error("Abra o CRM local autenticado antes de importar.");
+  const count=batch.items.reduce((sum,item)=>sum+item.messages.length,0);
+  if(!confirm(`Importar ${count} mensagem(ns) de ${batch.items.length} conversa(s) para o CRM? O lote poderá ser desfeito enquanto nenhum outro lote alterar as mesmas conversas.`))return;
+  const button=$("btnImportLocalWhatsAppBatch");button.disabled=true;
+  try{
+    const {data,error}=await sb.rpc("apply_crm_whatsapp_local_import",{p_payload:{workspace_id:batch.workspace_id,source_hash:batch.source_hash,source_files:batch.source_files,exporter_version:batch.exporter_version,items:batch.items}});if(error)throw error;
+    if(data?.status==="already_applied"){toast("Este mesmo lote já foi aplicado; nenhuma mensagem foi duplicada.");return;}
+    if(data?.status!=="applied")throw new Error(`Resposta inesperada: ${data?.status||"sem status"}`);
+    await refreshRecordsAfterLocalWhatsAppImport(batch.items.map(item=>item.record_id));
+    localStorage.setItem(LOCAL_WHATSAPP_IMPORT_RUN_KEY,JSON.stringify({run_id:data.run_id,record_ids:batch.items.map(item=>item.record_id),created_at:nowISO()}));
+    toast(`Lote importado: ${data.message_insert_count} mensagem(ns) gravada(s) e confirmada(s).`);
+  }finally{button.disabled=false;}
+}
+async function revertLastLocalWhatsAppBatch(){
+  let saved;try{saved=JSON.parse(localStorage.getItem(LOCAL_WHATSAPP_IMPORT_RUN_KEY)||"null");}catch(error){saved=null;}
+  if(!saved?.run_id)return toast("Nenhum lote local recente foi registrado neste navegador.",{error:true});
+  if(!confirm("Desfazer o último lote WhatsApp? A reversão só será executada se nenhuma alteração posterior tiver mudado essas conversas."))return;
+  const button=$("btnRevertLocalWhatsAppBatch");button.disabled=true;
+  try{const {data,error}=await sb.rpc("revert_crm_whatsapp_local_import",{p_run_id:saved.run_id});if(error)throw error;if(!["reverted","already_reverted"].includes(data?.status))throw new Error(`Resposta inesperada: ${data?.status||"sem status"}`);await refreshRecordsAfterLocalWhatsAppImport(saved.record_ids||[]);localStorage.removeItem(LOCAL_WHATSAPP_IMPORT_RUN_KEY);toast(data.status==="reverted"?"Lote WhatsApp desfeito com segurança.":"Este lote já havia sido desfeito.");}finally{button.disabled=false;}
+}
+$("btnImportLocalWhatsAppBatch").addEventListener("click",()=>{
+  const modal=$("batchImportModal");
+  if(!modal||!window.CriareBatchAnalysis)return toast("Importador de análises indisponível. Recarregue a página.",{error:true});
+  modal.showModal();
+});
+$("btnRevertLocalWhatsAppBatch").addEventListener("click",()=>{revertLastLocalWhatsAppBatch().catch(error=>toast(`Não foi possível desfazer: ${error.message||error}`,{error:true,duration:10000}));});
+
 $("importJson").addEventListener("change", async (e)=>{
   const f = e.target.files?.[0];
   if(!f) return;
@@ -5411,7 +5567,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=2.5.27").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=2.5.28").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
@@ -5436,7 +5592,7 @@ if("serviceWorker" in navigator){
   }
 })();
 </script>
-<script src="batch-analysis-ui.js?v=2.5.1"></script>
+<script src="batch-analysis-ui.js?v=2.5.2"></script>
 <script src="partners.js"></script>
 </body>
 </html>

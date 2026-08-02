@@ -9,7 +9,8 @@ const record=(entries,extra={})=>({id:"lead",whatsapp_message_entries:entries,wh
 
 assert.equal(engine.calculate(record([], {whatsapp_transcript_updated_at:null})).conversation_status,"not_captured");
 assert.equal(engine.calculate({whatsapp_transcript:"[10:00, 01/07/2026] Cliente: [Áudio sem transcrição]",whatsapp_sync_message_count:1,whatsapp_capture_complete:true}).pending_audio_count,1);
-assert.equal(engine.calculate(record([text()])).conversation_completeness_status,"complete");
+assert.equal(engine.calculate(record([text()])).conversation_completeness_status,"capture_may_be_incomplete","uma captura com uma única bolha exige a confirmação de hidratação completa");
+assert.equal(engine.calculate(record([text(),text("T2")])).conversation_completeness_status,"complete","duas bolhas canônicas estáveis podem ser consideradas completas");
 assert.equal(engine.calculate(record([audio("A",{}, {transcript:"texto"})])).transcribed_audio_count,1);
 assert.equal(engine.calculate(record([audio("A")])).pending_audio_count,1);
 assert.equal(engine.calculate(record([audio("A"),audio("B")])).pending_audio_count,2);
@@ -26,8 +27,8 @@ assert.equal(engine.audioStatus(audio("A",{}, {audioMeta:{fileObtained:true}})),
 assert.equal(engine.calculate(record([text()],{whatsapp_sync_error:"rede"})).conversation_status,"sync_error");
 assert.equal(engine.calculate(record([text()]),{identity_status:"phone_duplicate"}).conversation_status,"verification_required");
 assert.equal(engine.sortRows([{summary:engine.calculate(record([text()]))},{summary:engine.calculate(record([audio("A")],{whatsapp_analysis_status:"never"}))}])[0].summary.pending_audio_count,1);
-assert.equal(engine.calculate(record([audio("A",{media_status:"media_unavailable"})])).conversation_completeness_status,"unavailable_audio");
-assert.equal(engine.calculate(record([audio("A",{transcription_status:"failed"})])).conversation_completeness_status,"pending_audio");
+assert.equal(engine.calculate(record([audio("A",{media_status:"media_unavailable"}),text("T-unavailable")])).conversation_completeness_status,"unavailable_audio");
+assert.equal(engine.calculate(record([audio("A",{transcription_status:"failed"}),text("T-failed")])).conversation_completeness_status,"pending_audio");
 const readyAudio=(id,duration)=>audio(id,{}, {sender:"Cliente",direction:"incoming",date:"01/07/2026",message_time:"10:00",duration_seconds:duration,duration_valid:true,duration_source:"whatsapp_player"});
 const fivePending=engine.calculate(record([readyAudio("A",10),readyAudio("B",11),readyAudio("C",12),readyAudio("D",13),audio("E",{}, {sender:"Cliente",direction:"incoming",date:"01/07/2026",message_time:"10:01",duration_valid:false})]));
 assert.equal(fivePending.pending_audio_count,5);assert.equal(fivePending.ready_for_import_count,4);assert.equal(fivePending.metadata_pending_audio_count,1);assert.match(fivePending.completeness_reasons.join(" "),/aguardando atualização de metadados/);
@@ -40,7 +41,7 @@ const approvedImporterParity=engine.calculate(record([
 ].map(entry=>entry.message_id==="DONE"?{...entry,transcript:"já transcrito"}:entry)));
 assert.equal(approvedImporterParity.pending_audio_count,5);
 assert.equal(approvedImporterParity.ready_for_import_count,4,"a central deve usar a elegibilidade canônica do importador, excluindo transcritos");
-assert.equal(engine.calculate(record([text()]),{identity_status:"conversation_linked"}).conversation_completeness_status,"complete");
+assert.equal(engine.calculate(record([text()]),{identity_status:"conversation_linked"}).conversation_completeness_status,"capture_may_be_incomplete","confirmar o telefone não transforma uma captura de uma bolha em histórico completo");
 assert.equal(engine.matchesSearch({first_name:"Crislaine",last_name:"Silvia"},["+5519999999999","(19) 99999-9999"],"crislaine"),true);
 assert.equal(engine.matchesSearch({first_name:"Crislaine"},["+5519999999999"],"+5519"),true);
 assert.equal(engine.matchesSearch({first_name:"Crislaine"},["+5519999999999"],"Luiza"),false);

@@ -152,6 +152,17 @@ test("ZIP de entrada selecionado no importador é classificado e rejeitado clara
   const classification=batch.classifyImportPayload(null,{filename:"01-ENVIAR-AO-GPT_criare-lote_20260718-0745-A7F3.zip",type:"application/zip"});assert.equal(classification.code,"input_package");assert.equal(classification.batch_id,"20260718-0745-A7F3");
 });
 
+test("botão superior abre o importador novo e o seletor aceita ZIP",async()=>{
+  const crm=await readFile(new URL("../index.html",import.meta.url),"utf8");
+  assert.match(crm,/id="btnOpenBatchExportHeader"[^>]*>Preparar fila WhatsApp</);
+  assert.match(crm,/id="btnImportLocalWhatsAppBatch"[^>]*>Importar análises \(ZIP\)</);
+  assert.match(crm,/id="batchImportFile"[^>]*accept="[^"]*\.zip/);
+  assert.match(crm,/\$\("btnImportLocalWhatsAppBatch"\)\.addEventListener\("click",\(\)=>\{/);
+  assert.doesNotMatch(crm,/\$\("btnImportLocalWhatsAppBatch"\)\.addEventListener\("click",chooseLocalWhatsAppImportFile\)/);
+  assert.doesNotMatch(crm,/data-tab="completeness"/);
+  assert.match(crm,/id="whatsappSection" hidden aria-hidden="true"/);
+});
+
 test("resultado 1.1 válido é reconhecido pelo conteúdo",async()=>{
   const input=await batch.buildBatch([textLead]),item=validAnalysis(textLead.id,input.conversations[0].conversation_hash,batch.lastMessageId(textLead));item.batch_id=input.batch_id;const payload={schema_version:"1.1",batch_id:input.batch_id,generated_at:"2026-07-18T12:00:00Z",analysis_model:"Custom GPT",prompt_version:"criare-batch-v1",analyses:[item]};const classification=batch.classifyImportPayload(payload,{filename:input.expected_output_filename,type:"application/json"});assert.equal(classification.code,"analysis_result");assert.equal((await batch.validateImport(payload,[textLead])).results[0].status,"ready_to_import");
 });
@@ -166,6 +177,54 @@ test("lotes misturados no schema 1.1 são rejeitados",async()=>{
 
 test("schema 1.0 permanece compatível",async()=>{
   const payload=await envelopeFor(textLead),classification=batch.classifyImportPayload(payload,{filename:"resultado-legado.json",type:"application/json"});assert.equal(classification.code,"analysis_result");assert.equal((await batch.validateImport(payload,[textLead])).results[0].status,"ready_to_import");
+});
+
+test("gera fila leve para a extensão sem conversas ou mídias",()=>{
+  const request=batch.buildDownloadRequest([textLead],record=>({full_name:"Cliente Anônimo",workspace_id:record.workspace_id}));
+  assert.equal(request.schema_version,"criare-whatsapp-download-request-1.0");
+  assert.equal(request.contact_count,1);
+  assert.equal(request.contacts[0].lead_id,textLead.id);
+  assert.equal("messages" in request.contacts[0],false);
+  assert.equal("media" in request.contacts[0],false);
+  assert.match(request.expected_input_filename,/^01-ENVIAR-AO-GPT_conversas_/);
+  assert.match(request.expected_output_filename,/^02-IMPORTAR-NO-CRM_resultados_.*\.zip$/);
+});
+
+test("aceita resultado leve 1.2 com somente Chefe Duro e Análise Completa",async()=>{
+  const hash="a".repeat(64),last="MSG-LIGHT-001",item={batch_id:"20260802-1900-ABCD",lead_id:textLead.id,conversation_hash:hash,analyzed_until_message_id:last,chefe_duro:"Resposta curta.",full_analysis:"Análise completa e factual."};
+  const payload={schema_version:"1.2",batch_id:item.batch_id,generated_at:"2026-08-02T22:00:00Z",analysis_model:"ChatGPT",prompt_version:"criare-whatsapp-local-v1",analyses:[item]};
+  const validation=await batch.validateImport(payload,[textLead]);
+  assert.equal(validation.results[0].status,"ready_to_import");
+  const patch=batch.persistencePatch(textLead,item,payload);
+  assert.equal(patch.whatsapp_analysis_hard_boss,item.chefe_duro);
+  assert.equal(patch.whatsapp_analysis_full,item.full_analysis);
+  assert.equal(patch.whatsapp_analysis_last_message_id,last);
+  assert.equal(patch.whatsapp_analysis_structured.full_analysis,undefined);
+  assert.deepEqual(patch.whatsapp_analysis_history,textLead.whatsapp_analysis_history?.length?textLead.whatsapp_analysis_history:[]);
+});
+
+test("preserva títulos, listas e parágrafos da análise completa",()=>{
+  const markdown="# Resumo\n\n## Próxima melhor ação\n\n- Confirmar medição\n- Marcar apresentação\n\n## Mensagem sugerida\n\n**Opção enxuta:** Podemos conversar hoje?";
+  const sanitized=batch.sanitizeAnalysis({lead_id:"lead-text",conversation_hash:"a".repeat(64),analyzed_until_message_id:"TXT2",chefe_duro:"Aja hoje.",full_analysis:markdown});
+  assert.equal(sanitized.full_analysis,markdown);
+  assert.match(sanitized.full_analysis,/\n\n## Próxima melhor ação\n\n- Confirmar/);
+});
+
+test("leitor da análise oferece tópicos e busca sem exibir Markdown cru",async()=>{
+  const crm=await readFile(new URL("../index.html",import.meta.url),"utf8");
+  assert.match(crm,/id="whatsappAnalysisSearch"/);
+  assert.match(crm,/id="whatsappAnalysisNavigation"/);
+  assert.match(crm,/function renderFullAnalysisDocument\(value\)/);
+  assert.doesNotMatch(crm,/\$\("whatsappFullAnalysisText"\)\.textContent\s*=\s*currentWhatsAppAnalysis\.full/);
+});
+
+test("abre ZIP de resultado com uma pasta por cliente",async()=>{
+  const batchId="20260802-1901-BCDE",analysis={batch_id:batchId,lead_id:textLead.id,conversation_hash:"b".repeat(64),analyzed_until_message_id:"MSG-ZIP",chefe_duro:"Direto.",full_analysis:"Completa."};
+  const manifest={schema_version:"1.2",batch_id:batchId,generated_at:"2026-08-02T22:01:00Z",analysis_model:"ChatGPT",prompt_version:"criare-whatsapp-local-v1"};
+  const zip=batch.zipFiles({"result_manifest.json":JSON.stringify(manifest),[`clientes/${textLead.id}/resultado.json`]:JSON.stringify(analysis)});
+  const payload=await batch.readResultZip(zip.buffer.slice(zip.byteOffset,zip.byteOffset+zip.byteLength));
+  assert.equal(payload.analyses.length,1);
+  assert.equal(payload.analyses[0].lead_id,textLead.id);
 });
 
 async function threeAnalysisEnvelope(records=[textLead,audioLead,staleLead]){const analyses=[];for(const record of records)analyses.push(validAnalysis(record.id,await batch.conversationHash(record),batch.lastMessageId(record)));return {schema_version:"1.0",generated_at:"2026-07-18T02:02:29.657Z",analysis_model:"GPT de teste",prompt_version:"criare-batch-v1",analyses};}
