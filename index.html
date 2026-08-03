@@ -456,6 +456,7 @@
     .headerMaintenance>summary::-webkit-details-marker{display:none}
     .headerMaintenanceMenu{position:absolute;right:0;top:calc(100% + 8px);z-index:40;display:grid;gap:7px;min-width:210px;padding:10px;border:1px solid rgba(255,255,255,.22);border-radius:12px;background:#151515;box-shadow:0 16px 34px rgba(0,0,0,.35)}
     .headerMaintenanceMenu button,.headerMaintenanceMenu .btn{width:100%;box-sizing:border-box;text-align:left;justify-content:flex-start}
+    [data-admin-only][hidden]{display:none!important}
     @media(max-width:700px){.headerMaintenanceMenu{position:fixed;left:14px;right:14px;top:auto;min-width:0}}
   </style>
   <link rel="stylesheet" href="criare.css" />
@@ -479,17 +480,18 @@
   <div class="actions">
     <button class="primary" id="btnNew">+ Novo lead</button>
     <button class="ghost" id="btnSync">Sincronizar</button>
-    <button class="ghost" id="btnOpenBatchExportHeader" type="button">Preparar fila WhatsApp</button>
-    <button class="primary" id="btnImportLocalWhatsAppBatch" type="button">Importar análises (ZIP)</button>
+    <button class="ghost" id="btnOpenBatchExportHeader" type="button" data-admin-only hidden>Preparar fila WhatsApp</button>
+    <button class="ghost" id="btnImportExtensionReceipt" type="button" data-admin-only hidden>Atualizar retorno da extensão</button>
+    <button class="primary" id="btnImportLocalWhatsAppBatch" type="button" data-admin-only hidden>Importar análises (ZIP)</button>
     <button class="ghost mobileUtility" id="btnInstall" hidden>Instalar aplicativo</button>
     <details class="headerMaintenance desktopUtility">
       <summary class="btn ghost">Opções</summary>
       <div class="headerMaintenanceMenu">
         <button class="ghost" id="btnSound">Som: OFF</button>
-        <button class="ghost" id="btnExportJson">Exportar backup</button>
-        <label class="btn ghost" for="importJson">Importar backup</label>
+        <button class="ghost" id="btnExportJson" data-admin-only hidden>Exportar backup</button>
+        <label class="btn ghost" for="importJson" data-admin-only hidden>Importar backup</label>
         <input id="importJson" type="file" accept="application/json" style="display:none" />
-        <button class="danger" id="btnWipe">Limpar dados locais</button>
+        <button class="danger" id="btnWipe" data-admin-only hidden>Limpar dados locais</button>
       </div>
     </details>
     <button class="ghost" id="btnSignOut">Sair</button>
@@ -510,8 +512,8 @@
     <div class="tab" data-tab="closed" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">✓</span><span>Fechados</span></div>
     <div class="tab" data-tab="specifiers" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">◇</span><span>Parceiros</span></div>
     <div class="tab" data-tab="pending" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">!</span><span>Pendências</span></div>
-    <div class="tab" data-tab="reports" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">↗</span><span>Relatórios</span></div>
-    <div class="tab" data-tab="config" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">⚙</span><span>Config</span></div>
+    <div class="tab" data-tab="reports" role="tab" tabindex="0" aria-selected="false" data-admin-only hidden><span class="tabIcon" aria-hidden="true">↗</span><span>Relatórios</span></div>
+    <div class="tab" data-tab="config" role="tab" tabindex="0" aria-selected="false" data-admin-only hidden><span class="tabIcon" aria-hidden="true">⚙</span><span>Config</span></div>
   </div>
 
   <div class="appStateBanner loading" id="appStateBanner" role="status" aria-live="polite">
@@ -1020,6 +1022,16 @@
     <div class="modalFt"><button class="ghost" id="btnCancelBatchExport" type="button">Cancelar</button><button class="primary" id="btnGenerateBatchZip" type="button">Baixar fila para a extensão</button></div>
   </dialog>
 
+  <dialog id="extensionReceiptModal" class="batchAnalysisModal">
+    <div class="modalHd"><div><div class="modalTitle">Atualizar retorno da extensão</div><div class="modalSub">Registra somente cursores, verificações e conversas novas; nenhuma conversa ou mídia é salva.</div></div><button class="ghost" id="btnCloseExtensionReceipt" type="button">Fechar</button></div>
+    <div class="modalBd">
+      <div class="whatsappActions"><button class="ghost" id="btnChooseExtensionReceipt" type="button">Selecionar 00-RETORNO-DA-EXTENSAO</button><input id="extensionReceiptFile" type="file" accept=".json,application/json" hidden /></div>
+      <div class="batchPersistentPanel" id="extensionReceiptPanel" role="status"><strong id="extensionReceiptTitle">Nenhum retorno selecionado</strong><span id="extensionReceiptStatus">Use o arquivo pequeno criado junto com o ZIP enviado ao GPT.</span></div>
+      <div id="extensionReceiptDiscoveries"></div>
+    </div>
+    <div class="modalFt"><button class="primary" id="btnApplyExtensionReceipt" type="button" disabled>Confirmar atualização dos controles</button></div>
+  </dialog>
+
   <dialog id="pendingAudioDetailsModal" class="batchAnalysisModal">
     <div class="modalHd"><div><div class="modalTitle">Áudios pendentes</div><div class="modalSub" id="pendingAudioLeadName"></div></div><button class="ghost" id="btnClosePendingAudioDetails" type="button">Fechar</button></div>
     <div class="modalBody"><p>Baixe no WhatsApp os áudios deste cliente e selecione todos os arquivos de uma vez.</p><div id="pendingAudioDetailsList"></div></div>
@@ -1159,7 +1171,7 @@
 <script src="whatsapp-crm-extension/capture-core.js?v=2.5.25"></script>
 <script src="audio-import-matcher.js?v=2.5.25"></script>
 <script src="conversation-completeness.js?v=2.5.1-final"></script>
-<script src="batch-analysis.js?v=2.5.3"></script>
+<script src="batch-analysis.js?v=2.6.0"></script>
 
 <script>
 /*
@@ -1198,6 +1210,8 @@ const TBL_WHATSAPP_MESSAGES = "crm_whatsapp_messages";
 const TBL_WHATSAPP_CONVERSATIONS = "crm_whatsapp_conversations";
 const TBL_WHATSAPP_ANALYSES = "crm_whatsapp_analysis_history";
 const TBL_PARTNER_CONTENTS = "crm_partner_contents";
+const TBL_WORKSPACE_MEMBERS = "crm_workspace_members";
+const DEFAULT_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001";
 const PENDING_PHOTO_BUCKET = "crm-pending-photos";
 const WHATSAPP_AVATAR_BUCKET = "crm-whatsapp-avatars";
 
@@ -2474,6 +2488,11 @@ let appointmentDrafts = [];
 
 let config = { sources: DEFAULT_SOURCES.slice(), lost_reasons: DEFAULT_LOST_REASONS.slice() };
 let profiles = [];   // [{id, display_name}]
+let currentWorkspaceRole = "member";
+let transferPreviewIds = new Set();
+let transferPreviewTarget = "";
+let transferPreviewSource = "";
+let transferAttentionOnly = true;
 let records = [];    // crm_records rows
 let recordEvents = []; // histórico de movimentações e contatos
 let partnerContents = []; // banco de conteúdos para parceiros
@@ -2606,6 +2625,21 @@ function sessionProfileFallback(){
     || session?.user?.email?.split("@")[0]
     || "Usuário";
   return [{ id: session?.user?.id || "current-user", display_name: name }];
+}
+
+function isAdminUser(){ return currentWorkspaceRole === "admin"; }
+function applyAccessVisibility(){
+  const admin=isAdminUser();
+  document.querySelectorAll("[data-admin-only]").forEach(element=>{element.hidden=!admin;});
+  if(!admin&&["reports","config","completeness"].includes(currentTab)) currentTab="leads";
+}
+
+async function fetchWorkspaceRole(){
+  const {data,error}=await sb.from(TBL_WORKSPACE_MEMBERS).select("role").eq("workspace_id",DEFAULT_WORKSPACE_ID).eq("user_id",session.user.id).maybeSingle();
+  if(error)throw error;
+  currentWorkspaceRole=data?.role||"member";
+  applyAccessVisibility();
+  return true;
 }
 
 function describeBootError(error, stage){
@@ -2915,6 +2949,8 @@ async function doLogin(){
 async function doSignOut(){
   if(!sb) return;
   await syncController.stop();
+  currentWorkspaceRole="member";
+  applyAccessVisibility();
   await sb.auth.signOut();
   toast("Saiu.");
 }
@@ -3178,6 +3214,7 @@ async function bootAfterLogin(){
     void (async()=>{
       try{
         if(!await withTimeout(ensureProfile(), BOOT_QUERY_TIMEOUT_MS, "perfil atual")) throw new Error("Não foi possível consultar o perfil atual.");
+        if(!await withTimeout(fetchWorkspaceRole(), BOOT_QUERY_TIMEOUT_MS, "permissão do usuário")) throw new Error("Não foi possível consultar a permissão do usuário.");
         if(!await withTimeout(fetchProfiles(), BOOT_QUERY_TIMEOUT_MS, "crm_profiles")) throw new Error("Não foi possível carregar crm_profiles.");
         if(!profiles.length) profiles = sessionProfileFallback();
         buildFilters();
@@ -3891,7 +3928,7 @@ function renderReports(){
             <div class="batchWorkflowStep batchWorkflowGpt"><b>2. EXTENSÃO → GPT</b><span>A extensão cria um único ZIP com as conversas e mídias separadas por cliente.</span><button class="ghost" id="btnCopyBatchGptInstruction" type="button">Copiar instrução para o GPT</button></div>
             <div class="batchWorkflowStep batchWorkflowImport"><b>3. GPT → CRM</b><span>Importe o ZIP retornado; somente Chefe Duro e Análise Completa serão gravados.</span><button class="primary" id="btnOpenBatchImport" type="button">3. Importar ZIP de resultados</button></div>
           </div>
-          <small>CRM 2.5.28 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
+          <small>CRM 2.6.0 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
         </div>
       </details>
       <div class="formNotice">${escapeHtml(reportPeriod)}</div>
@@ -3912,6 +3949,15 @@ function renderReports(){
         <section class="sectionCard"><div class="sectionHd"><span>Movimentação recente</span><span>Últimos 7 dias</span></div><div class="sectionBody">${movementRows}</div></section>
       </div>
     </div>`;
+}
+
+function reassignmentNeedsAttention(record){
+  const future=normalizeAppointments(record).some(item=>item.status==="scheduled"&&new Date(item.starts_at).getTime()>=Date.now());
+  return !future&&(stageAge(record).age>=7||["never","stale","failed"].includes(record.whatsapp_analysis_status||"never"));
+}
+function renderTransferPreview(){
+  if(!transferPreviewIds.size)return '<div class="empty">Escolha o responsável atual e gere uma prévia. Nenhum cliente será transferido sem confirmação.</div>';
+  return [...transferPreviewIds].map(id=>{const record=records.find(item=>item.id===id);if(!record)return "";return `<label class="batchLeadRow"><input type="checkbox" data-transfer-record="${escapeHtml(id)}" checked/><b>${escapeHtml(fullName(record))}<small>${escapeHtml(record.stage||"—")}</small></b><span>${escapeHtml(profileNameById(record.owner_id))}</span><span>${reassignmentNeedsAttention(record)?"Sem acompanhamento seguro":"Com acompanhamento"}</span></label>`;}).join("");
 }
 
 function renderConfig(){
@@ -3963,8 +4009,20 @@ function renderConfig(){
   const duplicated=phoneRows.filter(item=>item.state.code==="phone_duplicate").length;
   const ready=phoneRows.filter(item=>item.state.ready).length;
   const affected=phoneRows.filter(item=>!item.state.ready).map(({record,state})=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:9px;border-bottom:1px dashed var(--line);align-items:center"><span><b>${escapeHtml([record.first_name,record.last_name].filter(Boolean).join(" "))}</b><br><small>${escapeHtml(state.label)} • ${escapeHtml(state.normalized.normalized_e164||String(record.phone||"não informado"))}</small></span><button class="ghost" data-open-phone-lead="${escapeHtml(record.id)}">Abrir</button></div>`).join("");
+  const sellerOptions=selected=>profiles.map(profile=>`<option value="${escapeHtml(profile.id)}" ${profile.id===selected?"selected":""}>${escapeHtml(profile.display_name)}</option>`).join("");
 
   return `
+    <section class="outlookStatusCard" style="width:100%">
+      <div class="sectionHd" style="padding:0 0 10px;border-bottom:1px solid var(--line)"><span>Redistribuir clientes entre vendedores</span><span>Com prévia e confirmação</span></div>
+      <div class="batchFilterGrid" style="margin-top:12px">
+        <label>Responsável atual <select id="transferFromOwner"><option value="">Selecione</option>${sellerOptions(transferPreviewSource)}</select></label>
+        <label>Novo responsável <select id="transferToOwner"><option value="">Selecione</option>${sellerOptions(transferPreviewTarget)}</select></label>
+        <label class="batchCheck"><input id="transferAttentionOnly" type="checkbox" ${transferAttentionOnly?"checked":""}/> Somente leads sem acompanhamento seguro</label>
+      </div>
+      <div class="whatsappActions"><button class="ghost" data-act="previewTransfer">Gerar prévia</button><button class="primary" data-act="confirmTransfer" ${transferPreviewIds.size&&transferPreviewTarget?"":"disabled"}>Transferir selecionados</button></div>
+      <div>${renderTransferPreview()}</div>
+      <small>A transferência altera somente o vendedor responsável. Etapa, análise, histórico e pendências permanecem intactos.</small>
+    </section>
     <section class="outlookStatusCard" style="width:100%">
       <div class="sectionHd" style="padding:0 0 10px;border-bottom:1px solid var(--line)"><span>Qualidade dos telefones</span><span>${audited.length} leads</span></div>
       <div class="note" style="margin:10px 0">Válidos: ${valid} • ausentes: ${missing} • inválidos: ${invalid} • duplicados: ${duplicated} • prontos para WhatsApp: ${ready}</div>
@@ -4054,6 +4112,7 @@ function updateLostBtn(){
 
 
 function render(){
+  applyAccessVisibility();
   updateAppStateBanner();
   $("board").setAttribute("aria-busy", appDataState === "loading" ? "true" : "false");
   if(appDataState !== "ready"){
@@ -4709,12 +4768,14 @@ async function registerContactNow(r){
 
 /* ===== Config updates ===== */
 async function saveConfig(){
+  if(!isAdminUser())return toast("Apenas o administrador pode alterar as configurações.",{error:true});
   const { error } = await sb.from(TBL_CONFIG).upsert({ id:1, sources: config.sources, lost_reasons: config.lost_reasons });
   if(error) toast("Erro ao salvar config.");
 }
 
 /* ===== Tabs + filters ===== */
 function setTab(tab){
+  if(["reports","config","completeness"].includes(tab)&&!isAdminUser())tab="leads";
   const tabChanged = currentTab !== tab;
   currentTab = tab;
   $("btnNew").textContent = tab === "specifiers" ? "+ Novo especificador" : (tab === "pending" ? "+ Nova pendência" : "+ Novo lead");
@@ -5215,11 +5276,29 @@ window.addEventListener("resize", ()=>{
 /* Config tab button delegation */
 $("board").addEventListener("click", async (e)=>{
   if(currentTab!=="config") return;
+  if(!isAdminUser())return;
   const btn = e.target.closest?.("button[data-act]");
   if(!btn) return;
   if(!sb || !session?.user) return toast("Sem login.");
 
   const act = btn.dataset.act;
+
+  if(act==="previewTransfer"){
+    transferPreviewSource=$("transferFromOwner")?.value||"";transferPreviewTarget=$("transferToOwner")?.value||"";transferAttentionOnly=$("transferAttentionOnly")?.checked!==false;
+    if(!transferPreviewSource||!transferPreviewTarget)return toast("Selecione o responsável atual e o novo responsável.",{error:true});
+    if(transferPreviewSource===transferPreviewTarget)return toast("Escolha vendedores diferentes.",{error:true});
+    transferPreviewIds=new Set(records.filter(record=>!isSpecifier(record)&&record.pipeline==="lead"&&record.stage!=="Perdido"&&record.owner_id===transferPreviewSource&&(!transferAttentionOnly||reassignmentNeedsAttention(record))).map(record=>record.id));
+    render();toast(`${transferPreviewIds.size} cliente(s) incluído(s) na prévia.`);return;
+  }
+  if(act==="confirmTransfer"){
+    if(!transferPreviewTarget||!transferPreviewIds.size)return;
+    const targetName=profileNameById(transferPreviewTarget);if(!confirm(`Transferir ${transferPreviewIds.size} cliente(s) selecionado(s) para ${targetName}?`))return;
+    btn.disabled=true;const selectedIds=[...transferPreviewIds];
+    const {data,error}=await sb.from(TBL_RECORDS).update({owner_id:transferPreviewTarget}).in("id",selectedIds).select("*");
+    if(error){btn.disabled=false;return toast(`Transferência não realizada: ${error.message||"erro desconhecido"}`,{error:true});}
+    for(const updated of data||[]){const at=records.findIndex(record=>record.id===updated.id);if(at>=0)records[at]=updated;}
+    const changed=(data||[]).length;transferPreviewIds=new Set();transferPreviewSource="";transferPreviewTarget="";render();toast(`${changed} cliente(s) transferido(s) para ${targetName}.`);return;
+  }
 
   if(act==="connectOutlook"){
     try{
@@ -5289,6 +5368,8 @@ $("board").addEventListener("click", async (e)=>{
     return;
   }
 });
+
+$("board").addEventListener("change",event=>{const input=event.target.closest?.("[data-transfer-record]");if(!input)return;input.checked?transferPreviewIds.add(input.dataset.transferRecord):transferPreviewIds.delete(input.dataset.transferRecord);});
 
 /* Backup local (para emergência) */
 $("btnExportJson").addEventListener("click", ()=>{
@@ -5364,6 +5445,7 @@ async function revertLastLocalWhatsAppBatch(){
   try{const {data,error}=await sb.rpc("revert_crm_whatsapp_local_import",{p_run_id:saved.run_id});if(error)throw error;if(!["reverted","already_reverted"].includes(data?.status))throw new Error(`Resposta inesperada: ${data?.status||"sem status"}`);await refreshRecordsAfterLocalWhatsAppImport(saved.record_ids||[]);localStorage.removeItem(LOCAL_WHATSAPP_IMPORT_RUN_KEY);toast(data.status==="reverted"?"Lote WhatsApp desfeito com segurança.":"Este lote já havia sido desfeito.");}finally{button.disabled=false;}
 }
 $("btnImportLocalWhatsAppBatch").addEventListener("click",()=>{
+  if(!isAdminUser())return toast("Apenas o administrador pode importar análises.",{error:true});
   const modal=$("batchImportModal");
   if(!modal||!window.CriareBatchAnalysis)return toast("Importador de análises indisponível. Recarregue a página.",{error:true});
   modal.showModal();
@@ -5567,7 +5649,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=2.5.28").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=2.6.0").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
@@ -5592,7 +5674,8 @@ if("serviceWorker" in navigator){
   }
 })();
 </script>
-<script src="batch-analysis-ui.js?v=2.5.2"></script>
+<script src="whatsapp-sync-receipt.js?v=1.0.0"></script>
+<script src="batch-analysis-ui.js?v=2.6.0"></script>
 <script src="partners.js"></script>
 </body>
 </html>

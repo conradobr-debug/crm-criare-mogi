@@ -5,7 +5,8 @@
 
   const CRM_BATCH_VERSION="2.5.1";
   const engine=window.CriareBatchAnalysis;
-  const state={candidates:[],selected:new Set(),cancelled:false,lastBatch:null,importPayload:null,importFile:null,validation:null,importResults:[],importMachine:engine.createImportStateMachine(),importPhase:"idle",actualWrites:0};
+  const syncEngine=window.CriareWhatsAppSyncReceipt;
+  const state={candidates:[],selected:new Set(),cancelled:false,lastBatch:null,importPayload:null,importFile:null,validation:null,importResults:[],importMachine:engine.createImportStateMachine(),importPhase:"idle",actualWrites:0,receiptPlan:null,receiptApplied:false};
   const statusLabels={ready_to_import:"Pronta",invalid_schema:"Schema incompatível",duplicate:"Duplicada — não importada",duplicate_conflict:"Conflito de duplicidade",lead_not_found:"Lead não encontrado",invalid_analysis:"Análise inválida",stale_conversation:"Conversa alterada",already_imported:"Já importada",imported:"Importada",save_error:"Erro ao salvar"};
 
   function setPanel(id,titleId,statusId,title,message,kind=""){
@@ -63,7 +64,7 @@
   async function buildSelectedBatch(selection=null){
     const selected=selection||state.candidates.filter(record=>state.selected.has(String(record.id)));
     if(!selected.length)throw new Error("Selecione ao menos uma conversa.");
-    return engine.buildDownloadRequest(selected,contextFor);
+    return engine.buildDownloadRequest(selected,contextFor,records.filter(record=>!isSpecifier(record)));
   }
   async function exportBatch(){
     const button=$("btnGenerateBatchZip"),original=button.textContent;
@@ -132,15 +133,41 @@
   async function copyGptInstruction(){const input=state.lastBatch?.expected_input_filename||"o arquivo que começa com 01-ENVIAR-AO-GPT",output=state.lastBatch?.expected_output_filename||"um ZIP que começa com 02-IMPORTAR-NO-CRM";const message=`Analise o pacote ${input} seguindo integralmente as instruções internas. Leia também as mídias disponíveis nas pastas de cada cliente. Devolva somente o ZIP ${output}, com um resultado.json dentro da pasta de cada cliente e o result_manifest.json na raiz. Cada resultado deve conter apenas Chefe Duro, Análise Completa e os identificadores exigidos.`;try{await navigator.clipboard.writeText(message);toast("Instrução para o GPT copiada.");}catch(error){toast("Não foi possível copiar a instrução.",{error:true});}}
   function downloadFailures(){const failures=(state.validation?.results||[]).filter(result=>!['imported','already_imported'].includes(result.status)).map(result=>({lead_id:result.lead_id,status:result.status,reason:result.reason,analysis:result.item||null}));downloadBlob(new Blob([JSON.stringify({crm_version:CRM_BATCH_VERSION,generated_at:nowISO(),failures},null,2)],{type:"application/json"}),`criare-batch-import-falhas-${fileStamp()}.json`);}
 
+  function renderReceiptPlan(){
+    const plan=state.receiptPlan,container=$("extensionReceiptDiscoveries");if(!plan){container.innerHTML="";return;}
+    const candidates=plan.discoveries.filter(item=>item.classification!=="known_contact");
+    container.innerHTML=candidates.length?`<h3>Conversas recentes para revisar</h3>${candidates.map((item,index)=>{const chat=item.chat;return `<div class="batchLeadRow"><b>${escapeHtml(chat.display_name||"Sem nome")}<small>${escapeHtml(chat.phone_e164||chat.contact_wa_id||"Sem telefone confirmado")}</small></b><span>${escapeHtml(chat.last_message_at?fmtBRDateTime(chat.last_message_at):"Data não disponível")}</span><span>${item.classification==="ambiguous"?"Telefone ambíguo":"Possível novo lead"}</span><button class="ghost" data-create-discovered-lead="${index}" ${item.classification==="ambiguous"||!chat.phone_e164?"disabled":""}>Preparar novo lead</button></div>`;}).join("")}`:'<div class="empty">Nenhuma conversa nova encontrada na varredura recente.</div>';
+  }
+  async function loadExtensionReceipt(file){
+    if(!isAdminUser())return toast("Apenas o administrador pode atualizar os controles de sincronização.",{error:true});
+    try{
+      const receipt=syncEngine.validate(JSON.parse(await file.text()));state.receiptPlan=syncEngine.receiptPlan(receipt,records);state.receiptApplied=false;
+      const summary=state.receiptPlan.summary;
+      setPanel("extensionReceiptPanel","extensionReceiptTitle","extensionReceiptStatus",`Retorno ${receipt.batch_id} validado`,`${summary.unchanged} atualizada(s), ${summary.processed} aguardando análise, ${summary.failures} falha(s), ${summary.possible_new} possível(is) novo(s) lead(s).`,summary.failures?"error":"success");
+      $("btnApplyExtensionReceipt").disabled=!state.receiptPlan.patches.length;renderReceiptPlan();
+    }catch(error){state.receiptPlan=null;$("btnApplyExtensionReceipt").disabled=true;setPanel("extensionReceiptPanel","extensionReceiptTitle","extensionReceiptStatus","Retorno inválido",error.message||String(error),"error");renderReceiptPlan();}
+  }
+  async function applyExtensionReceipt(){
+    if(!isAdminUser()||!state.receiptPlan||state.receiptApplied)return;
+    const button=$("btnApplyExtensionReceipt");button.disabled=true;button.textContent="Atualizando…";let saved=0,failed=0;
+    for(const item of state.receiptPlan.patches){
+      const {data,error}=await sb.from(TBL_RECORDS).update(item.patch).eq("id",item.record.id).select("*").single();
+      if(error){failed+=1;continue;}replaceRecord(data);saved+=1;
+    }
+    state.receiptApplied=failed===0;button.textContent="Confirmar atualização dos controles";button.disabled=state.receiptApplied;
+    setPanel("extensionReceiptPanel","extensionReceiptTitle","extensionReceiptStatus",`${saved} controle(s) atualizado(s)`,failed?`${failed} registro(s) não puderam ser atualizados. Nenhuma conversa ou mídia foi salva.`:"Verificações confirmadas. Conversas sem novidade não voltarão à fila enquanto permanecerem atuais.",failed?"error":"success");
+    buildFilters();render();
+  }
+
   window.wireBatchAnalysisReport=function(){
     const exportButton=$("btnOpenBatchExport"),importButton=$("btnOpenBatchImport"),copyButton=$("btnCopyBatchGptInstruction");
-    if(exportButton&&!exportButton.dataset.batchWired){exportButton.dataset.batchWired="1";exportButton.addEventListener("click",()=>{populateExportFilters();refreshExportPicker(true);$("batchExportModal").showModal();});}
-    if(importButton&&!importButton.dataset.batchWired){importButton.dataset.batchWired="1";importButton.addEventListener("click",()=>{$("batchImportModal").showModal();});}
+    if(exportButton&&!exportButton.dataset.batchWired){exportButton.dataset.batchWired="1";exportButton.addEventListener("click",()=>{if(!isAdminUser())return;populateExportFilters();refreshExportPicker(true);$("batchExportModal").showModal();});}
+    if(importButton&&!importButton.dataset.batchWired){importButton.dataset.batchWired="1";importButton.addEventListener("click",()=>{if(isAdminUser())$("batchImportModal").showModal();});}
     if(copyButton&&!copyButton.dataset.batchWired){copyButton.dataset.batchWired="1";copyButton.addEventListener("click",copyGptInstruction);}
   };
 
   const headerExportButton=$("btnOpenBatchExportHeader");
-  if(headerExportButton&&!headerExportButton.dataset.batchWired){headerExportButton.dataset.batchWired="1";headerExportButton.addEventListener("click",()=>{populateExportFilters();refreshExportPicker(true);$("batchExportModal").showModal();});}
+  if(headerExportButton&&!headerExportButton.dataset.batchWired){headerExportButton.dataset.batchWired="1";headerExportButton.addEventListener("click",()=>{if(!isAdminUser())return;populateExportFilters();refreshExportPicker(true);$("batchExportModal").showModal();});}
 
   if(window.__criareBatchAnalysisStaticListenersRegistered)return;
   window.__criareBatchAnalysisStaticListenersRegistered=true;
@@ -154,4 +181,10 @@
   $("btnPreviewBatchPaste").addEventListener("click",()=>parseImportText($("batchImportPaste").value,{name:"JSON colado",type:"application/json"}));
   const drop=$("batchImportDropZone");drop.addEventListener("click",()=>$("batchImportFile").click());drop.addEventListener("dragover",event=>{event.preventDefault();drop.classList.add("dragging");});drop.addEventListener("dragleave",()=>drop.classList.remove("dragging"));drop.addEventListener("drop",event=>{event.preventDefault();drop.classList.remove("dragging");const file=[...event.dataTransfer.files].find(item=>/\.(json|zip)$/i.test(item.name));if(file)handleImportFile(file);else setPanel("batchImportPanel","batchImportTitle","batchImportStatus","Arquivo não reconhecido","Use o JSON que começa com 02-IMPORTAR-NO-CRM.","error");});
   $("btnImportValidatedBatch").addEventListener("click",importValidated);$("btnLoadAnotherBatch").addEventListener("click",loadAnotherImport);$("btnDownloadBatchFailures").addEventListener("click",downloadFailures);
+  const receiptButton=$("btnImportExtensionReceipt");if(receiptButton)receiptButton.addEventListener("click",()=>{if(!isAdminUser())return;state.receiptPlan=null;state.receiptApplied=false;$("btnApplyExtensionReceipt").disabled=true;setPanel("extensionReceiptPanel","extensionReceiptTitle","extensionReceiptStatus","Nenhum retorno selecionado","Use o arquivo pequeno criado junto com o ZIP enviado ao GPT.");renderReceiptPlan();$("extensionReceiptModal").showModal();});
+  $("btnCloseExtensionReceipt").addEventListener("click",()=>$("extensionReceiptModal").close());
+  $("btnChooseExtensionReceipt").addEventListener("click",()=>$("extensionReceiptFile").click());
+  $("extensionReceiptFile").addEventListener("change",event=>{const file=event.target.files?.[0];if(file)loadExtensionReceipt(file);event.target.value="";});
+  $("btnApplyExtensionReceipt").addEventListener("click",applyExtensionReceipt);
+  $("extensionReceiptDiscoveries").addEventListener("click",event=>{const button=event.target.closest("[data-create-discovered-lead]");if(!button||!state.receiptPlan)return;const candidates=state.receiptPlan.discoveries.filter(item=>item.classification!=="known_contact"),chat=candidates[Number(button.dataset.createDiscoveredLead)]?.chat;if(!chat)return;openModal(null);$("firstName").value=chat.display_name||"Novo contato WhatsApp";$("phone").value=chat.phone_e164||"";if([...$("source").options].some(option=>option.value==="WhatsApp"))$("source").value="WhatsApp";renderPhoneIdentityStatus(null);});
 })();

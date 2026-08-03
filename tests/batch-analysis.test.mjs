@@ -163,6 +163,15 @@ test("botão superior abre o importador novo e o seletor aceita ZIP",async()=>{
   assert.match(crm,/id="whatsappSection" hidden aria-hidden="true"/);
 });
 
+test("relatórios, configuração e operações em lote são exclusivos do administrador",async()=>{
+  const crm=await readFile(new URL("../index.html",import.meta.url),"utf8");
+  assert.match(crm,/data-tab="reports"[^>]*data-admin-only[^>]*hidden/);
+  assert.match(crm,/data-tab="config"[^>]*data-admin-only[^>]*hidden/);
+  assert.match(crm,/id="btnOpenBatchExportHeader"[^>]*data-admin-only[^>]*hidden/);
+  assert.match(crm,/function isAdminUser\(\)/);
+  assert.match(crm,/Redistribuir clientes entre vendedores/);
+});
+
 test("resultado 1.1 válido é reconhecido pelo conteúdo",async()=>{
   const input=await batch.buildBatch([textLead]),item=validAnalysis(textLead.id,input.conversations[0].conversation_hash,batch.lastMessageId(textLead));item.batch_id=input.batch_id;const payload={schema_version:"1.1",batch_id:input.batch_id,generated_at:"2026-07-18T12:00:00Z",analysis_model:"Custom GPT",prompt_version:"criare-batch-v1",analyses:[item]};const classification=batch.classifyImportPayload(payload,{filename:input.expected_output_filename,type:"application/json"});assert.equal(classification.code,"analysis_result");assert.equal((await batch.validateImport(payload,[textLead])).results[0].status,"ready_to_import");
 });
@@ -183,11 +192,20 @@ test("gera fila leve para a extensão sem conversas ou mídias",()=>{
   const request=batch.buildDownloadRequest([textLead],record=>({full_name:"Cliente Anônimo",workspace_id:record.workspace_id}));
   assert.equal(request.schema_version,"criare-whatsapp-download-request-1.0");
   assert.equal(request.contact_count,1);
+  assert.equal(request.known_contact_count,1);
+  assert.equal(request.known_contacts[0].lead_id,textLead.id);
   assert.equal(request.contacts[0].lead_id,textLead.id);
   assert.equal("messages" in request.contacts[0],false);
   assert.equal("media" in request.contacts[0],false);
   assert.match(request.expected_input_filename,/^01-ENVIAR-AO-GPT_conversas_/);
   assert.match(request.expected_output_filename,/^02-IMPORTAR-NO-CRM_resultados_.*\.zip$/);
+});
+
+test("importação da análise conclui também o controle leve de sincronização",()=>{
+  const patch=batch.persistencePatch(textLead,validAnalysis(textLead.id,"a".repeat(64),"MSG-9"),{schema_version:"1.2",prompt_version:"criare-whatsapp-local-v1",analysis_model:"ChatGPT"});
+  assert.equal(patch.whatsapp_sync_status,"current");
+  assert.equal(patch.whatsapp_observed_last_message_id,"MSG-9");
+  assert.equal(patch.whatsapp_sync_error,null);
 });
 
 test("aceita resultado leve 1.2 com somente Chefe Duro e Análise Completa",async()=>{
