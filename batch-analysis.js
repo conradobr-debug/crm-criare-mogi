@@ -8,7 +8,7 @@
   const PROMPT_VERSION="criare-batch-v1";
   const LIGHT_PROMPT_VERSION="criare-whatsapp-local-v1";
   const SUPPORTED_PROMPT_VERSIONS=new Set([PROMPT_VERSION,LIGHT_PROMPT_VERSION]);
-  const MODULE_VERSION="2.8.4";
+  const MODULE_VERSION="2.8.5";
   const VERIFICATION_DUE_HOURS=24;
   const FIT=new Set(["high","medium","low","unknown"]);
   const WAITING=new Set(["seller","customer","none","unknown"]);

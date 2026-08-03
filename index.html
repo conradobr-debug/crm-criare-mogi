@@ -895,7 +895,7 @@
             <button class="ghost" id="btnLoadOlderWhatsApp" type="button" hidden>Carregar anteriores</button>
             <button class="ghost" id="btnRefreshOfficialTimeline" type="button" hidden>Atualizar conversa</button>
             <button class="ghost" id="btnViewFullAnalysis" type="button" hidden>Ver análise completa</button>
-            <button class="primary" id="btnAnalyzeAutomatic" type="button">Analisar automaticamente</button>
+            <button class="primary" id="btnAnalyzeAutomatic" type="button" hidden>Fluxo automático desativado</button>
             <button class="ghost" id="btnTranscribeAudios" type="button" disabled>Transcrever áudios pendentes</button>
             <button class="ghost" id="btnCopyAudioDiagnostics" type="button">Copiar diagnóstico dos áudios</button>
             <button class="ghost" id="btnCopyConversationManual" type="button">Copiar conversa para meu GPT</button>
@@ -944,7 +944,7 @@
           <textarea id="whatsappConversation" class="whatsappConversation" placeholder="A conversa atualizada aparecerá aqui. Você também pode colar um trecho manualmente."></textarea>
           <div class="whatsappPrivacy">Mensagens sincronizadas ficam protegidas pelo acesso do CRM. Ao usar a análise automática, o trecho poderá ser enviado ao serviço de IA configurado. Evite documentos, senhas e dados bancários.</div>
           <div class="whatsappActions">
-            <button class="primary" id="btnSummarizeWhatsApp" type="button">Analisar automaticamente</button>
+            <button class="primary" id="btnSummarizeWhatsApp" type="button" hidden>Fluxo automático desativado</button>
             <button class="ghost" id="btnClearWhatsAppConversation" type="button">Limpar conversa colada</button>
           </div>
           <div class="manualGptSteps" aria-label="Como usar o seu GPT">
@@ -1186,12 +1186,11 @@
 
 <!-- Supabase via CDN -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="whatsapp-data-service.js"></script>
 <script src="whatsapp-crm-extension/phone-identity.js?v=2.5.1"></script>
 <script src="whatsapp-crm-extension/capture-core.js?v=2.5.25"></script>
 <script src="audio-import-matcher.js?v=2.5.25"></script>
 <script src="conversation-completeness.js?v=2.5.1-final"></script>
-<script src="batch-analysis.js?v=2.8.4"></script>
+<script src="batch-analysis.js?v=2.8.5"></script>
 
 <script>
 /*
@@ -2205,35 +2204,8 @@ function parseCustomGptResponse(text){
   };
 }
 async function callWhatsAppSummary(conversation){
-  if(!sb || !session?.access_token) throw new Error("Entre no CRM novamente.");
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/whatsapp-summary`, {
-    method:"POST",
-    headers:{
-      "content-type":"application/json",
-      "apikey":SUPABASE_ANON_KEY,
-      "authorization":`Bearer ${session.access_token}`
-    },
-    body:JSON.stringify({
-      conversation,
-      analysis_mode:$("whatsappAnalysisMode").value,
-      previous_analysis:$("whatsappSummary").value,
-      customer_name:`${$("firstName").value} ${$("lastName").value}`.trim(),
-      stage:$("stage").value,
-      rooms:$("rooms").value,
-      city:$("city").value,
-      notes:$("notes").value
-    })
-  });
-  const result = await response.json().catch(()=>({}));
-  if(!response.ok){
-    const error = new Error(result.error || "Falha ao gerar o resumo.");
-    error.code = result.code || "SUMMARY_ERROR";
-    throw error;
-  }
-  if(!String(result.full_analysis||"").trim() || !String(result.hard_boss||result.summary||"").trim()){
-    throw new Error("A IA respondeu sem uma análise completa. A conversa continua salva e pronta para nova tentativa.");
-  }
-  return result;
+  void conversation;
+  throw new Error("A análise automática antiga foi desativada. Use Preparar fila para a extensão e depois Importar análises em lote.");
 }
 function renderWhatsAppAnalysis(){
   const hardBoss = currentWhatsAppAnalysis.hardBoss || "";
@@ -2782,12 +2754,7 @@ async function initSupabase(){
   registerAuthListener();
   localAuthInfo = readLocalAuthInfo();
   setAuthenticatedActionsEnabled(false);
-  whatsappDataService = CriareWhatsAppDataService.create({
-    supabaseClient:sb,
-    supabaseUrl:SUPABASE_URL,
-    anonKey:SUPABASE_ANON_KEY,
-    getAccessToken:async()=>session?.access_token || (await sb.auth.getSession()).data.session?.access_token || ""
-  });
+  whatsappDataService = null;
   let data;
   try{
     const result = await getSessionWithExpiredRecovery("sessão autenticada");
@@ -3971,7 +3938,7 @@ function renderReports(){
             <div class="batchWorkflowStep batchWorkflowGpt"><b>2. EXTENSÃO → GPT</b><span>A extensão cria um único ZIP com as conversas e mídias separadas por cliente.</span><button class="ghost" id="btnCopyBatchGptInstruction" type="button">Copiar instrução para o GPT</button></div>
             <div class="batchWorkflowStep batchWorkflowImport"><b>3. GPT → CRM</b><span>Importe o ZIP retornado; somente Chefe Duro e Análise Completa serão gravados.</span><button class="primary" id="btnOpenBatchImport" type="button">3. Importar ZIP de resultados</button></div>
           </div>
-          <small>CRM 2.8.4 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
+          <small>CRM 2.8.5 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
         </div>
       </details>
       <div class="formNotice">${escapeHtml(reportPeriod)}</div>
@@ -5701,7 +5668,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=2.8.4").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=2.8.5").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
@@ -5727,7 +5694,7 @@ if("serviceWorker" in navigator){
 })();
 </script>
 <script src="whatsapp-sync-receipt.js?v=1.1.0"></script>
-<script src="batch-analysis-ui.js?v=2.8.4"></script>
+<script src="batch-analysis-ui.js?v=2.8.5"></script>
 <script src="partners.js"></script>
 </body>
 </html>

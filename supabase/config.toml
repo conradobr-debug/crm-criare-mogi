@@ -21,12 +21,3 @@ port = 55329
 
 [functions.outlook-calendar]
 verify_jwt = false
-
-[functions.whatsapp-summary]
-verify_jwt = false
-
-[functions.whatsapp-webhook]
-verify_jwt = false
-
-[functions.whatsapp-processor]
-verify_jwt = false
