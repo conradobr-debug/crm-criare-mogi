@@ -3,10 +3,11 @@
   if(window.__criareBatchAnalysisUiLoaded)return;
   window.__criareBatchAnalysisUiLoaded=true;
 
-  const CRM_BATCH_VERSION="2.7.0";
+  const CRM_BATCH_VERSION="2.8.1";
+  const CANDIDATE_TABLE="crm_whatsapp_lead_candidates";
   const engine=window.CriareBatchAnalysis;
   const syncEngine=window.CriareWhatsAppSyncReceipt;
-  const state={candidates:[],selected:new Set(),cancelled:false,lastBatch:null,importPayload:null,importFile:null,validation:null,importResults:[],importMachine:engine.createImportStateMachine(),importPhase:"idle",actualWrites:0,receiptPlan:null,receiptApplied:false};
+  const state={candidates:[],selected:new Set(),cancelled:false,lastBatch:null,importPayload:null,importFile:null,validation:null,importResults:[],importMachine:engine.createImportStateMachine(),importPhase:"idle",actualWrites:0,receiptPlan:null,receiptApplied:false,leadCandidates:[],linkingCandidateId:null};
   const statusLabels={ready_to_import:"Pronta",invalid_schema:"Schema incompatível",duplicate:"Duplicada — não importada",duplicate_conflict:"Conflito de duplicidade",lead_not_found:"Lead não encontrado",invalid_analysis:"Análise inválida",stale_conversation:"Conversa alterada",already_imported:"Já importada",imported:"Importada",save_error:"Erro ao salvar"};
 
   function setPanel(id,titleId,statusId,title,message,kind=""){
@@ -24,7 +25,13 @@
     const legacy=getLegacyNextActionAt(record);
     return legacy?[{starts_at:legacy.toISOString(),kind:record.next_action_kind||"Follow-up",details:record.next_action_details||null,status:"scheduled"}]:[];
   }
-  function contextFor(record){return {full_name:fullName(record),seller:profileNameById(record.owner_id),workspace_id:record.workspace_id||session?.user?.app_metadata?.workspace_id||null,commitments:commitmentsFor(record),identity_status:typeof phoneIdentityState==="function"?phoneIdentityState(record).code:"ready"};}
+  function phoneDigits(value){return String(value||"").replace(/\D/g,"");}
+  function contextFor(record){
+    const phone=phoneDigits(record.phone),openPending=(typeof pendingItems!=="undefined"?pendingItems:[]).filter(item=>item.status!=="completed"&&phone&&phoneDigits(item.customer_phone)===phone);
+    const analysisFocus=openPending.length?"technical_support":(record.pipeline==="closed"?"post_sale":"sales");
+    return {full_name:fullName(record),seller:profileNameById(record.owner_id),workspace_id:record.workspace_id||session?.user?.app_metadata?.workspace_id||null,commitments:commitmentsFor(record),identity_status:typeof phoneIdentityState==="function"?phoneIdentityState(record).code:"ready",analysis_focus:analysisFocus,open_pending_context:openPending.map(item=>({id:item.id,type:item.pending_type,title:item.title,priority:item.priority,due_at:item.due_at||null,description:item.description||null}))};
+  }
+  function currentWorkspaceId(){return records.find(record=>record?.workspace_id)?.workspace_id||session?.user?.app_metadata?.workspace_id||"00000000-0000-4000-8000-000000000001";}
   function selectedCompleteness(){const selected=state.candidates.filter(record=>state.selected.has(String(record.id)));return selected.map(record=>({record,summary:window.CriareConversationCompleteness.calculate(record,{identity_status:typeof phoneIdentityState==="function"?phoneIdentityState(record).code:"ready"})}));}
   function completenessStatus(summary){if(summary.conversation_completeness_status==="complete")return "Completa";if(summary.metadata_pending_audio_count)return "Metadados pendentes";return ({pending_audio:"Áudios pendentes",unavailable_audio:"Mídia indisponível",capture_may_be_incomplete:"Captura potencialmente incompleta",verification_required:"Verificação necessária",not_captured:"Não capturada"})[summary.conversation_completeness_status]||summary.conversation_completeness_status;}
   function refreshCompletenessWarning(){const chosen=selectedCompleteness(),incomplete=chosen.filter(item=>item.summary.conversation_completeness_status!=="complete"),withPending=chosen.filter(item=>item.summary.pending_audio_count>0),withMetadata=chosen.filter(item=>item.summary.metadata_pending_audio_count>0),capture=chosen.filter(item=>item.summary.capture_may_be_incomplete),unavailable=chosen.filter(item=>item.summary.unavailable_audio_count>0),complete=chosen.filter(item=>item.summary.conversation_completeness_status==="complete"),pending=withPending.reduce((sum,item)=>sum+item.summary.pending_audio_count,0),box=$("batchCompletenessChoice");if(!box)return;box.hidden=!incomplete.length;$("batchCompletenessWarning").innerHTML=`Das ${chosen.length} conversas selecionadas:<br>• ${withPending.length} possuem áudios sem transcrição (${pending} áudio(s));<br>• ${withMetadata.length} possuem metadados de áudio não confirmados;<br>• ${capture.length} possuem captura potencialmente incompleta;<br>• ${unavailable.length} possuem mídia indisponível;<br>• ${complete.length} não possuem pendências conhecidas.`;if(!incomplete.length)box.querySelectorAll("input").forEach(input=>input.checked=false);}
@@ -136,26 +143,73 @@
   function renderReceiptPlan(){
     const plan=state.receiptPlan,container=$("extensionReceiptDiscoveries");if(!plan){container.innerHTML="";return;}
     const candidates=plan.discoveries.filter(item=>item.classification!=="known_contact");
-    container.innerHTML=candidates.length?`<h3>Conversas recentes para revisar</h3>${candidates.map((item,index)=>{const chat=item.chat;return `<div class="batchLeadRow"><b>${escapeHtml(chat.display_name||"Sem nome")}<small>${escapeHtml(chat.phone_e164||chat.contact_wa_id||"Sem telefone confirmado")}</small></b><span>${escapeHtml(chat.last_message_at?fmtBRDateTime(chat.last_message_at):"Data não disponível")}</span><span>${item.classification==="ambiguous"?"Telefone ambíguo":"Possível novo lead"}</span><button class="ghost" data-create-discovered-lead="${index}" ${item.classification==="ambiguous"||!chat.phone_e164?"disabled":""}>Preparar novo lead</button></div>`;}).join("")}`:'<div class="empty">Nenhuma conversa nova encontrada na varredura recente.</div>';
+    container.innerHTML=candidates.length?`<h3>Conversas recentes para revisar</h3><p>Ao confirmar, estas conversas ficarão guardadas em <b>Novos no WhatsApp</b>, mesmo depois de fechar esta janela.</p><div class="whatsappCandidateList">${candidates.map(item=>{const chat=item.chat;return `<div class="whatsappCandidateRow"><div class="whatsappCandidateIdentity"><b>${escapeHtml(chat.display_name||"Sem nome")}</b><small>${escapeHtml(chat.phone_e164||chat.contact_wa_id||chat.external_chat_id||"Sem telefone confirmado")}</small></div><span class="whatsappCandidateMeta">${escapeHtml(chat.last_message_at?fmtBRDateTime(chat.last_message_at):"Data não disponível")}</span><span>${item.classification==="ambiguous"?"Telefone ambíguo":"Possível novo lead"}</span><span>Será salvo para revisão</span></div>`;}).join("")}</div>`:'<div class="empty">Nenhuma conversa nova encontrada na varredura recente.</div>';
   }
+
+  function updateCandidateBadge(){const count=state.leadCandidates.length,badge=$("whatsappCandidateCount");if(!badge)return;badge.textContent=String(count);badge.hidden=!count;}
+  function renderCandidateInbox(){
+    const list=$("whatsappCandidateList");if(!list)return;
+    list.innerHTML=state.leadCandidates.length?state.leadCandidates.map(candidate=>`<div class="whatsappCandidateRow" data-whatsapp-candidate="${escapeHtml(candidate.id)}"><div class="whatsappCandidateIdentity"><b>${escapeHtml(candidate.display_name||"Contato sem nome")}</b><small>${escapeHtml(candidate.phone_e164||candidate.contact_wa_id||candidate.external_chat_id)}</small></div><span class="whatsappCandidateMeta">Última atividade<br>${escapeHtml(candidate.last_message_at?fmtBRDateTime(candidate.last_message_at):"data não disponível")}</span><div class="whatsappCandidateActions"><button class="primary" data-candidate-lead="${escapeHtml(candidate.id)}" ${candidate.phone_e164?"":"disabled"}>Novo lead</button><button class="ghost" data-candidate-closed="${escapeHtml(candidate.id)}" ${candidate.phone_e164?"":"disabled"}>Fechado / pós-venda</button><button class="ghost" data-candidate-link="${escapeHtml(candidate.id)}">Vincular existente</button><button class="ghost" data-candidate-pending="${escapeHtml(candidate.id)}">Criar pendência</button><button class="dangerGhost" data-candidate-dismiss="${escapeHtml(candidate.id)}">Ignorar</button></div></div>`).join(""):'<div class="empty">Nenhum contato do WhatsApp aguardando classificação.</div>';
+    setPanel("whatsappCandidatesPanel","whatsappCandidatesTitle","whatsappCandidatesStatus",`${state.leadCandidates.length} contato(s) aguardando classificação`,state.leadCandidates.length?"Escolha o destino correto de cada conversa. Nada será criado sem sua confirmação.":"A caixa está em dia.","success");updateCandidateBadge();
+  }
+  async function refreshCandidateInbox({silent=false}={}){
+    if(!isAdminUser()||!sb||!session?.user)return;
+    if(!silent)setPanel("whatsappCandidatesPanel","whatsappCandidatesTitle","whatsappCandidatesStatus","Carregando candidatos","Buscando conversas recentes ainda sem vínculo.");
+    const {data,error}=await sb.from(CANDIDATE_TABLE).select("*").eq("workspace_id",currentWorkspaceId()).eq("status","pending").order("last_message_at",{ascending:false,nullsFirst:false});
+    if(error){state.leadCandidates=[];updateCandidateBadge();if(!silent)setPanel("whatsappCandidatesPanel","whatsappCandidatesTitle","whatsappCandidatesStatus","Não foi possível abrir a caixa",error.message||String(error),"error");return;}
+    state.leadCandidates=data||[];renderCandidateInbox();
+  }
+  function openCandidateAsRecord(candidate,pipeline="lead"){
+    const name=String(candidate.display_name||"").trim(),parts=name&&!/^\+?\d/.test(name)?name.split(/\s+/):["Novo","contato"];
+    openModal(null,{whatsappCandidateId:candidate.id,initialPipeline:pipeline,initialStage:pipeline==="closed"?"Contrato realizado":"Novo"});$("firstName").value=parts.shift()||"Novo";$("lastName").value=parts.join(" ")||"WhatsApp";$("phone").value=candidate.phone_e164||"";if([...$("source").options].some(option=>option.value==="WhatsApp"))$("source").value="WhatsApp";$("notes").value=pipeline==="closed"?`Cliente já fechado identificado no WhatsApp em ${candidate.last_message_at?fmtBRDateTime(candidate.last_message_at):"data não disponível"}. O acompanhamento desta conversa deve ser de pós-venda.`:`Detectado automaticamente no WhatsApp em ${candidate.last_message_at?fmtBRDateTime(candidate.last_message_at):"data não disponível"}.`;renderPhoneIdentityStatus(null);
+  }
+  function openCandidateAsPending(candidate){
+    openPendingModal(null,{whatsappCandidateId:candidate.id});
+    $("pendingTitle").value=`WhatsApp — ${candidate.display_name||candidate.phone_e164||"contato a revisar"}`;
+    $("pendingType").value="Assistência técnica";$("pendingCustomer").value=candidate.display_name||"";$("pendingPhone").value=candidate.phone_e164||"";
+    $("pendingDescription").value=`Contato detectado no WhatsApp para assistência, garantia ou acompanhamento operacional. Conversa: ${candidate.external_chat_id}. Última atividade: ${candidate.last_message_at?fmtBRDateTime(candidate.last_message_at):"data não disponível"}.`;
+  }
+  function openCandidateLink(candidate){
+    state.linkingCandidateId=candidate.id;$("whatsappCandidateLinkName").textContent=`Vincular ${candidate.display_name||candidate.phone_e164||"este contato"} a um cadastro já existente.`;
+    const options=records.filter(record=>!isSpecifier(record)).sort((a,b)=>fullName(a).localeCompare(fullName(b),"pt-BR")).map(record=>`<option value="${escapeHtml(record.id)}">${escapeHtml(fullName(record))} — ${record.pipeline==="closed"?"Fechado / pós-venda":"Lead comercial"}${record.phone?` — ${escapeHtml(record.phone)}`:""}</option>`).join("");
+    $("whatsappCandidateRecordSelect").innerHTML=options||'<option value="">Nenhum cadastro disponível</option>';$("btnConfirmWhatsAppCandidateLink").disabled=!options;$("whatsappCandidateLinkModal").showModal();
+  }
+  async function confirmCandidateLink(){
+    const candidate=state.leadCandidates.find(item=>item.id===state.linkingCandidateId),recordId=$("whatsappCandidateRecordSelect").value;if(!candidate||!recordId)return;
+    const button=$("btnConfirmWhatsAppCandidateLink");button.disabled=true;button.textContent="Vinculando…";
+    const {data,error}=await sb.from(TBL_RECORDS).update({whatsapp_external_chat_id:candidate.external_chat_id||null,whatsapp_observed_last_message_id:candidate.last_message_id||null,whatsapp_observed_last_message_at:candidate.last_message_at||null,whatsapp_last_checked_at:nowISO(),whatsapp_sync_status:"awaiting_analysis",whatsapp_analysis_status:"stale"}).eq("id",recordId).select("*").single();
+    if(error){button.disabled=false;button.textContent="Confirmar vínculo";return toast("Não foi possível vincular esta conversa.",{error:true});}replaceRecord(data);
+    const {error:candidateError}=await sb.from(CANDIDATE_TABLE).update({status:"known",matched_record_id:recordId,updated_at:nowISO()}).eq("id",candidate.id);button.textContent="Confirmar vínculo";if(candidateError){button.disabled=false;return toast("O cliente foi vinculado, mas a caixa não pôde ser atualizada.",{error:true});}
+    $("whatsappCandidateLinkModal").close();state.linkingCandidateId=null;await refreshCandidateInbox({silent:true});buildFilters();render();toast(data.pipeline==="closed"?"Cliente vinculado. A próxima análise será de pós-venda.":"Lead vinculado à conversa do WhatsApp.");
+  }
+  async function dismissCandidate(id){const {error}=await sb.from(CANDIDATE_TABLE).update({status:"dismissed",updated_at:nowISO()}).eq("id",id);if(error)return toast("Não foi possível ignorar este contato.",{error:true});await refreshCandidateInbox({silent:true});}
+  async function onCandidateLeadCreated(candidateId,lead){
+    const candidate=state.leadCandidates.find(item=>item.id===candidateId);if(!candidate)return;
+    const {data,error}=await sb.from(TBL_RECORDS).update({whatsapp_external_chat_id:candidate.external_chat_id||null,whatsapp_observed_last_message_id:candidate.last_message_id||null,whatsapp_observed_last_message_at:candidate.last_message_at||null,whatsapp_last_checked_at:nowISO(),whatsapp_sync_status:"awaiting_analysis"}).eq("id",lead.id).select("*").single();if(error)throw error;replaceRecord(data);
+    const {error:candidateError}=await sb.from(CANDIDATE_TABLE).update({status:"converted",matched_record_id:lead.id,updated_at:nowISO()}).eq("id",candidateId);if(candidateError)throw candidateError;await refreshCandidateInbox({silent:true});toast(lead.pipeline==="closed"?"Cliente fechado criado. A análise será focada em pós-venda.":"Lead criado e vinculado à conversa do WhatsApp.");
+  }
+  async function onCandidatePendingCreated(candidateId,pending){const {error}=await sb.from(CANDIDATE_TABLE).update({status:"converted",matched_pending_id:pending.id,updated_at:nowISO()}).eq("id",candidateId);if(error)throw error;await refreshCandidateInbox({silent:true});toast("Pendência criada. O contato foi retirado da caixa de classificação.");}
   async function loadExtensionReceipt(file){
     if(!isAdminUser())return toast("Apenas o administrador pode atualizar os controles de sincronização.",{error:true});
     try{
       const receipt=syncEngine.validate(JSON.parse(await file.text()));state.receiptPlan=syncEngine.receiptPlan(receipt,records);state.receiptApplied=false;
       const summary=state.receiptPlan.summary;
       setPanel("extensionReceiptPanel","extensionReceiptTitle","extensionReceiptStatus",`Retorno ${receipt.batch_id} validado`,`${summary.unchanged} atualizada(s), ${summary.processed} aguardando análise, ${summary.failures} falha(s), ${summary.possible_new} possível(is) novo(s) lead(s).`,summary.failures?"error":"success");
-      $("btnApplyExtensionReceipt").disabled=!state.receiptPlan.patches.length;renderReceiptPlan();
+      $("btnApplyExtensionReceipt").disabled=!state.receiptPlan.patches.length&&!state.receiptPlan.discoveries.some(item=>item.classification!=="known_contact");renderReceiptPlan();
     }catch(error){state.receiptPlan=null;$("btnApplyExtensionReceipt").disabled=true;setPanel("extensionReceiptPanel","extensionReceiptTitle","extensionReceiptStatus","Retorno inválido",error.message||String(error),"error");renderReceiptPlan();}
   }
   async function applyExtensionReceipt(){
     if(!isAdminUser()||!state.receiptPlan||state.receiptApplied)return;
-    const button=$("btnApplyExtensionReceipt");button.disabled=true;button.textContent="Atualizando…";let saved=0,failed=0;
+    const button=$("btnApplyExtensionReceipt");button.disabled=true;button.textContent="Atualizando…";let saved=0,failed=0,candidatesSaved=0;
     for(const item of state.receiptPlan.patches){
       const {data,error}=await sb.from(TBL_RECORDS).update(item.patch).eq("id",item.record.id).select("*").single();
       if(error){failed+=1;continue;}replaceRecord(data);saved+=1;
     }
+    const candidateChats=state.receiptPlan.discoveries.filter(item=>item.classification!=="known_contact").map(item=>item.chat);
+    if(candidateChats.length){const {data,error}=await sb.rpc("crm_upsert_whatsapp_lead_candidates",{p_workspace_id:currentWorkspaceId(),p_batch_id:state.receiptPlan.receipt.batch_id,p_candidates:candidateChats});if(error)failed+=1;else candidatesSaved=Number(data?.saved||0);}
+    await refreshCandidateInbox({silent:true});
     state.receiptApplied=failed===0;button.textContent="Confirmar atualização dos controles";button.disabled=state.receiptApplied;
-    setPanel("extensionReceiptPanel","extensionReceiptTitle","extensionReceiptStatus",`${saved} controle(s) atualizado(s)`,failed?`${failed} registro(s) não puderam ser atualizados. Nenhuma conversa ou mídia foi salva.`:"Verificações confirmadas. Conversas sem novidade não voltarão à fila enquanto permanecerem atuais.",failed?"error":"success");
+    setPanel("extensionReceiptPanel","extensionReceiptTitle","extensionReceiptStatus",`${saved} controle(s) atualizado(s) • ${candidatesSaved} candidato(s) guardado(s)`,failed?`${failed} operação(ões) não puderam ser concluídas. Nenhuma conversa ou mídia foi salva.`:"Verificações confirmadas. Abra Novos no WhatsApp para cadastrar ou ignorar cada possível lead.",failed?"error":"success");
     buildFilters();render();
   }
 
@@ -182,9 +236,15 @@
   const drop=$("batchImportDropZone");drop.addEventListener("click",()=>$("batchImportFile").click());drop.addEventListener("dragover",event=>{event.preventDefault();drop.classList.add("dragging");});drop.addEventListener("dragleave",()=>drop.classList.remove("dragging"));drop.addEventListener("drop",event=>{event.preventDefault();drop.classList.remove("dragging");const file=[...event.dataTransfer.files].find(item=>/\.(json|zip)$/i.test(item.name));if(file)handleImportFile(file);else setPanel("batchImportPanel","batchImportTitle","batchImportStatus","Arquivo não reconhecido","Use o JSON que começa com 02-IMPORTAR-NO-CRM.","error");});
   $("btnImportValidatedBatch").addEventListener("click",importValidated);$("btnLoadAnotherBatch").addEventListener("click",loadAnotherImport);$("btnDownloadBatchFailures").addEventListener("click",downloadFailures);
   const receiptButton=$("btnImportExtensionReceipt");if(receiptButton)receiptButton.addEventListener("click",()=>{if(!isAdminUser())return;state.receiptPlan=null;state.receiptApplied=false;$("btnApplyExtensionReceipt").disabled=true;setPanel("extensionReceiptPanel","extensionReceiptTitle","extensionReceiptStatus","Nenhum retorno selecionado","Use o arquivo pequeno criado junto com o ZIP enviado ao GPT.");renderReceiptPlan();$("extensionReceiptModal").showModal();});
+  const candidateButton=$("btnReviewWhatsAppCandidates");if(candidateButton)candidateButton.addEventListener("click",async()=>{if(!isAdminUser())return;$("whatsappCandidatesModal").showModal();await refreshCandidateInbox();});
+  $("btnCloseWhatsAppCandidates").addEventListener("click",()=>$("whatsappCandidatesModal").close());
+  $("btnRefreshWhatsAppCandidates").addEventListener("click",()=>refreshCandidateInbox());
+  $("whatsappCandidateList").addEventListener("click",event=>{const button=event.target.closest("button");if(!button)return;const id=button.dataset.candidateLead||button.dataset.candidateClosed||button.dataset.candidateLink||button.dataset.candidatePending||button.dataset.candidateDismiss,candidate=state.leadCandidates.find(item=>item.id===id);if(!candidate)return;if(button.dataset.candidateLead){$("whatsappCandidatesModal").close();openCandidateAsRecord(candidate,"lead");}else if(button.dataset.candidateClosed){$("whatsappCandidatesModal").close();openCandidateAsRecord(candidate,"closed");}else if(button.dataset.candidateLink)openCandidateLink(candidate);else if(button.dataset.candidatePending){$("whatsappCandidatesModal").close();openCandidateAsPending(candidate);}else if(button.dataset.candidateDismiss)dismissCandidate(id);});
+  $("btnCloseWhatsAppCandidateLink").addEventListener("click",()=>$("whatsappCandidateLinkModal").close());$("btnCancelWhatsAppCandidateLink").addEventListener("click",()=>$("whatsappCandidateLinkModal").close());$("btnConfirmWhatsAppCandidateLink").addEventListener("click",confirmCandidateLink);
   $("btnCloseExtensionReceipt").addEventListener("click",()=>$("extensionReceiptModal").close());
   $("btnChooseExtensionReceipt").addEventListener("click",()=>$("extensionReceiptFile").click());
   $("extensionReceiptFile").addEventListener("change",event=>{const file=event.target.files?.[0];if(file)loadExtensionReceipt(file);event.target.value="";});
   $("btnApplyExtensionReceipt").addEventListener("click",applyExtensionReceipt);
-  $("extensionReceiptDiscoveries").addEventListener("click",event=>{const button=event.target.closest("[data-create-discovered-lead]");if(!button||!state.receiptPlan)return;const candidates=state.receiptPlan.discoveries.filter(item=>item.classification!=="known_contact"),chat=candidates[Number(button.dataset.createDiscoveredLead)]?.chat;if(!chat)return;openModal(null);$("firstName").value=chat.display_name||"Novo contato WhatsApp";$("phone").value=chat.phone_e164||"";if([...$("source").options].some(option=>option.value==="WhatsApp"))$("source").value="WhatsApp";renderPhoneIdentityStatus(null);});
+  window.CriareWhatsAppLeadCandidates={onLeadCreated:onCandidateLeadCreated,onPendingCreated:onCandidatePendingCreated,refresh:refreshCandidateInbox};
+  setTimeout(()=>refreshCandidateInbox({silent:true}),1500);
 })();

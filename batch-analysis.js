@@ -8,7 +8,7 @@
   const PROMPT_VERSION="criare-batch-v1";
   const LIGHT_PROMPT_VERSION="criare-whatsapp-local-v1";
   const SUPPORTED_PROMPT_VERSIONS=new Set([PROMPT_VERSION,LIGHT_PROMPT_VERSION]);
-  const MODULE_VERSION="2.7.0";
+  const MODULE_VERSION="2.8.1";
   const VERIFICATION_DUE_HOURS=24;
   const FIT=new Set(["high","medium","low","unknown"]);
   const WAITING=new Set(["seller","customer","none","unknown"]);
@@ -78,9 +78,10 @@
     const batchId=makeBatchId();
     const contacts=(records||[]).map(record=>{const context=contextFor(record)||{},cursor=normalizeId(record.whatsapp_analysis_last_message_id);return {
       lead_id:String(record.id),workspace_id:record.workspace_id||context.workspace_id||null,full_client_name:clean(context.full_name||[record.first_name,record.last_name].filter(Boolean).join(" ")),phone_e164:clean(record.phone||""),
+      pipeline:record.pipeline||"lead",stage:record.stage||null,analysis_focus:clean(context.analysis_focus)||(record.pipeline==="closed"?"post_sale":"sales"),open_pending_context:Array.isArray(context.open_pending_context)?context.open_pending_context:[],
       download_mode:cursor?"partial":"full",after_message_id:cursor||null,previous_chefe_duro:clean(record.whatsapp_analysis_hard_boss||record.whatsapp_summary||"")||null,previous_full_analysis:cleanMultiline(record.whatsapp_analysis_full||"")||null
     };});
-    const known_contacts=(knownRecords||[]).map(record=>({lead_id:String(record.id),phone_e164:clean(record.phone||"")})).filter(item=>item.phone_e164);
+    const known_contacts=(knownRecords||[]).map(record=>({lead_id:String(record.id),phone_e164:clean(record.phone||""),external_chat_id:clean(record.whatsapp_external_chat_id||"")||null})).filter(item=>item.phone_e164||item.external_chat_id);
     return {schema_version:DOWNLOAD_REQUEST_SCHEMA,batch_id:batchId,generated_at:new Date().toISOString(),prompt_version:LIGHT_PROMPT_VERSION,expected_input_filename:lightInputFilename(batchId),expected_output_filename:lightOutputFilename(batchId),contact_count:contacts.length,known_contact_count:known_contacts.length,known_contacts,contacts};
   }
 

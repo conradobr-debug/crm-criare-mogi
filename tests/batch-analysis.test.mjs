@@ -42,6 +42,21 @@ test("fila de verificação separa atual, atrasada, alterada e falha",()=>{
   assert.equal(batch.shouldQueueWhatsAppVerification(recent,"all_active",{now}),true);
 });
 
+test("fila da extensão preserva foco comercial, pós-venda e assistência",()=>{
+  const lead={...textLead,id:"lead-sales",pipeline:"lead",stage:"Qualificação"};
+  const closed={...textLead,id:"lead-closed",pipeline:"closed",stage:"Contrato realizado"};
+  const request=batch.buildDownloadRequest([lead,closed],record=>({analysis_focus:record.id==="lead-closed"?"technical_support":"sales",open_pending_context:record.id==="lead-closed"?[{type:"Assistência técnica",title:"Porta desalinhada"}]:[]}));
+  assert.equal(request.contacts[0].analysis_focus,"sales");
+  assert.equal(request.contacts[1].pipeline,"closed");
+  assert.equal(request.contacts[1].analysis_focus,"technical_support");
+  assert.equal(request.contacts[1].open_pending_context[0].type,"Assistência técnica");
+});
+
+test("caixa do WhatsApp oferece os cinco destinos de triagem",async()=>{
+  const ui=await readFile(new URL("../batch-analysis-ui.js",import.meta.url),"utf8");
+  for(const action of ["data-candidate-lead","data-candidate-closed","data-candidate-link","data-candidate-pending","data-candidate-dismiss"])assert.match(ui,new RegExp(action));
+});
+
 test("formatação do telefone não altera o hash da conversa",async()=>{const formatted={...textLead,phone:"(19) 99614-2935"},canonical={...textLead,phone:"+5519996142935"};assert.equal(await batch.conversationHash(formatted),await batch.conversationHash(canonical));});
 
 test("separa data, horário, remetente, direção e corpo das mensagens legadas",()=>{
