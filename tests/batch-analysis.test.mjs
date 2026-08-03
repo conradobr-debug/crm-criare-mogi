@@ -25,6 +25,23 @@ test("conversation_hash é determinístico e muda com alteração material",asyn
   assert.notEqual(await batch.conversationHash(textLead),await batch.conversationHash(changed));
 });
 
+test("fila de verificação separa atual, atrasada, alterada e falha",()=>{
+  const now=new Date("2026-08-02T21:00:00-03:00");
+  const recent={whatsapp_analysis_status:"current",whatsapp_sync_status:"current",whatsapp_last_checked_at:"2026-08-02T15:00:00-03:00"};
+  const due={...recent,whatsapp_last_checked_at:"2026-08-01T15:00:00-03:00"};
+  const changed={...recent,whatsapp_sync_status:"awaiting_analysis"};
+  const failed={...recent,whatsapp_sync_status:"verification_required",whatsapp_sync_error:"Conversa não encontrada"};
+  assert.equal(batch.whatsappVerificationState(recent,{now}).code,"current");
+  assert.equal(batch.whatsappVerificationState(due,{now}).code,"verification_due");
+  assert.equal(batch.whatsappVerificationState(changed,{now}).code,"needs_analysis");
+  assert.equal(batch.whatsappVerificationState(failed,{now}).code,"verification_failed");
+  assert.equal(batch.shouldQueueWhatsAppVerification(recent,"verify_due",{now}),false);
+  assert.equal(batch.shouldQueueWhatsAppVerification(due,"verify_due",{now}),true);
+  assert.equal(batch.shouldQueueWhatsAppVerification(changed,"needs_analysis",{now}),true);
+  assert.equal(batch.shouldQueueWhatsAppVerification(due,"needs_analysis",{now}),false);
+  assert.equal(batch.shouldQueueWhatsAppVerification(recent,"all_active",{now}),true);
+});
+
 test("formatação do telefone não altera o hash da conversa",async()=>{const formatted={...textLead,phone:"(19) 99614-2935"},canonical={...textLead,phone:"+5519996142935"};assert.equal(await batch.conversationHash(formatted),await batch.conversationHash(canonical));});
 
 test("separa data, horário, remetente, direção e corpo das mensagens legadas",()=>{
@@ -154,7 +171,10 @@ test("ZIP de entrada selecionado no importador é classificado e rejeitado clara
 
 test("botão superior abre o importador novo e o seletor aceita ZIP",async()=>{
   const crm=await readFile(new URL("../index.html",import.meta.url),"utf8");
-  assert.match(crm,/id="btnOpenBatchExportHeader"[^>]*>Preparar fila WhatsApp</);
+  assert.match(crm,/id="btnOpenBatchExportHeader"[^>]*>Verificar WhatsApp</);
+  assert.match(crm,/value="verify_due" selected>Verificações pendentes/);
+  assert.match(crm,/value="needs_analysis">Conversas que precisam de análise/);
+  assert.match(crm,/value="all_active">Verificar todos os clientes ativos agora/);
   assert.match(crm,/id="btnImportLocalWhatsAppBatch"[^>]*>Importar análises \(ZIP\)</);
   assert.match(crm,/id="batchImportFile"[^>]*accept="[^"]*\.zip/);
   assert.match(crm,/\$\("btnImportLocalWhatsAppBatch"\)\.addEventListener\("click",\(\)=>\{/);

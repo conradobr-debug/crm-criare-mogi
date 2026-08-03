@@ -3,7 +3,7 @@
   if(window.__criareBatchAnalysisUiLoaded)return;
   window.__criareBatchAnalysisUiLoaded=true;
 
-  const CRM_BATCH_VERSION="2.5.1";
+  const CRM_BATCH_VERSION="2.7.0";
   const engine=window.CriareBatchAnalysis;
   const syncEngine=window.CriareWhatsAppSyncReceipt;
   const state={candidates:[],selected:new Set(),cancelled:false,lastBatch:null,importPayload:null,importFile:null,validation:null,importResults:[],importMachine:engine.createImportStateMachine(),importPhase:"idle",actualWrites:0,receiptPlan:null,receiptApplied:false};
@@ -41,7 +41,7 @@
       const date=lastMessageDate(record);
       if(from&&(!date||date<new Date(`${from}T00:00:00`)))return false;
       if(to&&(!date||date>new Date(`${to}T23:59:59.999`)))return false;
-      if(scope==="pending"&&record.whatsapp_analysis_status==="current")return false;
+      if(!engine.shouldQueueWhatsAppVerification(record,scope))return false;
       return true;
     });
   }
@@ -56,8 +56,8 @@
     const ids=new Set(state.candidates.map(record=>String(record.id)));
     if(resetSelection)state.selected=new Set(ids);else state.selected=new Set([...state.selected].filter(id=>ids.has(id)));
     if(!state.selected.size&&state.candidates.length)state.selected=new Set(ids);
-    $("batchExportLeadPicker").innerHTML=state.candidates.length?state.candidates.map(record=>{const partial=Boolean(record.whatsapp_analysis_last_message_id);return `<label class="batchLeadRow"><input type="checkbox" data-batch-lead="${escapeHtml(record.id)}" ${state.selected.has(String(record.id))?"checked":""}/><b>${escapeHtml(fullName(record))}<small>${partial?"Parcial desde a última análise":"Histórico completo"}</small></b><span>${escapeHtml(profileNameById(record.owner_id))}</span><span>${escapeHtml(record.stage||"—")}</span><small>${escapeHtml(record.phone||"Sem telefone")}</small></label>`;}).join(""):'<div class="empty">Nenhum cliente com telefone válido corresponde aos filtros.</div>';
-    setPanel("batchExportPanel","batchExportCount","batchExportStatus",`${state.selected.size} contato(s) selecionado(s)`,state.candidates.length?"Confira a seleção e baixe a fila para a extensão.":"Ajuste os filtros para localizar clientes com telefone válido.");
+    $("batchExportLeadPicker").innerHTML=state.candidates.length?state.candidates.map(record=>{const partial=Boolean(record.whatsapp_analysis_last_message_id),verification=engine.whatsappVerificationState(record),checked=verification.checked_at?new Date(verification.checked_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"}):"nunca";return `<label class="batchLeadRow"><input type="checkbox" data-batch-lead="${escapeHtml(record.id)}" ${state.selected.has(String(record.id))?"checked":""}/><b>${escapeHtml(fullName(record))}<small>${partial?"Parcial desde a última análise":"Histórico completo"} • ${escapeHtml(verification.label)} • conferida: ${escapeHtml(checked)}</small></b><span>${escapeHtml(profileNameById(record.owner_id))}</span><span>${escapeHtml(record.stage||"—")}</span><small>${escapeHtml(record.phone||"Sem telefone")}</small></label>`;}).join(""):'<div class="empty">Nenhum cliente precisa de verificação neste filtro.</div>';
+    setPanel("batchExportPanel","batchExportCount","batchExportStatus",`${state.selected.size} contato(s) selecionado(s)`,state.candidates.length?"A extensão fará uma conferência leve e baixará somente as conversas alteradas.":"Tudo está atualizado neste filtro.");
     $("btnGenerateBatchZip").disabled=!state.selected.size;
     $("batchCompletenessChoice").hidden=true;
   }

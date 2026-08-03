@@ -480,7 +480,7 @@
   <div class="actions">
     <button class="primary" id="btnNew">+ Novo lead</button>
     <button class="ghost" id="btnSync">Sincronizar</button>
-    <button class="ghost" id="btnOpenBatchExportHeader" type="button" data-admin-only hidden>Preparar fila WhatsApp</button>
+    <button class="ghost" id="btnOpenBatchExportHeader" type="button" data-admin-only hidden>Verificar WhatsApp</button>
     <button class="ghost" id="btnImportExtensionReceipt" type="button" data-admin-only hidden>Atualizar retorno da extensão</button>
     <button class="primary" id="btnImportLocalWhatsAppBatch" type="button" data-admin-only hidden>Importar análises (ZIP)</button>
     <button class="ghost mobileUtility" id="btnInstall" hidden>Instalar aplicativo</button>
@@ -999,10 +999,10 @@
   </dialog>
 
   <dialog id="batchExportModal" class="batchAnalysisModal">
-    <div class="modalHd"><div><div class="modalTitle">Preparar fila para a extensão</div><div class="modalSub">O CRM informa quais contatos precisam de histórico completo ou parcial, sem incluir conversas.</div></div><button class="ghost" id="btnCloseBatchExport" type="button">Fechar</button></div>
+    <div class="modalHd"><div><div class="modalTitle">Verificar atualizações do WhatsApp</div><div class="modalSub">O CRM cria uma fila leve. A extensão confere a última mensagem e só baixa conversas que realmente mudaram.</div></div><button class="ghost" id="btnCloseBatchExport" type="button">Fechar</button></div>
     <div class="modalBd">
       <div class="batchFilterGrid">
-        <label>Clientes <select id="batchExportScope"><option value="pending" selected>Somente análises ausentes ou desatualizadas</option><option value="all">Todos com telefone válido</option></select></label>
+        <label>Clientes <select id="batchExportScope"><option value="verify_due" selected>Verificações pendentes (mais de 24 h)</option><option value="needs_analysis">Conversas que precisam de análise</option><option value="all_active">Verificar todos os clientes ativos agora</option></select></label>
         <label>Vendedor <select id="batchExportOwner"><option value="">Todos</option></select></label>
         <label>Etapa <select id="batchExportStage"><option value="">Todas</option></select></label>
         <label>Última análise — início <input id="batchExportDateFrom" type="date" /></label>
@@ -1171,7 +1171,7 @@
 <script src="whatsapp-crm-extension/capture-core.js?v=2.5.25"></script>
 <script src="audio-import-matcher.js?v=2.5.25"></script>
 <script src="conversation-completeness.js?v=2.5.1-final"></script>
-<script src="batch-analysis.js?v=2.6.0"></script>
+<script src="batch-analysis.js?v=2.7.0"></script>
 
 <script>
 /*
@@ -3928,7 +3928,7 @@ function renderReports(){
             <div class="batchWorkflowStep batchWorkflowGpt"><b>2. EXTENSÃO → GPT</b><span>A extensão cria um único ZIP com as conversas e mídias separadas por cliente.</span><button class="ghost" id="btnCopyBatchGptInstruction" type="button">Copiar instrução para o GPT</button></div>
             <div class="batchWorkflowStep batchWorkflowImport"><b>3. GPT → CRM</b><span>Importe o ZIP retornado; somente Chefe Duro e Análise Completa serão gravados.</span><button class="primary" id="btnOpenBatchImport" type="button">3. Importar ZIP de resultados</button></div>
           </div>
-          <small>CRM 2.6.0 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
+          <small>CRM 2.7.0 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
         </div>
       </details>
       <div class="formNotice">${escapeHtml(reportPeriod)}</div>
@@ -5649,7 +5649,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=2.6.0").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=2.7.0").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
@@ -5675,7 +5675,7 @@ if("serviceWorker" in navigator){
 })();
 </script>
 <script src="whatsapp-sync-receipt.js?v=1.0.0"></script>
-<script src="batch-analysis-ui.js?v=2.6.0"></script>
+<script src="batch-analysis-ui.js?v=2.7.0"></script>
 <script src="partners.js"></script>
 </body>
 </html>

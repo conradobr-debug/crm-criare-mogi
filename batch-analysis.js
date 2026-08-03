@@ -8,7 +8,8 @@
   const PROMPT_VERSION="criare-batch-v1";
   const LIGHT_PROMPT_VERSION="criare-whatsapp-local-v1";
   const SUPPORTED_PROMPT_VERSIONS=new Set([PROMPT_VERSION,LIGHT_PROMPT_VERSION]);
-  const MODULE_VERSION="2.5.1";
+  const MODULE_VERSION="2.7.0";
+  const VERIFICATION_DUE_HOURS=24;
   const FIT=new Set(["high","medium","low","unknown"]);
   const WAITING=new Set(["seller","customer","none","unknown"]);
   const RISK=new Set(["low","medium","high","critical"]);
@@ -42,6 +43,22 @@
   async function conversationHash(record){const stable=canonicalMessages(record).map(message=>[message.message_id,message.timestamp,message.direction,clean(message.audio_transcription||message.text)]);return sha256(JSON.stringify(stable));}
   function lastMessageId(record){const messages=canonicalMessages(record);return messages.at(-1)?.message_id||null;}
   function lastMessageTimestamp(record){const messages=canonicalMessages(record);for(let index=messages.length-1;index>=0;index--)if(messages[index].timestamp)return messages[index].timestamp;return null;}
+  function whatsappVerificationState(record,{now=new Date(),dueHours=VERIFICATION_DUE_HOURS}={}){
+    const sync=clean(record?.whatsapp_sync_status).toLowerCase(),analysis=clean(record?.whatsapp_analysis_status||"never").toLowerCase();
+    const checkedRaw=record?.whatsapp_last_checked_at,checkedAt=checkedRaw?new Date(checkedRaw):null,checkedValid=checkedAt&&!Number.isNaN(checkedAt.getTime());
+    const ageHours=checkedValid?Math.max(0,(new Date(now).getTime()-checkedAt.getTime())/36e5):null;
+    if(sync==="verification_required"||clean(record?.whatsapp_sync_error))return {code:"verification_failed",label:"Falha de verificação",checked_at:checkedValid?checkedAt.toISOString():null,age_hours:ageHours};
+    if(sync==="awaiting_analysis"||["stale","failed","error"].includes(analysis))return {code:"needs_analysis",label:"Conversa alterada — precisa analisar",checked_at:checkedValid?checkedAt.toISOString():null,age_hours:ageHours};
+    if(!checkedValid)return {code:"never_checked",label:"Nunca verificada",checked_at:null,age_hours:null};
+    if(ageHours>=Number(dueHours||VERIFICATION_DUE_HOURS))return {code:"verification_due",label:"Verificação atrasada",checked_at:checkedAt.toISOString(),age_hours:ageHours};
+    return {code:"current",label:"Atualizada recentemente",checked_at:checkedAt.toISOString(),age_hours:ageHours};
+  }
+  function shouldQueueWhatsAppVerification(record,scope="verify_due",options={}){
+    if(scope==="all_active")return true;
+    const state=whatsappVerificationState(record,options),analysis=clean(record?.whatsapp_analysis_status||"never").toLowerCase();
+    if(scope==="needs_analysis")return state.code==="needs_analysis"||["never","stale","failed","error"].includes(analysis);
+    return state.code!=="current";
+  }
   function humanNotes(record){const notes=clean(record?.notes||"");return /^Evento RD\s*:/i.test(notes)?null:(notes||null);}
   async function exportLead(record,context={}){const messages=canonicalMessages(record);const completeness=global.CriareConversationCompleteness?.calculate(record,{identity_status:context.identity_status})||{conversation_completeness_status:"complete",pending_audio_count:0,unavailable_audio_count:0,capture_may_be_incomplete:false};return {
     lead_id:String(record.id),workspace_id:record.workspace_id||context.workspace_id||null,full_client_name:clean(context.full_name||[record.first_name,record.last_name].filter(Boolean).join(" ")),
@@ -148,6 +165,6 @@
   }
   function packageFiles(batch){return {"batch_input.json":JSON.stringify(batch,null,2),"analysis_instructions.md":instructions(batch),"analysis_output_schema.json":JSON.stringify(outputSchema(batch),null,2),"README.txt":readme(batch)};}
 
-  global.CriareBatchAnalysis={version:MODULE_VERSION,schemaVersion:SCHEMA_VERSION,lightSchemaVersion:LIGHT_SCHEMA_VERSION,downloadRequestSchema:DOWNLOAD_REQUEST_SCHEMA,promptVersion:PROMPT_VERSION,lightPromptVersion:LIGHT_PROMPT_VERSION,makeBatchId,inputFilename,outputFilename,downloadRequestFilename,lightInputFilename,lightOutputFilename,canonicalMessages,conversationHash,lastMessageId,lastMessageTimestamp,exportLead,buildBatch,buildDownloadRequest,outputSchema,lightOutputSchema,instructions,readme,envelopeIssue,classifyImportPayload,validateAnalysisShape,validateImport,sanitizeAnalysis,canonicalImportKey,storedImportKeys,persistencePatch,createImportStateMachine,packageFiles,zipFiles,readResultZip,clean,cleanMultiline,normalizeId};
+  global.CriareBatchAnalysis={version:MODULE_VERSION,schemaVersion:SCHEMA_VERSION,lightSchemaVersion:LIGHT_SCHEMA_VERSION,downloadRequestSchema:DOWNLOAD_REQUEST_SCHEMA,promptVersion:PROMPT_VERSION,lightPromptVersion:LIGHT_PROMPT_VERSION,verificationDueHours:VERIFICATION_DUE_HOURS,makeBatchId,inputFilename,outputFilename,downloadRequestFilename,lightInputFilename,lightOutputFilename,canonicalMessages,conversationHash,lastMessageId,lastMessageTimestamp,whatsappVerificationState,shouldQueueWhatsAppVerification,exportLead,buildBatch,buildDownloadRequest,outputSchema,lightOutputSchema,instructions,readme,envelopeIssue,classifyImportPayload,validateAnalysisShape,validateImport,sanitizeAnalysis,canonicalImportKey,storedImportKeys,persistencePatch,createImportStateMachine,packageFiles,zipFiles,readResultZip,clean,cleanMultiline,normalizeId};
   if(typeof module!=="undefined"&&module.exports)module.exports=global.CriareBatchAnalysis;
 })(typeof globalThis!=="undefined"?globalThis:this);
