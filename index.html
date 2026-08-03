@@ -1191,7 +1191,7 @@
 <script src="whatsapp-crm-extension/capture-core.js?v=2.5.25"></script>
 <script src="audio-import-matcher.js?v=2.5.25"></script>
 <script src="conversation-completeness.js?v=2.5.1-final"></script>
-<script src="batch-analysis.js?v=2.8.3"></script>
+<script src="batch-analysis.js?v=2.8.4"></script>
 
 <script>
 /*
@@ -2606,29 +2606,8 @@ function clearPersistedAuthSession(){
 async function getSessionWithExpiredRecovery(label="sessão autenticada"){
   localAuthInfo = readLocalAuthInfo();
   if(!localAuthInfo.expired) return withTimeout(sb.auth.getSession(), BOOT_QUERY_TIMEOUT_MS, label);
-
-  const refreshToken=localAuthInfo.session?.refresh_token||null;
-  if(!refreshToken){
-    clearPersistedAuthSession();
-    return {data:{session:null},error:null,recovery:"expired_without_refresh_token"};
-  }
-
-  try{
-    const result=await withTimeout(
-      sb.auth.refreshSession({refresh_token:refreshToken}),
-      BOOT_QUERY_TIMEOUT_MS,
-      "renovação automática da sessão"
-    );
-    if(result.error)throw result.error;
-    if(!result.data?.session?.user)throw new Error("O servidor não devolveu uma sessão renovada.");
-    localAuthInfo=readLocalAuthInfo();
-    return {...result,recovery:"refreshed"};
-  }catch(error){
-    console.warn("[CRM Auth] A sessão expirada não pôde ser renovada; o login será solicitado.",error);
-    lastAuthValidationError=error;
-    clearPersistedAuthSession();
-    return {data:{session:null},error:null,recovery:"refresh_failed",recoveryError:error};
-  }
+  clearPersistedAuthSession();
+  return {data:{session:null},error:null,recovery:"expired_cleared_before_refresh"};
 }
 
 function authStateLabel(){
@@ -2797,6 +2776,8 @@ function registerAuthListener(){
 async function initSupabase(){
   if(!isConfigured()) return;
   setAppDataState("loading", "Carregando seus dados", "Conectando à base compartilhada da Criare…");
+  localAuthInfo = readLocalAuthInfo();
+  if(localAuthInfo.expired) clearPersistedAuthSession();
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth:{ storageKey:SUPABASE_AUTH_STORAGE_KEY } });
   registerAuthListener();
   localAuthInfo = readLocalAuthInfo();
@@ -3990,7 +3971,7 @@ function renderReports(){
             <div class="batchWorkflowStep batchWorkflowGpt"><b>2. EXTENSÃO → GPT</b><span>A extensão cria um único ZIP com as conversas e mídias separadas por cliente.</span><button class="ghost" id="btnCopyBatchGptInstruction" type="button">Copiar instrução para o GPT</button></div>
             <div class="batchWorkflowStep batchWorkflowImport"><b>3. GPT → CRM</b><span>Importe o ZIP retornado; somente Chefe Duro e Análise Completa serão gravados.</span><button class="primary" id="btnOpenBatchImport" type="button">3. Importar ZIP de resultados</button></div>
           </div>
-          <small>CRM 2.8.3 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
+          <small>CRM 2.8.4 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
         </div>
       </details>
       <div class="formNotice">${escapeHtml(reportPeriod)}</div>
@@ -5720,7 +5701,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=2.8.3").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=2.8.4").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
@@ -5746,7 +5727,7 @@ if("serviceWorker" in navigator){
 })();
 </script>
 <script src="whatsapp-sync-receipt.js?v=1.1.0"></script>
-<script src="batch-analysis-ui.js?v=2.8.3"></script>
+<script src="batch-analysis-ui.js?v=2.8.4"></script>
 <script src="partners.js"></script>
 </body>
 </html>
