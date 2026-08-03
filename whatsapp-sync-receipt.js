@@ -37,7 +37,12 @@
       patches.push({record,item,patch,status});
     };
     receipt.unchanged.forEach(item=>addPatch(item,"current"));
-    receipt.processed.forEach(item=>addPatch(item,"awaiting_analysis"));
+    receipt.processed.forEach(item=>{
+      const record=maps.byId.get(clean(item.lead_id));
+      const importedAlready=record?.whatsapp_analysis_status==="current"
+        && normalizeId(record.whatsapp_analysis_last_message_id)===normalizeId(item.analyzed_until_message_id);
+      addPatch(item,importedAlready?"current":"awaiting_analysis");
+    });
     receipt.failures.forEach(item=>addPatch(item,"verification_required"));
     const discoveries=[];
     for(const chat of receipt.possible_new_conversations){

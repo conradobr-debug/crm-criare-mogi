@@ -30,3 +30,11 @@ test("telefone já existente não cria novo lead",()=>{
 test("schema desconhecido é rejeitado",()=>{
   assert.throws(()=>engine.validate({...receipt,schema_version:"outro"}),/incompatível/);
 });
+
+test("retorno importado depois do GPT não rebaixa uma análise já atual",()=>{
+  const afterGpt=structuredClone(receipt);
+  afterGpt.unchanged=[];
+  afterGpt.processed=[{lead_id:"lead-2",checked_at:afterGpt.generated_at,analyzed_until_message_id:"MSG-2"}];
+  const currentRecords=records.map(record=>record.id==="lead-2"?{...record,whatsapp_analysis_last_message_id:"MSG-2"}:record);
+  assert.equal(engine.receiptPlan(afterGpt,currentRecords).patches[0].patch.whatsapp_sync_status,"current");
+});
