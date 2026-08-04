@@ -4163,7 +4163,20 @@ function render(){
     (byStage[st] ||= []).push(r);
   });
 
-  $("board").innerHTML = stages.map(stage=>{
+  const hasActiveBoardFilter = Boolean(
+    filters.search.trim() ||
+    filters.city.trim() ||
+    filters.owner !== "Todos" ||
+    filters.source !== "Todos" ||
+    (whatsappBatchStaleFilter && currentTab === "leads")
+  );
+  // Ao pesquisar, o quadro mostra somente as etapas que têm resultado. Sem filtro
+  // (ou sem resultado), todas as colunas continuam disponíveis como antes.
+  const visibleStages = hasActiveBoardFilter && data.length
+    ? stages.filter(stage => (byStage[stage] || []).length > 0)
+    : stages;
+
+  $("board").innerHTML = visibleStages.map(stage=>{
     const list = byStage[stage] || [];
     return `
       <div class="col ${list.length ? "" : "emptyStage"}" data-stage="${escapeHtml(stage)}">
@@ -4496,6 +4509,7 @@ function updateModalMode(kind){
 function openModal(record=null, options={}){
   const prevSearch = $("fSearch").value;
   const prevCity = $("fCity").value;
+  const prefill = options.prefill && typeof options.prefill === "object" ? options.prefill : {};
 
   const originalRecord=record;
   record=normalizeLegacyWhatsAppRecord(record);
@@ -4515,14 +4529,14 @@ function openModal(record=null, options={}){
   const modalAvatarUrl = whatsappAvatarUrls.get(record?.whatsapp_profile_photo_path) || "";
   $("modalCustomerAvatar").hidden = !modalAvatarUrl;
   $("modalCustomerAvatar").src = modalAvatarUrl;
-  $("firstName").value = record?.first_name || "";
-  $("lastName").value = record?.last_name || "";
-  $("phone").value = record?.phone || "";
-  $("city").value = record?.city || "";
-  $("rooms").value = record?.rooms || "";
-  $("email").value = record?.email || "";
-  $("estimate").value = (record?.estimate ?? "");
-  const noteParts=splitLeadNotes(record?.notes || "");
+  $("firstName").value = record?.first_name || prefill.first_name || "";
+  $("lastName").value = record?.last_name || prefill.last_name || "";
+  $("phone").value = record?.phone || prefill.phone || "";
+  $("city").value = record?.city || prefill.city || "";
+  $("rooms").value = record?.rooms || prefill.rooms || "";
+  $("email").value = record?.email || prefill.email || "";
+  $("estimate").value = (record?.estimate ?? prefill.estimate ?? "");
+  const noteParts=splitLeadNotes(record?.notes || prefill.notes || "");
   $("notes").value = noteParts.human;
   $("notesTechnical").value = noteParts.technical;
   renderTechnicalLeadMeta(noteParts.technical);
@@ -4568,7 +4582,7 @@ function openModal(record=null, options={}){
   setLeadSectionOpen("whatsappSection",false);
 
   // selects
-  fillSelect($("source"), config.sources, record?.source || config.sources[0]);
+  fillSelect($("source"), config.sources, record?.source || prefill.source || config.sources[0]);
   $("owner").innerHTML = profiles.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.display_name)}</option>`).join("");
   $("owner").value = record?.owner_id || session?.user?.id || (profiles[0]?.id || "");
 
