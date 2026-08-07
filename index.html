@@ -872,7 +872,8 @@
               <em id="whatsappSectionHardBoss"></em>
             </button>
             <div class="leadSectionActions">
-              <button class="whatsappAction" id="btnWhatsApp" type="button">Abrir WhatsApp Web</button>
+              <button class="whatsappAction" id="btnWhatsAppNative" type="button">WhatsApp</button>
+              <button class="whatsappAction" id="btnWhatsApp" type="button">Whats Web</button>
               <button class="primary analyzeConversationAction" id="btnUpdateOfficialAnalysis" type="button">Capturar conversa</button>
               <button class="ghost analyzeConversationAction" id="btnCaptureOpenWhatsApp" type="button">Capturar conversa aberta</button>
             </div>
@@ -973,7 +974,8 @@
         <button class="ghost" id="btnCancel">Cancelar</button>
         <button class="primary" id="btnSave">Salvar</button>
         <button class="primary" id="btnOutlook">Salvar e criar compromisso</button>
-        <button class="whatsappAction" id="btnWhatsAppFooter" type="button">Abrir WhatsApp</button>
+      <button class="whatsappAction" id="btnWhatsAppNativeFooter" type="button">WhatsApp</button>
+      <button class="whatsappAction" id="btnWhatsAppFooter" type="button">Whats Web</button>
         <button class="ghost" id="btnLogContact">Registrar contato agora</button>
         <button class="primary" id="btnQuickClosed" style="border-color: rgba(76,237,187,.75); background: rgba(76,237,187,.14)">Fechou</button>
         <button class="ghost" id="btnQuickLost" style="border-color: rgba(255,216,138,.65); background: rgba(255,216,138,.10)">Perdeu</button>
@@ -1393,15 +1395,35 @@ function renderPhoneIdentityStatus(record=null){
   box.className=`phoneIdentityStatus ${state.ready?"valid":state.code==="phone_duplicate"?"warning":"invalid"}`;
   box.innerHTML=`<b>${escapeHtml(state.label)}</b><div>Número informado: ${escapeHtml(raw)}</div><div>Número que será usado no WhatsApp: ${escapeHtml(canonical)}</div><div>${escapeHtml(state.detail)}</div>${state.duplicates[0]?`<button type="button" class="ghost" data-open-phone-duplicate="${escapeHtml(state.duplicates[0].id)}">Abrir lead existente</button>`:""}`;
   const manualNew=!$("id").value;$("btnSave").disabled=manualNew?!state.ready:!state.normalized.is_valid||Boolean(state.duplicates.length);
-  const captureAllowed=Boolean($("id").value)&&state.ready;["btnWhatsApp","btnWhatsAppFooter","btnUpdateOfficialAnalysis","btnCaptureOpenWhatsApp"].forEach(id=>{if($(id))$(id).disabled=!captureAllowed;});
+const captureAllowed=Boolean($("id").value)&&state.ready;["btnWhatsApp","btnWhatsAppFooter","btnWhatsAppNative","btnWhatsAppNativeFooter","btnUpdateOfficialAnalysis","btnCaptureOpenWhatsApp"].forEach(id=>{if($(id))$(id).disabled=!captureAllowed;});
   return state;
 }
 function requireWhatsAppIdentity(record){const state=phoneIdentityState(record);if(!state.ready){const error=new Error(`${state.label}. ${state.detail}`);error.code=state.code;throw error;}return state.normalized;}
+function whatsappConversationUrls(identity){
+  const number=identity.normalized_e164.slice(1);
+  return {
+    native:`whatsapp://send?phone=${encodeURIComponent(number)}`,
+    web:`https://web.whatsapp.com/send/?phone=${encodeURIComponent(number)}&type=phone_number&app_absent=0`
+  };
+}
+function getWhatsAppIdentityForOpen(record=null){
+  const target=record||{phone:$("phone").value,id:$("id").value};
+  return requireWhatsAppIdentity(target);
+}
 function openWhatsAppFor(record=null){
-  const target=record||{phone:$("phone").value,id:$("id").value};let identity;try{identity=requireWhatsAppIdentity(target);}catch(error){return toast(error.message,{error:true,duration:10000});}
-  const number = identity.normalized_e164.slice(1);
-  const webUrl=`https://web.whatsapp.com/send/?phone=${number}&type=phone_number&app_absent=0`;
-  window.open(webUrl,"_blank","noopener,noreferrer");
+  let identity;try{identity=getWhatsAppIdentityForOpen(record);}catch(error){return toast(error.message,{error:true,duration:10000});}
+  window.open(whatsappConversationUrls(identity).web,"_blank","noopener,noreferrer");
+}
+function openWhatsAppNativeFor(record=null){
+  let identity;try{identity=getWhatsAppIdentityForOpen(record);}catch(error){return toast(error.message,{error:true,duration:10000});}
+  const nativeUrl=whatsappConversationUrls(identity).native;
+  const link=document.createElement("a");
+  link.href=nativeUrl;
+  link.style.display="none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  toast("Solicitação enviada ao aplicativo do WhatsApp. Se ele não abrir, use Whats Web.",{duration:7000});
 }
 const WHATSAPP_EXTENSION_VERSION = "2.3.22";
 const WHATSAPP_BATCH_AUDIO_ENABLED = false;
@@ -4917,6 +4939,8 @@ $("pipeline").addEventListener("change", ()=>{
 $("stage").addEventListener("change", updateLostReasonVisibility);
 $("btnWhatsApp").addEventListener("click", ()=>openWhatsAppFor());
 $("btnWhatsAppFooter").addEventListener("click", ()=>openWhatsAppFor());
+$("btnWhatsAppNative").addEventListener("click", ()=>openWhatsAppNativeFor());
+$("btnWhatsAppNativeFooter").addEventListener("click", ()=>openWhatsAppNativeFor());
 $("btnRefreshOfficialTimeline").addEventListener("click",()=>{
   const record=records.find(item=>item.id===$("id").value)||null;
   if(currentOfficialConversation)loadOfficialWhatsApp(record,{notify:true});
