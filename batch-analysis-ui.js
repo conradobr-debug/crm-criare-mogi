@@ -3,7 +3,7 @@
   if(window.__criareBatchAnalysisUiLoaded)return;
   window.__criareBatchAnalysisUiLoaded=true;
 
-  const CRM_BATCH_VERSION="2.8.5";
+  const CRM_BATCH_VERSION="2.8.6";
   const CANDIDATE_TABLE="crm_whatsapp_lead_candidates";
   const engine=window.CriareBatchAnalysis;
   const syncEngine=window.CriareWhatsAppSyncReceipt;
@@ -231,7 +231,19 @@
   ["batchExportScope","batchExportOwner","batchExportStage","batchExportDateFrom","batchExportDateTo","batchExportClosed","batchExportLost"].forEach(id=>$(id).addEventListener("change",()=>refreshExportPicker(true)));
   $("batchExportLeadPicker").addEventListener("change",event=>{const input=event.target.closest("[data-batch-lead]");if(!input)return;input.checked?state.selected.add(input.dataset.batchLead):state.selected.delete(input.dataset.batchLead);setPanel("batchExportPanel","batchExportCount","batchExportStatus",`${state.selected.size} contato(s) selecionado(s)`,"Confira a seleção e baixe a fila.");$("btnGenerateBatchZip").disabled=!state.selected.size;});
   $("btnGenerateBatchZip").addEventListener("click",exportBatch);
-  window.CriareBatchAnalysisUI={openForRecords(ids=[]){populateExportFilters();refreshExportPicker(true);if(ids.length)state.selected=new Set(ids.map(String));refreshExportPicker(false);$("batchExportModal").showModal();}};
+  window.CriareBatchAnalysisUI={
+    openForRecords(ids=[]){populateExportFilters();refreshExportPicker(true);if(ids.length)state.selected=new Set(ids.map(String));refreshExportPicker(false);$("batchExportModal").showModal();},
+    openForLossReview(ids=[]){
+      populateExportFilters();
+      $("batchExportLost").checked=true;
+      $("batchExportScope").value="needs_analysis";
+      refreshExportPicker(true);
+      const available=new Set(state.candidates.map(record=>String(record.id)));
+      state.selected=new Set(ids.map(String).filter(id=>available.has(id)));
+      refreshExportPicker(false);
+      $("batchExportModal").showModal();
+    }
+  };
   $("btnCancelBatchExport").addEventListener("click",()=>{state.cancelled=true;$("batchExportModal").close();});$("btnCloseBatchExport").addEventListener("click",()=>$("batchExportModal").close());
   $("btnCloseBatchImport").addEventListener("click",()=>$("batchImportModal").close());$("btnChooseBatchImport").addEventListener("click",()=>$("batchImportFile").click());
   $("batchImportFile").addEventListener("change",event=>{const file=event.target.files?.[0];if(file)handleImportFile(file);event.target.value="";});
