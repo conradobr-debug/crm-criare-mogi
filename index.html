@@ -1217,7 +1217,7 @@ const STAGE_PHASES = {
   "Negociação":"Vender", "Acompanhamento":"Vender", "Perdido":"Encerrado"
 };
 const DEFAULT_SOURCES = ["WhatsApp","Campanha de Facebook","Cliente de Porta de loja","Google","Indicação","Lead Online"];
-const DEFAULT_LOST_REASONS = ["Preço","Prazo","Concorrente","Sem retorno (sumiu)","Mudou de ideia","Sem orçamento no momento","Outro"];
+const DEFAULT_LOST_REASONS = ["Preço","Prazo","Concorrente","Sem retorno (sumiu)","Mudou de ideia","Sem orçamento no momento","Cancelado pelo cliente","Outro"];
 
 /* ===== DB tables (SQL no guia) ===== */
 const TBL_RECORDS = "crm_records";
@@ -1225,6 +1225,7 @@ const TBL_PROFILES = "crm_profiles";
 const TBL_CONFIG = "crm_config"; // id=1, sources jsonb, lost_reasons jsonb
 const TBL_EVENTS = "crm_record_events";
 const TBL_WEEKLY_REPORTS = "crm_weekly_reports";
+const TBL_LOSS_ARCHIVE = "crm_record_loss_archive";
 const TBL_PENDING = "crm_pending_items";
 const TBL_PENDING_ATTACHMENTS = "crm_pending_attachments";
 const TBL_WHATSAPP_MESSAGES = "crm_whatsapp_messages";
@@ -2513,6 +2514,9 @@ let partnerContents = []; // banco de conteúdos para parceiros
 let eventsSupported = true;
 let weeklyReports = [];
 let weeklyReportsSupported = true;
+let lossArchive = [];
+let lossArchiveSupported = true;
+let lossReportFilters = { from:"", to:"", types:new Set(["lost","cancelled","deleted"]) };
 let pendingItems = [];
 let pendingAttachments = [];
 let pendingPhotosBuffer = [];
@@ -2923,6 +2927,7 @@ function lockApp(){
   profiles = [];
   recordEvents = [];
   weeklyReports = [];
+  lossArchive = [];
   pendingItems = [];
   pendingAttachments = [];
   whatsappAvatarUrls = new Map();
@@ -3070,6 +3075,22 @@ async function fetchWeeklyReports(){
     toast("Novo resumo semanal disponível em Relatórios.");
   }
   hasInitialWeeklySnapshot = true;
+  return true;
+}
+
+async function fetchLossArchive(){
+  if(!sb || !session?.user || !lossArchiveSupported) return false;
+  const { data, error } = await sb
+    .from(TBL_LOSS_ARCHIVE)
+    .select("*")
+    .order("deleted_at", { ascending:false })
+    .limit(2000);
+  if(error){
+    if(["42P01","PGRST205"].includes(error.code)) lossArchiveSupported=false;
+    else console.warn("[CRM Relatórios] Falha ao carregar exclusões.", error);
+    return false;
+  }
+  lossArchive=data||[];
   return true;
 }
 
@@ -3254,12 +3275,13 @@ async function bootAfterLogin(){
     void Promise.allSettled([
       withTimeout(fetchRecordEvents(), BOOT_QUERY_TIMEOUT_MS, "histórico de eventos"),
       withTimeout(fetchWeeklyReports(), BOOT_QUERY_TIMEOUT_MS, "relatórios"),
+      withTimeout(fetchLossArchive(), BOOT_QUERY_TIMEOUT_MS, "exclusões"),
       withTimeout(fetchPendingData(), BOOT_QUERY_TIMEOUT_MS, "crm_pending_items"),
       withTimeout(fetchOutlookStatus(), BOOT_QUERY_TIMEOUT_MS, "Outlook"),
       withTimeout(typeof partnerFetchContents === "function" ? partnerFetchContents() : Promise.resolve(), BOOT_QUERY_TIMEOUT_MS, "parceiros")
     ]).then(results => {
       results.forEach((result, index) => {
-        if(result.status === "rejected") noteOptionalBootFailure(["Histórico", "Relatórios", "Pendências", "Outlook", "Parceiros"][index], result.reason);
+        if(result.status === "rejected") noteOptionalBootFailure(["Histórico", "Relatórios", "Exclusões", "Pendências", "Outlook", "Parceiros"][index], result.reason);
       });
       render();
     });
@@ -3426,7 +3448,7 @@ const syncController = (() => {
   async function refresh(reason="sincronização", notifyNew=true, showError=false){
     const ok = await fetchRecords({ reason, notifyNew, showError });
     if(ok){
-      await Promise.all([fetchRecordEvents(), fetchWeeklyReports(), fetchPendingData(), fetchOutlookStatus()]);
+      await Promise.all([fetchRecordEvents(), fetchWeeklyReports(), fetchLossArchive(), fetchPendingData(), fetchOutlookStatus()]);
       if(currentTab === "reports") render();
     }
     return ok;
@@ -3876,6 +3898,71 @@ async function deletePendingItem(){
   toast("Pendência excluída.");
 }
 
+function reportDateInput(date){
+  const offset=date.getTimezoneOffset()*60000;
+  return new Date(date.getTime()-offset).toISOString().slice(0,10);
+}
+function ensureLossReportDates(){
+  if(!lossReportFilters.from){const d=new Date();d.setDate(d.getDate()-6);lossReportFilters.from=reportDateInput(d);}
+  if(!lossReportFilters.to)lossReportFilters.to=reportDateInput(new Date());
+}
+function isCancellationReason(reason){return /cancelad|desist/i.test(String(reason||""));}
+function lossAnalysis(record){
+  const hard=String(record?.whatsapp_analysis_hard_boss||"").trim();
+  const full=String(record?.whatsapp_analysis_full||"").trim();
+  return {available:Boolean(hard||full),summary:hard||full||"PENDENTE DE CONFIRMAÇÃO"};
+}
+function lossReportEntries(){
+  ensureLossReportDates();
+  const current=records.filter(record=>!isSpecifier(record)&&record.pipeline==="lead"&&record.stage==="Perdido").map(record=>{
+    const type=isCancellationReason(record.lost_reason)?"cancelled":"lost";
+    return {id:`record:${record.id}`,source:"record",type,occurred_at:record.stage_entered_at||record.updated_at||record.created_at,record,reason:record.lost_reason||"PENDENTE DE CONFIRMAÇÃO"};
+  });
+  const deleted=lossArchive.map(item=>{
+    const record=item.record_snapshot||{};
+    return {id:`archive:${item.id}`,source:"archive",type:"deleted",occurred_at:item.deleted_at,record,reason:item.deletion_reason||"Exclusão no CRM"};
+  });
+  const from=new Date(`${lossReportFilters.from}T00:00:00`),to=new Date(`${lossReportFilters.to}T23:59:59.999`);
+  return [...current,...deleted].filter(entry=>{
+    const date=new Date(entry.occurred_at);
+    return lossReportFilters.types.has(entry.type)&&!Number.isNaN(date.getTime())&&date>=from&&date<=to;
+  }).sort((a,b)=>new Date(b.occurred_at)-new Date(a.occurred_at));
+}
+function lossTypeLabel(type){return ({lost:"Perdido",cancelled:"Cancelado",deleted:"Excluído"})[type]||type;}
+function downloadLossReportCsv(entries){
+  const rows=[["Data","Situação","Cliente","Responsável","Motivo","Perfil","Análise de WhatsApp"]].concat(entries.map(entry=>[
+    fmtBRDate(entry.occurred_at),lossTypeLabel(entry.type),fullName(entry.record),profileNameById(entry.record.owner_id),entry.reason,entry.record.lead_quality||"PENDENTE DE CONFIRMAÇÃO",lossAnalysis(entry.record).available?"Disponível":"PENDENTE DE CONFIRMAÇÃO"
+  ]));
+  const csv=rows.map(row=>row.map(value=>`"${String(value??"").replaceAll('"','""')}"`).join(";")).join("\n");
+  const url=URL.createObjectURL(new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"}));
+  const link=document.createElement("a");link.href=url;link.download=`criare-relatorio-perdas-${lossReportFilters.from}-a-${lossReportFilters.to}.csv`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function renderLossReport(){
+  const entries=lossReportEntries();
+  const withAnalysis=entries.filter(entry=>lossAnalysis(entry.record).available);
+  const outOfProfile=entries.filter(entry=>entry.record.lead_quality==="Fora do perfil");
+  const reasons=new Map();entries.forEach(entry=>reasons.set(entry.reason,(reasons.get(entry.reason)||0)+1));
+  const reasonRows=[...reasons.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6).map(([reason,count])=>`<div class="reportRow"><span>${escapeHtml(reason)}</span><b>${count}</b></div>`).join("")||'<div class="empty">Nenhuma perda no período selecionado.</div>';
+  const rows=entries.slice(0,100).map(entry=>{const analysis=lossAnalysis(entry.record);return `<div class="reportRow"><div style="display:flex;justify-content:space-between;gap:10px"><b>${escapeHtml(fullName(entry.record)||"Registro sem nome")}</b><span>${escapeHtml(lossTypeLabel(entry.type))} • ${escapeHtml(fmtBRDate(entry.occurred_at))}</span></div><div style="color:var(--muted)">${escapeHtml(entry.reason)} • ${escapeHtml(entry.record.lead_quality||"PENDENTE DE CONFIRMAÇÃO")} • ${escapeHtml(profileNameById(entry.record.owner_id))}</div><div style="margin-top:5px">${analysis.available?escapeHtml(analysis.summary.slice(0,280)):"<em>PENDENTE DE CONFIRMAÇÃO: conversa ainda não analisada.</em>"}</div></div>`;}).join("")||'<div class="empty">Nenhum lead perdido, cancelado ou excluído no período selecionado.</div>';
+  const pendingIds=entries.filter(entry=>entry.source==="record"&&!lossAnalysis(entry.record).available).map(entry=>entry.record.id);
+  return `<section class="sectionCard" style="max-width:none;flex-basis:100%"><div class="sectionHd"><span>Análise de perdas</span><span>${entries.length} caso(s)</span></div><div class="sectionBody"><p style="margin-top:0;color:var(--muted)">Use esta visão para revisar perdas com base no motivo registrado, perfil do lead e análise factual da conversa. Ela não atribui causa sem evidência.</p><div class="batchFilterGrid"><label>Início<input id="lossReportFrom" type="date" value="${escapeHtml(lossReportFilters.from)}" /></label><label>Fim<input id="lossReportTo" type="date" value="${escapeHtml(lossReportFilters.to)}" /></label><label><input id="lossTypeLost" type="checkbox" ${lossReportFilters.types.has("lost")?"checked":""}/> Perdidos</label><label><input id="lossTypeCancelled" type="checkbox" ${lossReportFilters.types.has("cancelled")?"checked":""}/> Cancelados</label><label><input id="lossTypeDeleted" type="checkbox" ${lossReportFilters.types.has("deleted")?"checked":""}/> Excluídos</label></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0"><button class="ghost" id="btnLossReportWeek" type="button">Últimos 7 dias</button><button class="primary" id="btnApplyLossReport" type="button">Atualizar relatório</button><button class="ghost" id="btnExportLossReport" type="button">Baixar CSV</button>${pendingIds.length?`<button class="ghost" id="btnAnalyzeLossConversations" type="button">Analisar ${pendingIds.length} conversa(s) pendente(s)</button>`:""}</div><div class="summaryGrid"><div class="summaryCard"><div class="t">Perdas no período</div><div class="n">${entries.length}</div><div class="d">Registros dentro do filtro.</div></div><div class="summaryCard"><div class="t">Com análise de conversa</div><div class="n">${entries.length?Math.round((withAnalysis.length/entries.length)*100):0}%</div><div class="d">${withAnalysis.length} caso(s) com evidência registrada.</div></div><div class="summaryCard"><div class="t">Fora do perfil</div><div class="n">${outOfProfile.length}</div><div class="d">Classificação comercial registrada.</div></div><div class="summaryCard"><div class="t">Sem evidência de conversa</div><div class="n">${entries.length-withAnalysis.length}</div><div class="d">PENDENTE DE CONFIRMAÇÃO.</div></div></div><div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px"><section class="sectionCard"><div class="sectionHd"><span>Motivos registrados</span></div><div class="sectionBody">${reasonRows}</div></section><section class="sectionCard" style="max-width:none;flex:2 1 600px"><div class="sectionHd"><span>Lista para revisão</span><span>até 100 casos</span></div><div class="sectionBody">${rows}</div></section></div>${lossArchiveSupported?"":"<div class=\"formNotice\">Exclusões anteriores à implantação do histórico: PENDENTE DE CONFIRMAÇÃO.</div>"}</div></section>`;
+}
+function wireLossReport(){
+  const apply=$("btnApplyLossReport"),week=$("btnLossReportWeek"),download=$("btnExportLossReport"),analyze=$("btnAnalyzeLossConversations");
+  if(apply)apply.addEventListener("click",()=>{
+    lossReportFilters.from=$("lossReportFrom").value||lossReportFilters.from;
+    lossReportFilters.to=$("lossReportTo").value||lossReportFilters.to;
+    lossReportFilters.types=new Set(["lost","cancelled","deleted"].filter(type=>$("lossType"+type[0].toUpperCase()+type.slice(1))?.checked));
+    render();
+  });
+  if(week)week.addEventListener("click",()=>{const end=new Date(),start=new Date();start.setDate(start.getDate()-6);lossReportFilters.from=reportDateInput(start);lossReportFilters.to=reportDateInput(end);render();});
+  if(download)download.addEventListener("click",()=>downloadLossReportCsv(lossReportEntries()));
+  if(analyze)analyze.addEventListener("click",()=>{
+    const ids=lossReportEntries().filter(entry=>entry.source==="record"&&!lossAnalysis(entry.record).available).map(entry=>entry.record.id);
+    window.CriareBatchAnalysisUI?.openForLossReview(ids);
+  });
+}
+
 function renderReports(){
   const now = new Date();
   const since = new Date(now.getTime() - 7*24*60*60*1000);
@@ -3899,32 +3986,32 @@ function renderReports(){
     : null;
 
   const qualityDist = Object.fromEntries(LEAD_QUALITIES.map(q=>[q,0]));
-  leads.filter(r=>r.pipeline==="lead").forEach(r=>{
+  activeLeads.forEach(r=>{
     const q = LEAD_QUALITIES.includes(r.lead_quality) ? r.lead_quality : "Não avaliado";
     qualityDist[q] = (qualityDist[q]||0)+1;
   });
-  const assessed = Math.max(0, leads.filter(r=>r.pipeline==="lead").length - (qualityDist["Não avaliado"]||0));
+  const assessed = Math.max(0, activeLeads.length - (qualityDist["Não avaliado"]||0));
   const criareFit = (qualityDist["Perfil Criare"]||0) + (qualityDist["Potencial"]||0);
   const latestWeekly = weeklyReports[0] || null;
-  const savedSummary = latestWeekly?.summary || null;
   const shown = {
-    newLeads: savedSummary?.new_leads ?? createdThisWeek,
-    stageMoves: savedSummary?.stage_moves ?? stageMoves,
-    contacts: savedSummary?.contacts ?? contacts,
-    coverage: savedSummary?.followup_coverage_pct ?? followupCoverage,
-    fitPct: savedSummary?.fit_pct ?? (assessed ? Math.round((criareFit/assessed)*100) : null),
-    unassessed: savedSummary?.unassessed_leads ?? (qualityDist["Não avaliado"]||0),
-    overdue: savedSummary?.overdue_followups ?? overdue.length
+    newLeads: createdThisWeek,
+    stageMoves,
+    contacts,
+    coverage: followupCoverage,
+    fitPct: assessed ? Math.round((criareFit/assessed)*100) : null,
+    unassessed: qualityDist["Não avaliado"]||0,
+    overdue: overdue.length
   };
-  const reportPeriod = latestWeekly
-    ? `Resumo programado de ${fmtBRDate(`${latestWeekly.week_start}T12:00:00`)} a ${fmtBRDate(`${latestWeekly.week_end}T12:00:00`)} • gerado ${fmtBRDateTime(latestWeekly.generated_at)}`
-    : "Visão ao vivo dos últimos 7 dias • o primeiro resumo fixo será gerado na próxima segunda-feira às 09:00";
+  const reportPeriod = "Visão operacional ao vivo • últimos 7 dias";
+  const weeklySnapshotNotice = latestWeekly
+    ? `Último fechamento semanal preservado: ${fmtBRDate(`${latestWeekly.week_start}T12:00:00`)} a ${fmtBRDate(`${latestWeekly.week_end}T12:00:00`)} • gerado ${fmtBRDateTime(latestWeekly.generated_at)}.`
+    : "O primeiro fechamento semanal será gerado na próxima segunda-feira às 09:00.";
 
   renderKPIs(activeLeads);
 
   const qualityRows = LEAD_QUALITIES.map(q=>{
     const value = qualityDist[q] || 0;
-    const total = Math.max(1, leads.filter(r=>r.pipeline==="lead").length);
+    const total = Math.max(1, activeLeads.length);
     const pct = Math.round((value/total)*100);
     return `<div class="reportRow"><div style="display:flex;justify-content:space-between;gap:10px"><span>${escapeHtml(q)}</span><b>${value} • ${pct}%</b></div><div class="reportBar"><span style="width:${pct}%"></span></div></div>`;
   }).join("");
@@ -3960,14 +4047,14 @@ function renderReports(){
             <div class="batchWorkflowStep batchWorkflowGpt"><b>2. EXTENSÃO → GPT</b><span>A extensão cria um único ZIP com as conversas e mídias separadas por cliente.</span><button class="ghost" id="btnCopyBatchGptInstruction" type="button">Copiar instrução para o GPT</button></div>
             <div class="batchWorkflowStep batchWorkflowImport"><b>3. GPT → CRM</b><span>Importe o ZIP retornado; somente Chefe Duro e Análise Completa serão gravados.</span><button class="primary" id="btnOpenBatchImport" type="button">3. Importar ZIP de resultados</button></div>
           </div>
-          <small>CRM 2.8.5 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
+          <small>CRM 2.8.7 • formato de análise ${escapeHtml(window.CriareBatchAnalysis?.schemaVersion || "PENDENTE DE CONFIRMAÇÃO")} • compatível com resultados 1.0</small>
         </div>
       </details>
-      <div class="formNotice">${escapeHtml(reportPeriod)}</div>
+      <div class="formNotice"><b>${escapeHtml(reportPeriod)}</b><br/>${escapeHtml(weeklySnapshotNotice)}</div>
       <div class="summaryGrid">
-        <div class="summaryCard"><div class="t">Novos leads • semana</div><div class="n">${shown.newLeads}</div><div class="d">Entradas recentes no funil.</div></div>
-        <div class="summaryCard"><div class="t">Movimentações • semana</div><div class="n">${shown.stageMoves}</div><div class="d">Mudanças de etapa registradas.</div></div>
-        <div class="summaryCard"><div class="t">Contatos • semana</div><div class="n">${shown.contacts}</div><div class="d">Atendimentos marcados como realizados.</div></div>
+        <div class="summaryCard"><div class="t">Novos leads • 7 dias</div><div class="n">${shown.newLeads}</div><div class="d">Entradas recentes no funil.</div></div>
+        <div class="summaryCard"><div class="t">Movimentações • 7 dias</div><div class="n">${shown.stageMoves}</div><div class="d">Mudanças de etapa registradas.</div></div>
+        <div class="summaryCard"><div class="t">Contatos registrados • 7 dias</div><div class="n">${shown.contacts}</div><div class="d">Registros manuais de atendimento.</div></div>
         <div class="summaryCard"><div class="t">Leads com agenda futura</div><div class="n">${shown.coverage===null ? "—" : `${shown.coverage}%`}</div><div class="d">Meta recomendada: 100% dos leads ativos.</div></div>
         <div class="summaryCard"><div class="t">Perfil Criare ou potencial</div><div class="n">${shown.fitPct===null ? "—" : `${shown.fitPct}%`}</div><div class="d">Considera apenas leads já avaliados.</div></div>
         <div class="summaryCard"><div class="t">Sem avaliação de perfil</div><div class="n">${shown.unassessed}</div><div class="d">Precisam de qualificação comercial.</div></div>
@@ -3980,6 +4067,7 @@ function renderReports(){
         <section class="sectionCard"><div class="sectionHd"><span>Prioridade de acompanhamento</span><span>${attention.length}</span></div><div class="sectionBody">${attentionRows}</div></section>
         <section class="sectionCard"><div class="sectionHd"><span>Movimentação recente</span><span>Últimos 7 dias</span></div><div class="sectionBody">${movementRows}</div></section>
       </div>
+      ${renderLossReport()}
     </div>`;
 }
 
@@ -4159,6 +4247,7 @@ function render(){
   if(currentTab==="reports"){
     $("board").innerHTML = renderReports();
     wireBatchAnalysisReport();
+    wireLossReport();
     return;
   }
   if(currentTab==="pending"){
@@ -4847,7 +4936,7 @@ function setTab(tab){
                tab==="specifiers" ? "Relacionamento contínuo com arquitetos, designers, corretores e parceiros." :
                tab==="pending" ? "Assistências, vistorias, peças e compras acompanhadas até a conclusão." :
                tab==="completeness" ? "Conferência factual de capturas, áudios pendentes e análises desatualizadas." :
-               tab==="reports" ? "Resumo semanal: movimentação, qualidade e cobertura de acompanhamento." :
+               tab==="reports" ? "Visão operacional: últimos 7 dias, qualidade atual e análise de perdas." :
                "Config: origens e motivos de perda (compartilhado).";
 
   $("boardHint").innerHTML = `<div>${escapeHtml(hint)}</div><div></div>`;
@@ -5732,7 +5821,7 @@ if("serviceWorker" in navigator){
 })();
 </script>
 <script src="whatsapp-sync-receipt.js?v=1.1.0"></script>
-<script src="batch-analysis-ui.js?v=2.8.5"></script>
+<script src="batch-analysis-ui.js?v=2.8.6"></script>
 <script src="partners.js"></script>
 </body>
 </html>
