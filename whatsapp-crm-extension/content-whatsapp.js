@@ -8,6 +8,10 @@ function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 
 const LOCAL_TRANSCRIBER_URL = "http://127.0.0.1:32123/v1/transcribe";
 const AUDIO_MAX_BYTES = 15 * 1024 * 1024;
+// Áudios antigos podem continuar com o player em carregamento no WhatsApp Web.
+// O exportador precisa prosseguir com a conversa, mantendo no manifesto o motivo
+// da mídia não ter sido obtida.
+const AUDIO_MEDIA_WAIT_TIMEOUT_MS = 15000;
 // `data-icon` é usado em controles auxiliares do WhatsApp e não identifica
 // sozinho uma mensagem de voz. A leitura anterior buscava esses ícones em uma
 // raiz ampla e, em alguns layouts, classificava a bolha de texto seguinte como
@@ -89,7 +93,8 @@ function bytesToBase64(buffer){const bytes=new Uint8Array(buffer);let binary="";
 async function extractAudioFile(node,id,sourceOverride=""){
   const source=String(sourceOverride||audioSource(node)||"");const base=audioMeta(id,{source:source?(source.startsWith("blob:")?"blob":"url"):"none",durationSeconds:audioDuration(node)});
   if(!source){base.extractionStatus="unavailable";base.transcriptionStatus="unavailable";base.error="O WhatsApp não expôs o arquivo de áudio.";return base;}
-  try{const response=await fetch(source,{credentials:"include",cache:"no-store"});if(!response.ok)throw new Error(`download_http_${response.status}`);const blob=await response.blob();if(!blob.size)throw new Error("arquivo_vazio");if(blob.size>AUDIO_MAX_BYTES)throw new Error("audio_maior_que_15mb");const buffer=await blob.arrayBuffer();const sha256=await sha256Hex(buffer);return {...base,sourceAvailable:true,extractionStatus:"extracted",mimeType:blob.type||"audio/ogg",sizeBytes:blob.size,sha256,buffer};}catch(error){return {...base,extractionStatus:"error",transcriptionStatus:"error",error:error.message||"Não foi possível obter o áudio."};}
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),AUDIO_MEDIA_WAIT_TIMEOUT_MS);
+  try{const response=await fetch(source,{credentials:"include",cache:"no-store",signal:controller.signal});if(!response.ok)throw new Error(`download_http_${response.status}`);const blob=await response.blob();if(!blob.size)throw new Error("arquivo_vazio");if(blob.size>AUDIO_MAX_BYTES)throw new Error("audio_maior_que_15mb");const buffer=await blob.arrayBuffer();const sha256=await sha256Hex(buffer);return {...base,sourceAvailable:true,extractionStatus:"extracted",mimeType:blob.type||"audio/ogg",sizeBytes:blob.size,sha256,buffer};}catch(error){const timedOut=error?.name==="AbortError";return {...base,extractionStatus:timedOut?"unavailable":"error",transcriptionStatus:timedOut?"unavailable":"error",error:timedOut?"Áudio não disponibilizado pelo WhatsApp em até 15 segundos; ignorado para continuar a exportação.":error.message||"Não foi possível obter o áudio."};}finally{clearTimeout(timer);}
 }
 async function transcribeLocally(meta){
   if(!meta?.buffer)return meta;
@@ -907,8 +912,8 @@ async function extractLoadedMessages(request={}){
 
 function audioDownloadButton(node){return node.querySelector('[data-testid*="download" i],button[aria-label*="download" i],[aria-label*="baixar" i]');}
 function audioPlayControl(node){return node.querySelector('[data-testid*="audio" i],[aria-label*="reproduzir" i],[aria-label*="play" i],audio');}
-async function waitForAudioMedia(node,{timeoutMs=9000}={}){const deadline=Date.now()+timeoutMs;while(Date.now()<deadline){const source=audioSource(node);if(source)return source;await sleep(450);}return "";}
-async function waitForDownloadState(node,{timeoutMs=9000}={}){const deadline=Date.now()+timeoutMs;let buttonRemoved=false;while(Date.now()<deadline){buttonRemoved=buttonRemoved||!audioDownloadButton(node);const source=audioSource(node);if(source)return {source,buttonRemoved};await sleep(450);}return {source:"",buttonRemoved};}
+async function waitForAudioMedia(node,{timeoutMs=AUDIO_MEDIA_WAIT_TIMEOUT_MS}={}){const deadline=Date.now()+timeoutMs;while(Date.now()<deadline){const source=audioSource(node);if(source)return source;await sleep(450);}return "";}
+async function waitForDownloadState(node,{timeoutMs=AUDIO_MEDIA_WAIT_TIMEOUT_MS}={}){const deadline=Date.now()+timeoutMs;let buttonRemoved=false;while(Date.now()<deadline){buttonRemoved=buttonRemoved||!audioDownloadButton(node);const source=audioSource(node);if(source)return {source,buttonRemoved};await sleep(450);}return {source:"",buttonRemoved};}
 function extensionMessage(message){
   return new Promise(resolve=>{
     chrome.runtime.sendMessage(message,response=>{
