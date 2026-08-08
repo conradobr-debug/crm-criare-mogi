@@ -203,16 +203,21 @@
   }
   async function applyExtensionReceipt(){
     if(!isAdminUser()||!state.receiptPlan||state.receiptApplied)return;
-    const button=$("btnApplyExtensionReceipt");button.disabled=true;button.textContent="Atualizando…";let saved=0,failed=0,candidatesSaved=0;
-    for(const item of state.receiptPlan.patches){
-      const {data,error}=await sb.from(TBL_RECORDS).update(item.patch).eq("id",item.record.id).select("*").single();
-      if(error){failed+=1;continue;}replaceRecord(data);saved+=1;
+    const button=$("btnApplyExtensionReceipt");button.disabled=true;button.textContent="Atualizando lote…";
+    const updates=state.receiptPlan.patches.map(item=>({id:item.record.id,...item.patch}));
+    const candidateChats=state.receiptPlan.discoveries.filter(item=>item.classification!=="known_contact").map(item=>{
+      const chat=item.chat||{};return {external_chat_id:chat.external_chat_id||null,contact_wa_id:chat.contact_wa_id||null,phone_e164:chat.phone_e164||null,display_name:chat.display_name||null,last_message_id:chat.last_message_id||null,last_message_at:chat.last_message_at||null};
+    });
+    const {data,error}=await sb.rpc("crm_apply_whatsapp_sync_receipt",{p_workspace_id:currentWorkspaceId(),p_batch_id:state.receiptPlan.receipt.batch_id,p_updates:updates,p_candidates:candidateChats});
+    if(error){
+      button.textContent="Tentar novamente";button.disabled=false;
+      setPanel("extensionReceiptPanel","extensionReceiptTitle","extensionReceiptStatus","Atualização não concluída",`Nada novo foi enviado ao CRM. Detalhe: ${error.message||"erro no Supabase"}`,"error");
+      return;
     }
-    const candidateChats=state.receiptPlan.discoveries.filter(item=>item.classification!=="known_contact").map(item=>item.chat);
-    if(candidateChats.length){const {data,error}=await sb.rpc("crm_upsert_whatsapp_lead_candidates",{p_workspace_id:currentWorkspaceId(),p_batch_id:state.receiptPlan.receipt.batch_id,p_candidates:candidateChats});if(error)failed+=1;else candidatesSaved=Number(data?.saved||0);}
+    for(const item of state.receiptPlan.patches)replaceRecord({...item.record,...item.patch});
     await refreshCandidateInbox({silent:true});
-    state.receiptApplied=failed===0;button.textContent="Confirmar atualização dos controles";button.disabled=state.receiptApplied;
-    setPanel("extensionReceiptPanel","extensionReceiptTitle","extensionReceiptStatus",`${saved} controle(s) atualizado(s) • ${candidatesSaved} candidato(s) guardado(s)`,failed?`${failed} operação(ões) não puderam ser concluídas. Nenhuma conversa ou mídia foi salva.`:"Verificações confirmadas. Abra Novos no WhatsApp para cadastrar ou ignorar cada possível lead.",failed?"error":"success");
+    state.receiptApplied=true;button.textContent="Atualização concluída";button.disabled=true;
+    setPanel("extensionReceiptPanel","extensionReceiptTitle","extensionReceiptStatus",`${Number(data?.updated||0)} controle(s) atualizado(s) • ${Number(data?.saved||0)} candidato(s) guardado(s)`,`Um único lote transacional foi concluído. Abra Novos no WhatsApp para cadastrar ou ignorar cada possível lead.`,"success");
     buildFilters();render();
   }
 

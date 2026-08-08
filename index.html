@@ -3122,7 +3122,8 @@ async function fetchRecords({ reason="sincronização", notifyNew=true, showErro
   if(!sb || !session?.user) return false;
 
   if(recordsFetchPromise){
-    recordsRefreshQueued = true;
+    // A leitura em andamento já fornece um snapshot novo. Acumular uma nova
+    // leitura para cada evento criava tempestades de requests no Supabase.
     return recordsFetchPromise;
   }
 
@@ -3171,10 +3172,7 @@ async function fetchRecords({ reason="sincronização", notifyNew=true, showErro
     return false;
   }).finally(() => {
     recordsFetchPromise = null;
-    if(recordsRefreshQueued){
-      recordsRefreshQueued = false;
-      setTimeout(() => syncController.refresh("atualização pendente", true), 100);
-    }
+    recordsRefreshQueued = false;
   });
 
   return recordsFetchPromise;
@@ -3290,6 +3288,7 @@ const syncController = (() => {
   const MAX_RECONNECT_DELAY_MS = 30000;
 
   let channel = null;
+  let channelStatus = "CLOSED";
   let channelGeneration = 0;
   let reconnectAttempt = 0;
   let reconnectTimer = null;
@@ -3351,6 +3350,7 @@ const syncController = (() => {
   async function removeCurrentChannel(){
     const oldChannel = channel;
     channel = null;
+    channelStatus = "CLOSED";
     if(!oldChannel || !sb) return;
     try{
       await sb.removeChannel(oldChannel);
@@ -3365,6 +3365,10 @@ const syncController = (() => {
       setSyncConnectionState("offline");
       return false;
     }
+
+    // Foco e visibilidade acontecem várias vezes durante a importação. Um canal
+    // saudável não deve ser removido e recriado em cada um desses eventos.
+    if(channel && channelStatus === "SUBSCRIBED") return true;
 
     clearTimer("reconnect");
     setSyncConnectionState("reconnecting");
@@ -3394,6 +3398,7 @@ const syncController = (() => {
     channel = nextChannel;
     nextChannel.subscribe((status, error) => {
       if(generation !== channelGeneration || channel !== nextChannel) return;
+      channelStatus = status;
       console.info("[CRM Realtime] Estado do canal.", { status, hasError:Boolean(error) });
 
       if(status === "SUBSCRIBED"){
@@ -3423,9 +3428,11 @@ const syncController = (() => {
     return connectPromise;
   }
 
-  async function refresh(reason="sincronização", notifyNew=true, showError=false){
+  async function refresh(reason="sincronização", notifyNew=true, showError=false, includeAuxiliary=false){
     const ok = await fetchRecords({ reason, notifyNew, showError });
-    if(ok){
+    // Eventos de lead atualizam apenas os leads. As fontes auxiliares são
+    // buscadas no boot ou numa sincronização manual, não a cada evento realtime.
+    if(ok && includeAuxiliary){
       await Promise.all([fetchRecordEvents(), fetchWeeklyReports(), fetchPendingData(), fetchOutlookStatus()]);
       if(currentTab === "reports") render();
     }
@@ -3453,7 +3460,7 @@ const syncController = (() => {
     document.addEventListener("visibilitychange", () => {
       if(!started || !session?.user || document.visibilityState !== "visible") return;
       console.info("[CRM Sync] Aba voltou a ficar visível.");
-      connect("aba visível");
+      if(channelStatus !== "SUBSCRIBED") connect("aba visível");
       scheduleRefresh("aba visível", true, 150);
     });
 
@@ -3462,7 +3469,7 @@ const syncController = (() => {
       const now = Date.now();
       if(now - lastFocusRefreshAt < 10000) return;
       lastFocusRefreshAt = now;
-      connect("janela em foco");
+      if(channelStatus !== "SUBSCRIBED") connect("janela em foco");
       scheduleRefresh("janela em foco", true, 150);
     });
   }
@@ -3483,7 +3490,7 @@ const syncController = (() => {
         lastWakeTick = now;
         if(!started || !session?.user || gap <= WAKE_GAP_MS) return;
         console.info("[CRM Sync] Retorno de suspensão detectado.", { gap });
-        connect("retorno de suspensão");
+        if(channelStatus !== "SUBSCRIBED") connect("retorno de suspensão");
         scheduleRefresh("retorno de suspensão", true, 200);
       }, WAKE_CHECK_INTERVAL_MS);
     }
@@ -5262,7 +5269,7 @@ $("loginModal").addEventListener("cancel", event=>{
 $("btnSignOut").addEventListener("click", ()=> doSignOut());
 $("btnSync").addEventListener("click", async ()=>{
   if(!sb || !session?.user) return openLogin();
-  const ok = await syncController.refresh("sincronização manual", true, true);
+  const ok = await syncController.refresh("sincronização manual", true, true, true);
   if(!ok) return;
   toast("Sincronizado com sucesso.");
   syncController.resume("sincronização manual");
