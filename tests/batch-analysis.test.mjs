@@ -260,6 +260,15 @@ test("aceita resultado leve 1.2 com somente Chefe Duro e Análise Completa",asyn
   assert.deepEqual(patch.whatsapp_analysis_history,textLead.whatsapp_analysis_history?.length?textLead.whatsapp_analysis_history:[]);
 });
 
+test("resultado leve preserva ações verificáveis para o plano diário",async()=>{
+  const hash=await batch.conversationHash(textLead),item={batch_id:"20260802-1902-ABCD",lead_id:textLead.id,conversation_hash:hash,analyzed_until_message_id:batch.lastMessageId(textLead),chefe_duro:"Retomar hoje.",full_analysis:"## Próxima melhor ação\n\nRetomar.",recommended_next_actions:[{priority:"high",owner:"seller",due_in_hours:24,action:"Confirmar o prazo informado ao cliente.",evidence:"Cliente perguntou pelo prazo e não recebeu confirmação.",suggested_message:"Vou confirmar o prazo e retorno hoje."}]},payload={schema_version:"1.2",batch_id:item.batch_id,generated_at:"2026-08-02T22:01:00Z",analysis_model:"ChatGPT",prompt_version:"criare-whatsapp-local-v1",analyses:[item]};
+  assert.equal(batch.validateAnalysisShape(item,"1.2"),"");
+  const patch=batch.persistencePatch(textLead,item,payload,"2026-08-02T22:01:00Z");
+  assert.equal(patch.whatsapp_analysis_structured.operational_actions.length,1);
+  assert.equal(patch.whatsapp_analysis_structured.operational_actions[0].status,"open");
+  assert.match(patch.whatsapp_analysis_structured.operational_actions[0].evidence,/Cliente perguntou/);
+});
+
 test("preserva títulos, listas e parágrafos da análise completa",()=>{
   const markdown="# Resumo\n\n## Próxima melhor ação\n\n- Confirmar medição\n- Marcar apresentação\n\n## Mensagem sugerida\n\n**Opção enxuta:** Podemos conversar hoje?";
   const sanitized=batch.sanitizeAnalysis({lead_id:"lead-text",conversation_hash:"a".repeat(64),analyzed_until_message_id:"TXT2",chefe_duro:"Aja hoje.",full_analysis:markdown});

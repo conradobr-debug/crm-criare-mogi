@@ -3,7 +3,7 @@
   if(window.__criareBatchAnalysisUiLoaded)return;
   window.__criareBatchAnalysisUiLoaded=true;
 
-  const CRM_BATCH_VERSION="2.8.5";
+  const CRM_BATCH_VERSION="2.9.0";
   const CANDIDATE_TABLE="crm_whatsapp_lead_candidates";
   const engine=window.CriareBatchAnalysis;
   const syncEngine=window.CriareWhatsAppSyncReceipt;
