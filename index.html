@@ -6035,7 +6035,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=2.9.2").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=2.9.3").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
@@ -6085,7 +6085,7 @@ window.setInterval(checkAgendaReminders,30_000);
 })();
 </script>
 <script src="whatsapp-sync-receipt.js?v=1.1.0"></script>
-<script src="batch-analysis-ui.js?v=2.9.2"></script>
+<script src="batch-analysis-ui.js?v=2.9.3"></script>
 <script src="partners.js"></script>
 </body>
 </html>

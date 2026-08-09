@@ -54,9 +54,10 @@ test("fila da extensão preserva foco comercial, pós-venda e assistência",()=>
 
 test("caixa do WhatsApp oferece os cinco destinos de triagem",async()=>{
   const ui=await readFile(new URL("../batch-analysis-ui.js",import.meta.url),"utf8");
-  for(const action of ["data-candidate-lead","data-candidate-closed","data-candidate-link","data-candidate-pending","data-candidate-dismiss"])assert.match(ui,new RegExp(action));
+  for(const action of ["data-candidate-lead","data-candidate-closed","data-candidate-link","data-candidate-pending","data-candidate-resolve-pending","data-candidate-dismiss"])assert.match(ui,new RegExp(action));
   assert.doesNotMatch(ui,/data-candidate-(?:lead|closed)=[^>]+disabled/);
   assert.match(ui,/Telefone não confirmado — será solicitado no cadastro/);
+  assert.match(ui,/Pendência criada e conversa vinculada para análise de assistência/);
 });
 
 test("formatação do telefone não altera o hash da conversa",async()=>{const formatted={...textLead,phone:"(19) 99614-2935"},canonical={...textLead,phone:"+5519996142935"};assert.equal(await batch.conversationHash(formatted),await batch.conversationHash(canonical));});
