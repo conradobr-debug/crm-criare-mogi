@@ -298,6 +298,8 @@
     .reportBar{height:8px; border-radius:999px; background:#E8F1F2; overflow:hidden; margin-top:6px;}
     .reportBar > span{display:block; height:100%; background:linear-gradient(90deg,#96BAFF,#4CEDBB); border-radius:999px;}
     .formNotice{padding:10px 12px; border:1px solid #F3D69F; border-radius:12px; background:#FFF9ED; color:#745623; font-size:12px; line-height:1.4;}
+    .pendingWhatsAppPanel{border:1px solid #B7CBEA;border-radius:12px;background:#F4F8FF;padding:12px;font-size:12px;line-height:1.45;}
+    .pendingWhatsAppPanel.isReady{border-color:#BCE8D8;background:#F0FBF7;}.pendingWhatsAppPanel h3{margin:0 0 4px;font-size:13px;}.pendingWhatsAppPanel p{margin:7px 0;}.pendingWhatsAppActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px;}.pendingWhatsAppFull{margin-top:10px;border-top:1px solid #C6D7EE;padding-top:8px;max-height:260px;overflow:auto;}.pendingWhatsAppFull summary{cursor:pointer;font-weight:650;}.pendingWhatsAppFull p{margin:7px 0;}
     .appointmentComposer{grid-column:span 12;display:grid;grid-template-columns:repeat(12,1fr);gap:10px;padding:14px;border:1px solid #DCE8EA;border-radius:14px;background:#FFFFFF;}
     .appointmentComposerHd{grid-column:span 12;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
     .appointmentComposerTitle{font-size:13px;font-weight:650;color:var(--text);}
@@ -1187,6 +1189,7 @@
           <label>Descrição e próximos passos</label>
           <textarea id="pendingDescription" placeholder="Descreva a situação, medidas já tomadas, peças necessárias e o próximo passo."></textarea>
         </div>
+        <div class="col-12" id="pendingWhatsappPanel" hidden></div>
         <div class="col-12">
           <label>Fotos da situação</label>
           <input id="pendingPhotos" type="file" accept="image/jpeg,image/png,image/webp,image/heic" multiple />
@@ -4017,6 +4020,29 @@ function renderPendingPhotoGrid(pendingId=""){
   $("pendingPhotoGrid").innerHTML=savedHtml+newHtml;
 }
 
+function renderPendingWhatsAppPanel(item){
+  const panel=$("pendingWhatsappPanel");if(!panel)return;
+  panel.hidden=!item;
+  if(!item)return;
+  const phone=pendingPhoneIdentity(item.customer_phone),record=pendingConversationRecord(item);
+  if(!phone){panel.className="pendingWhatsAppPanel";panel.innerHTML=`<h3>Conversa do WhatsApp</h3><p>Informe um telefone de WhatsApp válido para vincular esta pendência à conversa e às análises.</p>`;return;}
+  if(!record){panel.className="pendingWhatsAppPanel";panel.innerHTML=`<h3>Conversa do WhatsApp</h3><p>Este telefone ainda não possui um cadastro de conversa. O vínculo é feito pelo telefone normalizado; o nome não é usado como chave.</p><div class="pendingWhatsAppActions"><button class="ghost" type="button" data-pending-prepare-whatsapp="${escapeHtml(item.id)}">Vincular e preparar atualização</button></div>`;return;}
+  const hasAnalysis=Boolean(record.whatsapp_analysis_full||record.whatsapp_analysis_hard_boss),analysis=record.whatsapp_analysis_full||"";
+  panel.className="pendingWhatsAppPanel isReady";
+  panel.innerHTML=`<h3>Conversa do WhatsApp vinculada</h3><p><b>${escapeHtml(fullName(record))}</b> • vínculo por telefone ${escapeHtml(phone)}${item.whatsapp_record_id===record.id?"":" • vínculo será salvo automaticamente"}.</p>${hasAnalysis?`<p><b>Chefe Duro:</b> ${escapeHtml(record.whatsapp_analysis_hard_boss||"Análise importada.")}</p><details class="pendingWhatsAppFull"><summary>Ler análise completa</summary>${analysisBodyHtml(normalizeAnalysisMarkdownSource(analysis).split("\n"))}</details>`:`<p>A conversa está vinculada, mas ainda não há análise importada para este contato.</p>`}<div class="pendingWhatsAppActions"><button class="ghost" type="button" data-pending-prepare-whatsapp="${escapeHtml(item.id)}">Atualizar / analisar conversa</button>${hasAnalysis?`<button class="ghost" type="button" data-pending-open-analysis="${escapeHtml(record.id)}">Abrir leitura ampliada</button>`:""}</div>`;
+}
+async function preparePendingWhatsApp(item){
+  const linked=await ensurePendingWhatsAppRecord(item);
+  if(!linked.record)return toast(linked.reason||"Informe um telefone de WhatsApp válido.",{error:true});
+  const current=pendingItems.find(entry=>entry.id===item.id)||item;renderPendingWhatsAppPanel(current);
+  globalThis.CriareBatchAnalysisUI?.openForRecords([linked.record.id],{includePending:true});
+  if(linked.created)toast("Contato técnico criado e vinculado pelo telefone.");
+}
+function openPendingWhatsAppAnalysis(recordId){
+  const record=records.find(item=>item.id===recordId);if(!record)return;
+  currentWhatsAppAnalysis={full:record.whatsapp_analysis_full||"",hardBoss:record.whatsapp_analysis_hard_boss||record.whatsapp_summary||"",updatedAt:record.whatsapp_analysis_updated_at||null,model:record.whatsapp_analysis_model||"IA"};
+  openFullWhatsAppAnalysis();
+}
 function openPendingModal(item=null, options={}){
   releasePendingPreviews();
   if(options.whatsappCandidateId)$('pendingModal').dataset.whatsappCandidateId=options.whatsappCandidateId;
@@ -4042,6 +4068,10 @@ function openPendingModal(item=null, options={}){
   $("pendingStatusNote").textContent=item?.status==="completed"
     ? `Concluída em ${fmtBRDateTime(item.completed_at)}.`
     : "A pendência ficará visível até ser concluída.";
+  renderPendingWhatsAppPanel(item);
+  if(item&&pendingPhoneIdentity(item.customer_phone)&&!item.whatsapp_record_id){
+    void ensurePendingWhatsAppRecord(item).then(()=>{const fresh=pendingItems.find(entry=>entry.id===item.id)||item;if($("pendingModal").open&&$("pendingId").value===item.id)renderPendingWhatsAppPanel(fresh);}).catch(error=>console.warn("[CRM Pendências] Vínculo automático de WhatsApp indisponível.",error));
+  }
   renderPendingPhotoGrid(item?.id||"");
   $("pendingModal").showModal();
 }
@@ -5493,6 +5523,11 @@ $("btnCancelPending").addEventListener("click",closePendingModal);
 $("btnSavePending").addEventListener("click",async event=>{event.preventDefault();await savePendingItem();});
 $("btnCompletePending").addEventListener("click",async event=>{event.preventDefault();await completePendingItem();});
 $("btnDeletePending").addEventListener("click",async event=>{event.preventDefault();await deletePendingItem();});
+$("pendingWhatsappPanel").addEventListener("click",event=>{
+  const prepare=event.target.closest("[data-pending-prepare-whatsapp]");
+  if(prepare){const item=pendingItems.find(entry=>entry.id===prepare.dataset.pendingPrepareWhatsapp);if(item)preparePendingWhatsApp(item).catch(error=>{console.error(error);toast("Não foi possível preparar a conversa desta pendência.",{error:true});});return;}
+  const analysis=event.target.closest("[data-pending-open-analysis]");if(analysis)openPendingWhatsAppAnalysis(analysis.dataset.pendingOpenAnalysis);
+});
 $("pendingPhotos").addEventListener("change",event=>{
   releasePendingPreviews();
   const files=Array.from(event.target.files||[]).slice(0,6);
