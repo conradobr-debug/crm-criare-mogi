@@ -2581,6 +2581,17 @@ function normalizeClosedStage(stage){
   return legacy[stage] || stage || "Contrato realizado";
 }
 function fullName(r){ return [r.first_name, r.last_name].filter(Boolean).join(" ").trim() || "Sem nome"; }
+function validContactDate(value){const date=new Date(value);return Number.isNaN(date.getTime())?null:date;}
+function firstWhatsAppContactAt(record){
+  const entries=Array.isArray(record?.whatsapp_message_entries)?record.whatsapp_message_entries:[];
+  const dates=entries.map(entry=>validContactDate(entry?.message_timestamp||entry?.timestamp||entry?.occurred_at||entry?.created_at)).filter(Boolean);
+  return dates.length?new Date(Math.min(...dates.map(date=>date.getTime()))):null;
+}
+function initialContactDate(record){
+  const rd=validContactDate(record?.rd_conversion_at);if(rd)return {date:rd,source:"RDStation"};
+  const whatsapp=firstWhatsAppContactAt(record);if(whatsapp)return {date:whatsapp,source:"WhatsApp"};
+  const created=validContactDate(record?.created_at);return created?{date:created,source:"Cadastro"}:null;
+}
 function stageAge(r){
   const entered = new Date(r.stage_entered_at || r.updated_at || r.created_at);
   const age = daysBetween(entered, new Date());
@@ -3714,11 +3725,12 @@ function renderCard(r){
   let st = r.stage || (r.pipeline==="lead" ? "Novo" : "Contrato realizado");
   if(r.pipeline==="lead") st = normalizeLeadStage(st); else st = normalizeClosedStage(st);
   const age = stageAge(r);
+  const initialContact=initialContactDate(r);
   const schedule = scheduleStatus(r);
   const appointmentCount = scheduledAppointments(r).filter(item=>new Date(item.starts_at).getTime() >= Date.now()).length;
 
   const metaLines = [
-    `Etapa <b>${escapeHtml(age.date)}</b>`,
+    initialContact ? `Contato <b>${escapeHtml(fmtBRDate(initialContact.date.toISOString()))}</b>` : "Contato <b>—</b>",
     getNextActionAt(r) ? `Ação <b>${escapeHtml(fmtBRDateTime(getNextActionAt(r).toISOString()))}</b>` : ""
   ].filter(Boolean).join(" • ");
 
@@ -3734,7 +3746,6 @@ function renderCard(r){
         <div class="customerIdentity">${avatar}<div class="cName">${escapeHtml(name)}</div></div>
         <div class="rightTop">
           <span class="badge" title="Responsável">${escapeHtml(profileNameById(r.owner_id))}</span>
-          ${stuckTag}
           <button class="dots" type="button" aria-label="Menu" data-menu-btn="${escapeHtml(r.id)}">...</button>
         </div>
       </div>
@@ -3745,6 +3756,7 @@ function renderCard(r){
              <span class="chip muted" title="Empresa">${escapeHtml(r.company_name || "Empresa —")}</span>`
           : `<span class="chip" title="Ambiente">${escapeHtml(r.rooms || "Ambiente —")}</span>
              <span class="chip muted" title="Origem">${escapeHtml(r.source || "Origem —")}</span>`}
+        ${stuckTag}
       </div>
 
       <div class="meta">${metaLines || "—"}</div>
