@@ -52,7 +52,7 @@
       const date=lastMessageDate(record);
       if(from&&(!date||date<new Date(`${from}T00:00:00`)))return false;
       if(to&&(!date||date>new Date(`${to}T23:59:59.999`)))return false;
-      if(!engine.shouldQueueWhatsAppVerification(record,scope))return false;
+      if(scope!=="full_history_reanalysis"&&!engine.shouldQueueWhatsAppVerification(record,scope))return false;
       return true;
     });
   }
@@ -75,12 +75,13 @@
   async function buildSelectedBatch(selection=null){
     const selected=selection||state.candidates.filter(record=>state.selected.has(String(record.id)));
     if(!selected.length)throw new Error("Selecione ao menos uma conversa.");
-    return engine.buildDownloadRequest(selected,contextFor,records.filter(record=>hasUsablePhone(record)));
+    return engine.buildDownloadRequest(selected,contextFor,records.filter(record=>hasUsablePhone(record)),{force_full_history:$("batchExportScope").value==="full_history_reanalysis"});
   }
   async function exportBatch(){
     const button=$("btnGenerateBatchZip"),original=button.textContent;
     state.cancelled=false;button.disabled=true;button.textContent="Preparando…";
-    setPanel("batchExportPanel","batchExportCount","batchExportStatus",`Preparando ${state.selected.size} contato(s)`,"Montando uma fila leve, sem conversas ou mídias.");
+    const fullHistory=$("batchExportScope").value==="full_history_reanalysis";
+    setPanel("batchExportPanel","batchExportCount","batchExportStatus",`Preparando ${state.selected.size} contato(s)`,fullHistory?"Montando uma fila de reanálise completa, sem usar o cursor da última análise.":"Montando uma fila leve, sem conversas ou mídias.");
     try{
       const batch=await buildSelectedBatch();if(state.cancelled)return;
       state.lastBatch=batch;

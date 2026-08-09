@@ -52,6 +52,14 @@ test("fila da extensão preserva foco comercial, pós-venda e assistência",()=>
   assert.equal(request.contacts[1].open_pending_context[0].type,"Assistência técnica");
 });
 
+test("reanálise completa remove o cursor e solicita histórico integral",()=>{
+  const record={...textLead,whatsapp_analysis_last_message_id:"mensagem-antiga"};
+  const request=batch.buildDownloadRequest([record],()=>({}),[record],{force_full_history:true});
+  assert.equal(request.capture_mode,"full_history_reanalysis");
+  assert.equal(request.contacts[0].download_mode,"full");
+  assert.equal(request.contacts[0].after_message_id,null);
+});
+
 test("caixa do WhatsApp oferece os cinco destinos de triagem",async()=>{
   const ui=await readFile(new URL("../batch-analysis-ui.js",import.meta.url),"utf8");
   for(const action of ["data-candidate-lead","data-candidate-closed","data-candidate-link","data-candidate-pending","data-candidate-resolve-pending","data-candidate-dismiss"])assert.match(ui,new RegExp(action));

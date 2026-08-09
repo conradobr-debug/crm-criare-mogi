@@ -1051,7 +1051,7 @@
     <div class="modalHd"><div><div class="modalTitle">Verificar atualizações do WhatsApp</div><div class="modalSub">O CRM cria uma fila leve. A extensão confere a última mensagem e só baixa conversas que realmente mudaram.</div></div><button class="ghost" id="btnCloseBatchExport" type="button">Fechar</button></div>
     <div class="modalBd">
       <div class="batchFilterGrid">
-        <label>Contatos <select id="batchExportScope"><option value="verify_due" selected>Verificações pendentes (mais de 24 h)</option><option value="needs_analysis">Conversas que precisam de análise</option><option value="all_active">Verificar todos os contatos selecionados agora</option></select></label>
+        <label>Contatos <select id="batchExportScope"><option value="verify_due" selected>Verificações pendentes (mais de 24 h)</option><option value="needs_analysis">Conversas que precisam de análise</option><option value="all_active">Verificar todos os contatos selecionados agora</option><option value="full_history_reanalysis">Reanálise completa — ignorar última análise</option></select></label>
         <label>Vendedor <select id="batchExportOwner"><option value="">Todos</option></select></label>
         <label>Etapa <select id="batchExportStage"><option value="">Todas</option></select></label>
         <label>Última análise — início <input id="batchExportDateFrom" type="date" /></label>
@@ -1241,7 +1241,7 @@
 <script src="whatsapp-crm-extension/capture-core.js?v=2.5.25"></script>
 <script src="audio-import-matcher.js?v=2.5.25"></script>
 <script src="conversation-completeness.js?v=2.5.1-final"></script>
-<script src="batch-analysis.js?v=2.9.0"></script>
+<script src="batch-analysis.js?v=2.9.4"></script>
 
 <script>
 /*
@@ -6035,7 +6035,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=2.9.3").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=2.9.4").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
@@ -6085,7 +6085,7 @@ window.setInterval(checkAgendaReminders,30_000);
 })();
 </script>
 <script src="whatsapp-sync-receipt.js?v=1.1.0"></script>
-<script src="batch-analysis-ui.js?v=2.9.3"></script>
+<script src="batch-analysis-ui.js?v=2.9.4"></script>
 <script src="partners.js"></script>
 </body>
 </html>
