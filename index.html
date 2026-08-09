@@ -472,6 +472,8 @@
     .headerMaintenance>summary::-webkit-details-marker{display:none}
     .headerMaintenanceMenu{position:absolute;right:0;top:calc(100% + 8px);z-index:40;display:grid;gap:7px;min-width:210px;padding:10px;border:1px solid rgba(255,255,255,.22);border-radius:12px;background:#151515;box-shadow:0 16px 34px rgba(0,0,0,.35)}
     .headerMaintenanceMenu button,.headerMaintenanceMenu .btn{width:100%;box-sizing:border-box;text-align:left;justify-content:flex-start}
+    .headerConversationMenu{min-width:280px;}
+    .headerMenuHint{padding:3px 4px 7px;color:rgba(255,255,255,.68);font-size:11px;line-height:1.35;}
     [data-admin-only][hidden]{display:none!important}
     @media(max-width:700px){.headerMaintenanceMenu{position:fixed;left:14px;right:14px;top:auto;min-width:0}}
   </style>
@@ -495,12 +497,18 @@
   </div>
   <div class="actions">
     <button class="primary" id="btnNew">+ Novo lead</button>
-    <button class="ghost" id="btnSync">Sincronizar</button>
+    <button class="ghost" id="btnSync" hidden>Sincronizar</button>
     <button class="ghost agendaToggle" id="btnTodayAgenda" type="button" hidden>Minha agenda <span id="todayAgendaCount" class="agendaBadge" hidden>0</span></button>
-    <button class="ghost" id="btnOpenBatchExportHeader" type="button" data-admin-only hidden>Verificar WhatsApp</button>
-    <button class="ghost" id="btnImportExtensionReceipt" type="button" data-admin-only hidden>Atualizar retorno da extensão</button>
-    <button class="ghost" id="btnReviewWhatsAppCandidates" type="button" data-admin-only hidden>Novos no WhatsApp <span id="whatsappCandidateCount" class="headerCount" hidden>0</span></button>
-    <button class="primary" id="btnImportLocalWhatsAppBatch" type="button" data-admin-only hidden>Importar análises (ZIP)</button>
+    <details class="headerMaintenance desktopUtility" id="conversationActionsMenu" data-admin-only hidden>
+      <summary class="btn ghost">Conversas e análises</summary>
+      <div class="headerMaintenanceMenu headerConversationMenu">
+        <div class="headerMenuHint">Atualize conversas, revise novos contatos e importe análises em um só lugar.</div>
+        <button class="ghost" id="btnOpenBatchExportHeader" type="button">1. Verificar WhatsApp</button>
+        <button class="ghost" id="btnImportExtensionReceipt" type="button">2. Atualizar retorno da extensão</button>
+        <button class="ghost" id="btnReviewWhatsAppCandidates" type="button">3. Novos no WhatsApp <span id="whatsappCandidateCount" class="headerCount" hidden>0</span></button>
+        <button class="ghost" id="btnImportLocalWhatsAppBatch" type="button">4. Importar análises (ZIP)</button>
+      </div>
+    </details>
     <button class="ghost mobileUtility" id="btnInstall" hidden>Instalar aplicativo</button>
     <details class="headerMaintenance desktopUtility">
       <summary class="btn ghost">Opções</summary>

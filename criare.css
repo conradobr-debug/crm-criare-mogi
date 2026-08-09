@@ -65,7 +65,8 @@ header{
     repeating-radial-gradient(ellipse at 17% 53%,transparent 0 22px,rgba(255,255,255,.075) 23px 24px,transparent 25px 34px),
     repeating-radial-gradient(ellipse at 86% 18%,transparent 0 28px,rgba(255,255,255,.045) 29px 30px,transparent 31px 43px),
     #090909;
-  overflow:hidden;
+  overflow:visible;
+  z-index:100;
 }
 
 header::after{
@@ -76,7 +77,7 @@ header::after{
   background:rgba(255,255,255,.25);
 }
 
-header .brand, header .actions{position:relative;z-index:1}
+header .brand, header .actions{position:relative;z-index:101}
 header h1{font-size:17px;font-weight:600;letter-spacing:.02em;color:#fff}
 header .sub{color:rgba(255,255,255,.64)}
 .brandClaim{margin-top:3px;color:rgba(255,255,255,.48);font-size:8px;font-weight:700;letter-spacing:.32em}
