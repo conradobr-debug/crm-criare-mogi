@@ -178,7 +178,7 @@
   }
   function openCandidateLink(candidate){
     state.linkingCandidateId=candidate.id;$("whatsappCandidateLinkName").textContent=`Vincular ${candidate.display_name||candidate.phone_e164||"este contato"} a um cadastro já existente.`;
-    const options=records.filter(record=>!isSpecifier(record)).sort((a,b)=>fullName(a).localeCompare(fullName(b),"pt-BR")).map(record=>`<option value="${escapeHtml(record.id)}">${escapeHtml(fullName(record))} — ${record.pipeline==="closed"?"Fechado / pós-venda":"Lead comercial"}${record.phone?` — ${escapeHtml(record.phone)}`:""}</option>`).join("");
+    const options=records.filter(record=>!(typeof isPendingContact==="function"&&isPendingContact(record))).sort((a,b)=>fullName(a).localeCompare(fullName(b),"pt-BR")).map(record=>`<option value="${escapeHtml(record.id)}">${escapeHtml(fullName(record))} — ${isSpecifier(record)?"Parceiro":(record.pipeline==="closed"?"Fechado / pós-venda":"Lead comercial")}${record.phone?` — ${escapeHtml(record.phone)}`:""}</option>`).join("");
     $("whatsappCandidateRecordSelect").innerHTML=options||'<option value="">Nenhum cadastro disponível</option>';$("btnConfirmWhatsAppCandidateLink").disabled=!options;$("whatsappCandidateLinkModal").showModal();
   }
   async function confirmCandidateLink(){
@@ -188,7 +188,7 @@
     if(error){button.disabled=false;button.textContent="Confirmar vínculo";return toast("Não foi possível vincular esta conversa.",{error:true});}replaceRecord(data);
     if(candidate.matched_pending_id)await sb.from(TBL_PENDING).update({customer_name:fullName(data),customer_phone:data.phone||candidate.phone_e164||null}).eq("id",candidate.matched_pending_id);
     const {error:candidateError}=await sb.from(CANDIDATE_TABLE).update({status:"known",matched_record_id:recordId,updated_at:nowISO()}).eq("id",candidate.id);button.textContent="Confirmar vínculo";if(candidateError){button.disabled=false;return toast("O cliente foi vinculado, mas a caixa não pôde ser atualizada.",{error:true});}
-    $("whatsappCandidateLinkModal").close();state.linkingCandidateId=null;await refreshCandidateInbox({silent:true});buildFilters();render();toast(data.pipeline==="closed"?"Cliente vinculado. A próxima análise será de pós-venda.":"Lead vinculado à conversa do WhatsApp.");
+    $("whatsappCandidateLinkModal").close();state.linkingCandidateId=null;await refreshCandidateInbox({silent:true});buildFilters();render();toast(isSpecifier(data)?"Parceiro vinculado. A próxima análise será de relacionamento.":(data.pipeline==="closed"?"Cliente vinculado. A próxima análise será de pós-venda.":"Lead vinculado à conversa do WhatsApp."));
   }
   async function dismissCandidate(id){const {error}=await sb.from(CANDIDATE_TABLE).update({status:"dismissed",updated_at:nowISO()}).eq("id",id);if(error)return toast("Não foi possível ignorar este contato.",{error:true});await refreshCandidateInbox({silent:true});}
   async function reactivateCandidate(id){const {error}=await sb.from(CANDIDATE_TABLE).update({status:"pending",updated_at:nowISO()}).eq("id",id);if(error)return toast("Não foi possível reativar este contato.",{error:true});state.candidateInboxMode="pending";await refreshCandidateInbox({silent:true});toast("Contato reativado para classificação.");}
