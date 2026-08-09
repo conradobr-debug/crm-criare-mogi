@@ -1087,10 +1087,10 @@
     <div class="modalHd"><div><div class="modalTitle">Contatos encontrados no WhatsApp</div><div class="modalSub">Classifique cada contato como lead, cliente fechado, pendência, vínculo existente ou conversa sem interesse comercial. Nenhuma mensagem ou mídia é armazenada nesta caixa.</div></div><button class="ghost" id="btnCloseWhatsAppCandidates" type="button">Fechar</button></div>
     <div class="modalBd">
       <div class="batchPersistentPanel" id="whatsappCandidatesPanel" role="status"><strong id="whatsappCandidatesTitle">Carregando candidatos</strong><span id="whatsappCandidatesStatus">Conferindo a caixa persistente do WhatsApp.</span></div>
-      <div class="batchPersistentPanel whatsappCandidateHelp"><strong>O que escolher?</strong><span><b>Novo lead</b> inicia atendimento comercial. <b>Fechado</b> cria um cliente em pós-venda. <b>Vincular existente</b> associa a conversa a alguém já cadastrado. <b>Pendência</b> registra assistência, garantia ou tarefa operacional. <b>Ignorar</b> remove contatos sem relação com o CRM.</span></div>
+      <div class="batchPersistentPanel whatsappCandidateHelp"><strong>O que escolher?</strong><span><b>Novo lead</b> inicia atendimento comercial. <b>Fechado</b> cria um cliente em pós-venda. <b>Vincular existente</b> associa a conversa a alguém já cadastrado. <b>Pendência</b> registra assistência, garantia ou tarefa operacional. <b>Ignorar</b> tira o contato da fila, mas o mantém em histórico para possível reativação.</span></div>
       <div class="whatsappCandidateList" id="whatsappCandidateList"></div>
     </div>
-    <div class="modalFt"><button class="ghost" id="btnRefreshWhatsAppCandidates" type="button">Atualizar lista</button></div>
+    <div class="modalFt"><button class="ghost" id="btnToggleDismissedWhatsAppCandidates" type="button">Ver ignorados</button><button class="ghost" id="btnRefreshWhatsAppCandidates" type="button">Atualizar lista</button></div>
   </dialog>
 
   <dialog id="whatsappCandidateLinkModal" class="batchAnalysisModal compactModal">
@@ -6035,7 +6035,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=2.9.0").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=2.9.1").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
@@ -6085,7 +6085,7 @@ window.setInterval(checkAgendaReminders,30_000);
 })();
 </script>
 <script src="whatsapp-sync-receipt.js?v=1.1.0"></script>
-<script src="batch-analysis-ui.js?v=2.9.0"></script>
+<script src="batch-analysis-ui.js?v=2.9.1"></script>
 <script src="partners.js"></script>
 </body>
 </html>
