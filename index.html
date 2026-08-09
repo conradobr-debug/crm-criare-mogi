@@ -308,6 +308,22 @@
     .appointmentItemMeta{color:var(--muted);font-size:11px;margin-top:2px;}
     .appointmentItem button{padding:7px 9px;font-size:11px;flex:0 0 auto;}
     .appointmentEmpty{padding:10px 12px;border:1px dashed #CCDDE0;border-radius:12px;color:var(--muted);font-size:12px;}
+    .appointmentParticipants{grid-column:span 12;border:1px solid #DCE8EA;border-radius:12px;padding:10px 12px;background:#F8FBFC;}
+    .appointmentParticipants label{margin:0 0 7px;}
+    .appointmentParticipantList{display:flex;gap:7px;flex-wrap:wrap;}
+    .appointmentParticipant{display:flex;align-items:center;gap:6px;margin:0;padding:6px 8px;border:1px solid #DCE8EA;border-radius:999px;background:#fff;color:var(--text);font-size:12px;font-weight:600;cursor:pointer;}
+    .appointmentParticipant input{width:auto;margin:0;accent-color:#4A9EC5;}
+    .agendaToggle{position:relative;}
+    .agendaBadge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:4px;border-radius:999px;background:#2C9674;color:#fff;font-size:10px;}
+    .todayAgenda{position:fixed;z-index:900;top:0;right:0;width:min(410px,100vw);height:100dvh;background:#fff;border-left:1px solid #D9E7EA;box-shadow:-16px 0 38px rgba(24,62,72,.16);transform:translateX(104%);transition:transform .22s ease;display:flex;flex-direction:column;}
+    .todayAgenda.open{transform:translateX(0);}
+    .todayAgendaHd{padding:18px;border-bottom:1px solid #D9E7EA;background:linear-gradient(135deg,#F1F8F9,#FFFFFF);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+    .todayAgendaHd strong{display:block;font-size:17px;}.todayAgendaHd span{display:block;margin-top:4px;font-size:12px;color:var(--muted);}
+    .todayAgendaList{padding:12px;overflow:auto;display:flex;flex-direction:column;gap:9px;}
+    .todayAgendaItem{border:1px solid #DCE8EA;border-left:4px solid #4A9EC5;border-radius:12px;padding:11px;background:#fff;cursor:pointer;text-align:left;color:var(--text);font:inherit;}
+    .todayAgendaItem:hover{background:#F7FBFC;}.todayAgendaTime{font-size:13px;font-weight:750;color:#17698D;}.todayAgendaItem b{display:block;margin-top:3px;font-size:13px;}.todayAgendaItem small{display:block;margin-top:4px;color:var(--muted);font-size:11px;line-height:1.35;}
+    .todayAgendaEmpty{padding:22px 14px;color:var(--muted);font-size:13px;text-align:center;}
+    #agendaReminderModal{width:min(510px,94vw);}.agendaReminderBody{padding:22px 18px 18px;}.agendaReminderTime{font-size:28px;font-weight:750;color:#17698D;margin:8px 0;}.agendaReminderLead{font-size:16px;font-weight:700;}.agendaReminderMeta{margin-top:8px;color:var(--muted);font-size:13px;line-height:1.45;}
     @media (max-width:900px){.summaryGrid{grid-template-columns:repeat(2,minmax(140px,1fr));}}
     @media (max-width:520px){.summaryGrid{grid-template-columns:1fr;}}
 
@@ -480,6 +496,7 @@
   <div class="actions">
     <button class="primary" id="btnNew">+ Novo lead</button>
     <button class="ghost" id="btnSync">Sincronizar</button>
+    <button class="ghost agendaToggle" id="btnTodayAgenda" type="button" hidden>Minha agenda <span id="todayAgendaCount" class="agendaBadge" hidden>0</span></button>
     <button class="ghost" id="btnOpenBatchExportHeader" type="button" data-admin-only hidden>Verificar WhatsApp</button>
     <button class="ghost" id="btnImportExtensionReceipt" type="button" data-admin-only hidden>Atualizar retorno da extensão</button>
     <button class="ghost" id="btnReviewWhatsAppCandidates" type="button" data-admin-only hidden>Novos no WhatsApp <span id="whatsappCandidateCount" class="headerCount" hidden>0</span></button>
@@ -506,6 +523,17 @@
     </div>
   </div>
 </header>
+
+<aside class="todayAgenda" id="todayAgenda" aria-label="Compromissos de hoje" aria-hidden="true">
+  <div class="todayAgendaHd"><div><strong>Minha agenda</strong><span id="todayAgendaSubtitle">Compromissos de hoje</span></div><button class="ghost" id="btnCloseTodayAgenda" type="button">Fechar</button></div>
+  <div class="todayAgendaList" id="todayAgendaList"></div>
+</aside>
+
+<dialog id="agendaReminderModal">
+  <div class="modalHd"><div><div class="modalTitle">Lembrete de compromisso</div><div class="modalSub">Seu compromisso está próximo.</div></div><button class="ghost" id="btnCloseAgendaReminder" type="button">Fechar</button></div>
+  <div class="agendaReminderBody"><div class="agendaReminderTime" id="agendaReminderTime"></div><div class="agendaReminderLead" id="agendaReminderLead"></div><div class="agendaReminderMeta" id="agendaReminderMeta"></div></div>
+  <div class="modalFt"><button class="ghost" id="btnSnoozeAgendaReminder" type="button">Lembrar em 5 min</button><button class="primary" id="btnOpenAgendaReminder" type="button">Abrir compromisso</button></div>
+</dialog>
 
 <div class="wrap">
   <div class="tabs" role="tablist" aria-label="Navegação">
@@ -735,6 +763,11 @@
             <option value="120">2 horas antes</option>
             <option value="1440">1 dia antes</option>
           </select>
+        </div>
+
+        <div class="appointmentParticipants">
+          <label>Participantes notificados</label>
+          <div class="appointmentParticipantList" id="appointmentParticipants"></div>
         </div>
 
         <div class="col-12">
@@ -1259,6 +1292,7 @@ function localScheduleIso(dateValue, timeValue="09:00"){
 }
 function normalizeAppointments(record){
   const stored = Array.isArray(record?.appointments) ? record.appointments : [];
+  const fallbackParticipants=record?.owner_id?[record.owner_id]:[];
   if(stored.length) return stored.map(item=>({
     id:item.id || crypto.randomUUID(),
     starts_at:item.starts_at || null,
@@ -1269,7 +1303,8 @@ function normalizeAppointments(record){
     status:item.status || "scheduled",
     event_id:item.event_id || null,
     web_link:item.web_link || null,
-    synced_at:item.synced_at || null
+    synced_at:item.synced_at || null,
+    participant_ids:[...new Set((Array.isArray(item.participant_ids)?item.participant_ids:fallbackParticipants).filter(Boolean))]
   })).filter(item=>item.starts_at);
   const legacy = getLegacyNextActionAt(record);
   return legacy ? [{
@@ -1278,8 +1313,70 @@ function normalizeAppointments(record){
     duration_minutes:Number(record?.next_action_duration_minutes || 30),
     reminder_minutes:Number(record?.next_action_reminder_minutes ?? 30), status:"scheduled",
     event_id:record?.outlook_event_id || null, web_link:record?.outlook_event_web_link || null,
-    synced_at:record?.outlook_synced_at || null
+    synced_at:record?.outlook_synced_at || null, participant_ids:fallbackParticipants
   }] : [];
+}
+
+const AGENDA_REMINDER_KEY="crm_agenda_reminders_v1";
+const agendaUi={open:false,openedForUserId:"",activeReminder:null,notified:new Map()};
+try{
+  const stored=JSON.parse(localStorage.getItem(AGENDA_REMINDER_KEY)||"{}");
+  if(stored&&typeof stored==="object") agendaUi.notified=new Map(Object.entries(stored));
+}catch(error){ console.warn("[Agenda] Preferências de lembrete inválidas.",error); }
+function saveAgendaReminderMemory(){
+  const recent=[...agendaUi.notified.entries()].filter(([,at])=>Number(at)>Date.now()-48*60*60*1000).slice(-500);
+  agendaUi.notified=new Map(recent);localStorage.setItem(AGENDA_REMINDER_KEY,JSON.stringify(Object.fromEntries(recent)));
+}
+function sameLocalDate(a,b){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
+function isAppointmentParticipant(record,appointment,userId=session?.user?.id){
+  if(!userId)return false;
+  const ids=Array.isArray(appointment?.participant_ids)?appointment.participant_ids.filter(Boolean):[];
+  return ids.length?ids.includes(userId):record?.owner_id===userId;
+}
+function agendaEntries({day=null}={}){
+  const now=day||new Date();
+  return records.flatMap(record=>scheduledAppointments(record).filter(appointment=>isAppointmentParticipant(record,appointment)).map(appointment=>({record,appointment})))
+    .filter(entry=>sameLocalDate(new Date(entry.appointment.starts_at),now))
+    .sort((a,b)=>new Date(a.appointment.starts_at)-new Date(b.appointment.starts_at));
+}
+function participantNames(ids=[]){return [...new Set(ids)].map(profileNameById).filter(name=>name&&name!=="—");}
+function renderAppointmentParticipants(selectedIds=[]){
+  const target=$("appointmentParticipants");if(!target)return;
+  const fallback=$("owner")?.value||session?.user?.id||"";
+  const selected=new Set(selectedIds.length?selectedIds:[fallback].filter(Boolean));
+  target.innerHTML=profiles.length?profiles.map(profile=>`<label class="appointmentParticipant"><input type="checkbox" value="${escapeHtml(profile.id)}" ${selected.has(profile.id)?"checked":""}> ${escapeHtml(profile.display_name||"Usuário")}</label>`).join(""):`<span class="appointmentItemMeta">Carregando usuários…</span>`;
+}
+function selectedAppointmentParticipants(){
+  const ids=[...document.querySelectorAll('#appointmentParticipants input:checked')].map(input=>input.value).filter(Boolean);
+  const fallback=$("owner")?.value||session?.user?.id||"";
+  return [...new Set((ids.length?ids:[fallback]).filter(Boolean))];
+}
+function setTodayAgendaOpen(open){
+  agendaUi.open=Boolean(open);const panel=$("todayAgenda");if(!panel)return;
+  panel.classList.toggle("open",agendaUi.open);panel.setAttribute("aria-hidden",String(!agendaUi.open));
+}
+function renderTodayAgenda(){
+  const button=$("btnTodayAgenda"),count=$("todayAgendaCount"),list=$("todayAgendaList");if(!button||!count||!list)return;
+  const entries=agendaEntries();button.hidden=!session?.user;count.hidden=!entries.length;count.textContent=String(entries.length);
+  $("todayAgendaSubtitle").textContent=`${entries.length} compromisso(s) para hoje`;
+  list.innerHTML=entries.length?entries.map(({record,appointment})=>{
+    const people=participantNames(appointment.participant_ids||[]);return `<button class="todayAgendaItem" type="button" data-open-agenda-record="${escapeHtml(record.id)}"><span class="todayAgendaTime">${escapeHtml(fmtBRDateTime(appointment.starts_at).split(", ")[1]||fmtBRDateTime(appointment.starts_at))} • ${escapeHtml(appointment.kind)}</span><b>${escapeHtml(fullName(record))}</b><small>${escapeHtml(appointment.details||"Sem detalhes")}${people.length?` • ${escapeHtml(people.join(", "))}`:""}</small></button>`;
+  }).join(""):`<div class="todayAgendaEmpty">Nenhum compromisso seu para hoje.</div>`;
+}
+function showAgendaReminder(entry){
+  agendaUi.activeReminder=entry;$("agendaReminderTime").textContent=`${fmtBRDateTime(entry.appointment.starts_at)} • ${entry.appointment.kind}`;
+  $("agendaReminderLead").textContent=fullName(entry.record);$("agendaReminderMeta").textContent=entry.appointment.details||"Sem detalhes adicionais.";
+  if(!$("agendaReminderModal").open)$("agendaReminderModal").showModal();
+  beep();setTimeout(beep,230);
+}
+function checkAgendaReminders(){
+  if(!session?.user||document.hidden)return;
+  const now=Date.now();
+  records.flatMap(record=>scheduledAppointments(record).filter(appointment=>isAppointmentParticipant(record,appointment)).map(appointment=>({record,appointment}))).forEach(entry=>{
+    const start=new Date(entry.appointment.starts_at).getTime(),minutes=Number(entry.appointment.reminder_minutes??30),trigger=start-minutes*60_000,key=`${session.user.id}:${entry.record.id}:${entry.appointment.id}:${start}`;
+    if(!Number.isFinite(start)||minutes<=0||now<trigger||now>start+15*60_000||agendaUi.notified.has(key))return;
+    agendaUi.notified.set(key,String(now));saveAgendaReminderMemory();showAgendaReminder(entry);
+  });
 }
 function getLegacyNextActionAt(r){
   if(r?.next_action_at){
@@ -2639,7 +2736,7 @@ function sessionFromLocalFallback(){
 }
 
 function setAuthenticatedActionsEnabled(enabled){
-  ["btnNew","btnSync","btnSyncWhatsAppAll","btnWhatsAppBatchTest","btnWhatsAppBatch","btnExportJson","btnExportWhatsAppIndex","btnCompareWhatsAppExports","btnWipe"].forEach(id=>{
+  ["btnNew","btnSync","btnTodayAgenda","btnSyncWhatsAppAll","btnWhatsAppBatchTest","btnWhatsAppBatch","btnExportJson","btnExportWhatsAppIndex","btnCompareWhatsAppExports","btnWipe"].forEach(id=>{
     const element = $(id);
     if(element) element.disabled = !enabled;
   });
@@ -3215,8 +3312,10 @@ async function bootAfterLogin(){
     setAuthenticatedActionsEnabled(true);
     updateSessionLine();
     bootedUserId = userId;
+    if(agendaUi.openedForUserId!==userId){agendaUi.openedForUserId=userId;agendaUi.open=true;}
     setAppDataState("ready", "Dados carregados", `${records.length} registros sincronizados.`);
     render();
+    checkAgendaReminders();
     if($("loginModal").open) closeLogin();
     await syncController.start();
     setSyncConnectionState("online");
@@ -4152,6 +4251,7 @@ function updateLostBtn(){
 
 function render(){
   applyAccessVisibility();
+  renderTodayAgenda();
   updateAppStateBanner();
   $("board").setAttribute("aria-busy", appDataState === "loading" ? "true" : "false");
   if(appDataState !== "ready"){
@@ -4427,6 +4527,7 @@ function clearAppointmentComposer(){
   $("nextActionDuration").value = "30";
   $("nextActionReminder").value = "30";
   $("nextActionDetails").value = "";
+  renderAppointmentParticipants([$("owner")?.value||session?.user?.id].filter(Boolean));
 }
 function appointmentFromComposer(){
   const date = $("nextAction").value;
@@ -4439,7 +4540,8 @@ function appointmentFromComposer(){
     details:$("nextActionDetails").value.trim() || null,
     duration_minutes:Number($("nextActionDuration").value || 30),
     reminder_minutes:Number($("nextActionReminder").value || 30),
-    status:"scheduled", event_id:null, web_link:null, synced_at:null
+    status:"scheduled", event_id:null, web_link:null, synced_at:null,
+    participant_ids:selectedAppointmentParticipants()
   };
 }
 function setLeadSectionOpen(sectionId,open){
@@ -4492,7 +4594,7 @@ function renderAppointmentList(){
       <div class="appointmentItemMain">
         <b>${escapeHtml(item.kind)} • ${escapeHtml(fmtBRDateTime(item.starts_at))}</b>
         ${item.details ? `<div>${escapeHtml(item.details)}</div>` : ""}
-        <div class="appointmentItemMeta">${item.duration_minutes || 30} min • lembrete ${item.reminder_minutes ? `${item.reminder_minutes} min antes` : "desativado"}${synced ? " • salvo no calendário" : " • aguardando salvar"}</div>
+        <div class="appointmentItemMeta">${item.duration_minutes || 30} min • lembrete ${item.reminder_minutes ? `${item.reminder_minutes} min antes` : "desativado"}${(item.participant_ids||[]).length ? ` • ${escapeHtml(participantNames(item.participant_ids).join(", ") || "participantes definidos")}` : ""}${synced ? " • salvo no calendário" : " • aguardando salvar"}</div>
       </div>
       ${synced
         ? (item.web_link ? `<a class="btn" href="${escapeHtml(item.web_link)}" target="_blank" rel="noopener noreferrer">Abrir</a>` : `<span class="appointmentItemMeta">No calendário</span>`)
@@ -4614,6 +4716,7 @@ function openModal(record=null, options={}){
   fillSelect($("source"), config.sources, record?.source || prefill.source || config.sources[0]);
   $("owner").innerHTML = profiles.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.display_name)}</option>`).join("");
   $("owner").value = record?.owner_id || session?.user?.id || (profiles[0]?.id || "");
+  renderAppointmentParticipants([$("owner").value].filter(Boolean));
 
   const pipeline = kind === "specifier" ? "lead" : (record?.pipeline || requestedNewPipeline || (currentTab==="closed" ? "closed" : "lead"));
   $("pipeline").value = pipeline;
@@ -5718,6 +5821,26 @@ if("serviceWorker" in navigator){
     });
   });
 }
+
+$("btnTodayAgenda").addEventListener("click",()=>setTodayAgendaOpen(!agendaUi.open));
+$("btnCloseTodayAgenda").addEventListener("click",()=>setTodayAgendaOpen(false));
+$("todayAgendaList").addEventListener("click",event=>{
+  const button=event.target.closest("[data-open-agenda-record]");if(!button)return;
+  const record=records.find(item=>item.id===button.dataset.openAgendaRecord);if(record){setTodayAgendaOpen(false);openModal(record,{focusSchedule:true});}
+});
+$("btnCloseAgendaReminder").addEventListener("click",()=>$("agendaReminderModal").close());
+$("btnOpenAgendaReminder").addEventListener("click",()=>{
+  const entry=agendaUi.activeReminder;$("agendaReminderModal").close();if(entry?.record)openModal(entry.record,{focusSchedule:true});
+});
+$("btnSnoozeAgendaReminder").addEventListener("click",()=>{
+  const entry=agendaUi.activeReminder;$("agendaReminderModal").close();if(entry)window.setTimeout(()=>showAgendaReminder(entry),5*60_000);
+});
+$("owner").addEventListener("change",()=>{
+  const selected=[...document.querySelectorAll('#appointmentParticipants input:checked')].map(input=>input.value);
+  if(!selected.length)renderAppointmentParticipants([$("owner").value].filter(Boolean));
+});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)checkAgendaReminders();});
+window.setInterval(checkAgendaReminders,30_000);
 
 /* Boot */
 (async function boot(){
