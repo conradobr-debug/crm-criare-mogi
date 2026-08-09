@@ -191,7 +191,9 @@ test("botão superior abre o importador novo e o seletor aceita ZIP",async()=>{
   assert.match(crm,/id="btnOpenBatchExportHeader"[^>]*>Verificar WhatsApp</);
   assert.match(crm,/value="verify_due" selected>Verificações pendentes/);
   assert.match(crm,/value="needs_analysis">Conversas que precisam de análise/);
-  assert.match(crm,/value="all_active">Verificar todos os clientes ativos agora/);
+  assert.match(crm,/value="all_active">Verificar todos os contatos selecionados agora/);
+  assert.match(crm,/id="batchExportPartners"/);
+  assert.match(crm,/id="batchExportPending"/);
   assert.match(crm,/id="btnImportLocalWhatsAppBatch"[^>]*>Importar análises \(ZIP\)</);
   assert.match(crm,/id="batchImportFile"[^>]*accept="[^"]*\.zip/);
   assert.match(crm,/\$\("btnImportLocalWhatsAppBatch"\)\.addEventListener\("click",\(\)=>\{/);

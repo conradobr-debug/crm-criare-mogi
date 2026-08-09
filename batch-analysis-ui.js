@@ -28,7 +28,7 @@
   function phoneDigits(value){return String(value||"").replace(/\D/g,"");}
   function contextFor(record){
     const phone=phoneDigits(record.phone),openPending=(typeof pendingItems!=="undefined"?pendingItems:[]).filter(item=>item.status!=="completed"&&phone&&phoneDigits(item.customer_phone)===phone);
-    const analysisFocus=openPending.length?"technical_support":(record.pipeline==="closed"?"post_sale":"sales");
+    const analysisFocus=record?.record_type==="pending_contact"||openPending.length?"technical_support":(record?.record_type==="specifier"?"partner_relationship":(record.pipeline==="closed"?"post_sale":"sales"));
     return {full_name:fullName(record),seller:profileNameById(record.owner_id),workspace_id:record.workspace_id||session?.user?.app_metadata?.workspace_id||null,commitments:commitmentsFor(record),identity_status:typeof phoneIdentityState==="function"?phoneIdentityState(record).code:"ready",analysis_focus:analysisFocus,open_pending_context:openPending.map(item=>({id:item.id,type:item.pending_type,title:item.title,priority:item.priority,due_at:item.due_at||null,description:item.description||null}))};
   }
   function currentWorkspaceId(){return records.find(record=>record?.workspace_id)?.workspace_id||session?.user?.app_metadata?.workspace_id||"00000000-0000-4000-8000-000000000001";}
@@ -37,12 +37,16 @@
   function refreshCompletenessWarning(){const chosen=selectedCompleteness(),incomplete=chosen.filter(item=>item.summary.conversation_completeness_status!=="complete"),withPending=chosen.filter(item=>item.summary.pending_audio_count>0),withMetadata=chosen.filter(item=>item.summary.metadata_pending_audio_count>0),capture=chosen.filter(item=>item.summary.capture_may_be_incomplete),unavailable=chosen.filter(item=>item.summary.unavailable_audio_count>0),complete=chosen.filter(item=>item.summary.conversation_completeness_status==="complete"),pending=withPending.reduce((sum,item)=>sum+item.summary.pending_audio_count,0),box=$("batchCompletenessChoice");if(!box)return;box.hidden=!incomplete.length;$("batchCompletenessWarning").innerHTML=`Das ${chosen.length} conversas selecionadas:<br>• ${withPending.length} possuem áudios sem transcrição (${pending} áudio(s));<br>• ${withMetadata.length} possuem metadados de áudio não confirmados;<br>• ${capture.length} possuem captura potencialmente incompleta;<br>• ${unavailable.length} possuem mídia indisponível;<br>• ${complete.length} não possuem pendências conhecidas.`;if(!incomplete.length)box.querySelectorAll("input").forEach(input=>input.checked=false);}
   function filterCandidates(){
     const scope=$("batchExportScope").value,owner=$("batchExportOwner").value,stage=$("batchExportStage").value,from=$("batchExportDateFrom").value,to=$("batchExportDateTo").value;
-    const includeClosed=$("batchExportClosed").checked,includeLost=$("batchExportLost").checked;
+    const includeClosed=$("batchExportClosed").checked,includeLost=$("batchExportLost").checked,includePartners=$("batchExportPartners").checked,includePending=$("batchExportPending").checked;
     return records.filter(record=>{
-      if(isSpecifier(record)||!hasUsablePhone(record))return false;
-      if(record.pipeline==="closed"&&!includeClosed)return false;
-      if(record.stage==="Perdido"&&!includeLost)return false;
-      if(!includeClosed&&!includeLost&&!(record.pipeline==="lead"&&record.stage!=="Perdido"))return false;
+      if(!hasUsablePhone(record))return false;
+      if(isSpecifier(record) && !includePartners)return false;
+      if(typeof isPendingContact==="function"&&isPendingContact(record) && !includePending)return false;
+      if(!isSpecifier(record)&&!(typeof isPendingContact==="function"&&isPendingContact(record))){
+        if(record.pipeline==="closed"&&!includeClosed)return false;
+        if(record.stage==="Perdido"&&!includeLost)return false;
+        if(!includeClosed&&!includeLost&&!(record.pipeline==="lead"&&record.stage!=="Perdido"))return false;
+      }
       if(owner&&String(record.owner_id||"")!==owner)return false;
       if(stage&&String(record.stage||"")!==stage)return false;
       const date=lastMessageDate(record);
@@ -55,7 +59,7 @@
   function populateExportFilters(){
     const owner=$("batchExportOwner"),stage=$("batchExportStage");
     owner.innerHTML='<option value="">Todos</option>'+profiles.map(profile=>`<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.display_name||profile.email||profile.id)}</option>`).join("");
-    const stages=[...new Set(records.filter(record=>!isSpecifier(record)).map(record=>record.stage).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
+    const stages=[...new Set(records.map(record=>record.stage).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
     stage.innerHTML='<option value="">Todas</option>'+stages.map(value=>`<option>${escapeHtml(value)}</option>`).join("");
   }
   function refreshExportPicker(resetSelection=false){
@@ -63,7 +67,7 @@
     const ids=new Set(state.candidates.map(record=>String(record.id)));
     if(resetSelection)state.selected=new Set(ids);else state.selected=new Set([...state.selected].filter(id=>ids.has(id)));
     if(!state.selected.size&&state.candidates.length)state.selected=new Set(ids);
-    $("batchExportLeadPicker").innerHTML=state.candidates.length?state.candidates.map(record=>{const partial=Boolean(record.whatsapp_analysis_last_message_id),verification=engine.whatsappVerificationState(record),checked=verification.checked_at?new Date(verification.checked_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"}):"nunca";return `<label class="batchLeadRow"><input type="checkbox" data-batch-lead="${escapeHtml(record.id)}" ${state.selected.has(String(record.id))?"checked":""}/><b>${escapeHtml(fullName(record))}<small>${partial?"Parcial desde a última análise":"Histórico completo"} • ${escapeHtml(verification.label)} • conferida: ${escapeHtml(checked)}</small></b><span>${escapeHtml(profileNameById(record.owner_id))}</span><span>${escapeHtml(record.stage||"—")}</span><small>${escapeHtml(record.phone||"Sem telefone")}</small></label>`;}).join(""):'<div class="empty">Nenhum cliente precisa de verificação neste filtro.</div>';
+    $("batchExportLeadPicker").innerHTML=state.candidates.length?state.candidates.map(record=>{const partial=Boolean(record.whatsapp_analysis_last_message_id),verification=engine.whatsappVerificationState(record),checked=verification.checked_at?new Date(verification.checked_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"}):"nunca",audience=typeof recordAudienceLabel==="function"?recordAudienceLabel(record):(record.pipeline==="closed"?"Fechado":"Lead");return `<label class="batchLeadRow"><input type="checkbox" data-batch-lead="${escapeHtml(record.id)}" ${state.selected.has(String(record.id))?"checked":""}/><b>${escapeHtml(fullName(record))}<small>${escapeHtml(audience)} • ${partial?"Parcial desde a última análise":"Histórico completo"} • ${escapeHtml(verification.label)} • conferida: ${escapeHtml(checked)}</small></b><span>${escapeHtml(profileNameById(record.owner_id))}</span><span>${escapeHtml(record.stage||"—")}</span><small>${escapeHtml(record.phone||"Sem telefone")}</small></label>`;}).join(""):'<div class="empty">Nenhum contato precisa de verificação neste filtro.</div>';
     setPanel("batchExportPanel","batchExportCount","batchExportStatus",`${state.selected.size} contato(s) selecionado(s)`,state.candidates.length?"A extensão fará uma conferência leve e baixará somente as conversas alteradas.":"Tudo está atualizado neste filtro.");
     $("btnGenerateBatchZip").disabled=!state.selected.size;
     $("batchCompletenessChoice").hidden=true;
@@ -71,7 +75,7 @@
   async function buildSelectedBatch(selection=null){
     const selected=selection||state.candidates.filter(record=>state.selected.has(String(record.id)));
     if(!selected.length)throw new Error("Selecione ao menos uma conversa.");
-    return engine.buildDownloadRequest(selected,contextFor,records.filter(record=>!isSpecifier(record)));
+    return engine.buildDownloadRequest(selected,contextFor,records.filter(record=>hasUsablePhone(record)));
   }
   async function exportBatch(){
     const button=$("btnGenerateBatchZip"),original=button.textContent;
@@ -233,10 +237,10 @@
 
   if(window.__criareBatchAnalysisStaticListenersRegistered)return;
   window.__criareBatchAnalysisStaticListenersRegistered=true;
-  ["batchExportScope","batchExportOwner","batchExportStage","batchExportDateFrom","batchExportDateTo","batchExportClosed","batchExportLost"].forEach(id=>$(id).addEventListener("change",()=>refreshExportPicker(true)));
+  ["batchExportScope","batchExportOwner","batchExportStage","batchExportDateFrom","batchExportDateTo","batchExportClosed","batchExportLost","batchExportPartners","batchExportPending"].forEach(id=>$(id).addEventListener("change",()=>refreshExportPicker(true)));
   $("batchExportLeadPicker").addEventListener("change",event=>{const input=event.target.closest("[data-batch-lead]");if(!input)return;input.checked?state.selected.add(input.dataset.batchLead):state.selected.delete(input.dataset.batchLead);setPanel("batchExportPanel","batchExportCount","batchExportStatus",`${state.selected.size} contato(s) selecionado(s)`,"Confira a seleção e baixe a fila.");$("btnGenerateBatchZip").disabled=!state.selected.size;});
   $("btnGenerateBatchZip").addEventListener("click",exportBatch);
-  window.CriareBatchAnalysisUI={openForRecords(ids=[]){populateExportFilters();refreshExportPicker(true);if(ids.length)state.selected=new Set(ids.map(String));refreshExportPicker(false);$("batchExportModal").showModal();}};
+  window.CriareBatchAnalysisUI={openForRecords(ids=[],options={}){populateExportFilters();if(options.includePartners)$("batchExportPartners").checked=true;if(options.includePending)$("batchExportPending").checked=true;refreshExportPicker(true);if(ids.length)state.selected=new Set(ids.map(String));refreshExportPicker(false);$("batchExportModal").showModal();}};
   $("btnCancelBatchExport").addEventListener("click",()=>{state.cancelled=true;$("batchExportModal").close();});$("btnCloseBatchExport").addEventListener("click",()=>$("batchExportModal").close());
   $("btnCloseBatchImport").addEventListener("click",()=>$("batchImportModal").close());$("btnChooseBatchImport").addEventListener("click",()=>$("batchImportFile").click());
   $("batchImportFile").addEventListener("change",event=>{const file=event.target.files?.[0];if(file)handleImportFile(file);event.target.value="";});
