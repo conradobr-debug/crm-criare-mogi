@@ -2581,7 +2581,11 @@ function normalizeClosedStage(stage){
   return legacy[stage] || stage || "Contrato realizado";
 }
 function fullName(r){ return [r.first_name, r.last_name].filter(Boolean).join(" ").trim() || "Sem nome"; }
-function validContactDate(value){const date=new Date(value);return Number.isNaN(date.getTime())?null:date;}
+function validContactDate(value){
+  if(value===null||value===undefined||value===""||value===0||value==="0")return null;
+  const date=new Date(value),minimum=new Date("2000-01-01T00:00:00-03:00"),maximum=Date.now()+24*60*60*1000;
+  return Number.isNaN(date.getTime())||date<minimum||date.getTime()>maximum?null:date;
+}
 function firstWhatsAppContactAt(record){
   const entries=Array.isArray(record?.whatsapp_message_entries)?record.whatsapp_message_entries:[];
   const dates=entries.map(entry=>validContactDate(entry?.message_timestamp||entry?.timestamp||entry?.occurred_at||entry?.created_at)).filter(Boolean);
