@@ -39,3 +39,11 @@ test("retorno importado depois do GPT não rebaixa uma análise já atual",()=>{
   const currentRecords=records.map(record=>record.id==="lead-2"?{...record,whatsapp_analysis_last_message_id:"MSG-2"}:record);
   assert.equal(engine.receiptPlan(afterGpt,currentRecords).patches[0].patch.whatsapp_sync_status,"current");
 });
+
+test("reanálise completa permanece aguardando importação mesmo com a mesma última mensagem",()=>{
+  const replay=structuredClone(receipt);
+  replay.unchanged=[];
+  replay.processed=[{lead_id:"lead-2",checked_at:replay.generated_at,analyzed_until_message_id:"MSG-2",download_mode_actual:"full"}];
+  const currentRecords=records.map(record=>record.id==="lead-2"?{...record,whatsapp_analysis_last_message_id:"MSG-2"}:record);
+  assert.equal(engine.receiptPlan(replay,currentRecords).patches[0].patch.whatsapp_sync_status,"awaiting_analysis");
+});

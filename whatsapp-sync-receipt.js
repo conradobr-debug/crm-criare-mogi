@@ -42,7 +42,10 @@
       const record=maps.byId.get(clean(item.lead_id));
       const importedAlready=record?.whatsapp_analysis_status==="current"
         && normalizeId(record.whatsapp_analysis_last_message_id)===normalizeId(item.analyzed_until_message_id);
-      addPatch(item,importedAlready?"current":"awaiting_analysis");
+      // Uma fila de reanálise integral pede uma nova análise mesmo quando a
+      // última mensagem é igual à da análise anterior.
+      const forceReanalysis=clean(item.download_mode_actual).toLowerCase()==="full";
+      addPatch(item,importedAlready&&!forceReanalysis?"current":"awaiting_analysis");
     });
     receipt.failures.forEach(item=>addPatch(item,"verification_required"));
     const discoveries=[];
