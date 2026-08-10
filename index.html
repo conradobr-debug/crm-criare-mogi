@@ -521,6 +521,7 @@
         <button class="ghost" id="btnImportExtensionReceipt" type="button" data-admin-only hidden>Atualizar retorno da extensão</button>
         <button class="ghost" id="btnReviewWhatsAppCandidates" type="button" data-admin-only hidden>Novos no WhatsApp <span id="whatsappCandidateCount" class="headerCount" hidden>0</span></button>
         <button class="ghost" id="btnImportLocalWhatsAppBatch" type="button" data-admin-only hidden>Importar análises (ZIP)</button>
+        <button class="ghost" id="btnRecoverIndividualSuggestions" type="button" data-admin-only hidden>Recuperar sugestões individuais</button>
       </div>
     </details>
     <button class="ghost mobileUtility" id="btnInstall" hidden>Instalar aplicativo</button>
@@ -1251,7 +1252,7 @@
 <script src="whatsapp-crm-extension/capture-core.js?v=2.5.25"></script>
 <script src="audio-import-matcher.js?v=2.5.25"></script>
 <script src="conversation-completeness.js?v=2.5.1-final"></script>
-<script src="batch-analysis.js?v=2.9.6"></script>
+<script src="batch-analysis.js?v=3.0.1"></script>
 <script src="management-planning.js?v=1.0.0"></script>
 
 <script>
@@ -6094,7 +6095,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=3.0.0").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=3.0.1").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
@@ -6151,7 +6152,7 @@ window.setInterval(checkAgendaReminders,30_000);
 })();
 </script>
 <script src="whatsapp-sync-receipt.js?v=1.3.0"></script>
-<script src="batch-analysis-ui.js?v=3.0.0"></script>
+<script src="batch-analysis-ui.js?v=3.0.1"></script>
 <script src="management-planning-ui.js?v=1.0.0"></script>
 <script src="partners.js"></script>
 </body>

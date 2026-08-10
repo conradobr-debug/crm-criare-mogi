@@ -227,6 +227,7 @@ test("botão superior abre o importador novo e o seletor aceita ZIP",async()=>{
   assert.match(crm,/id="batchExportPartners"/);
   assert.match(crm,/id="batchExportPending"/);
   assert.match(crm,/id="btnImportLocalWhatsAppBatch"[^>]*>Importar análises \(ZIP\)</);
+  assert.match(crm,/id="btnRecoverIndividualSuggestions"[^>]*>Recuperar sugestões individuais</);
   assert.match(crm,/id="batchImportFile"[^>]*accept="[^"]*\.zip/);
   assert.match(crm,/\$\("btnImportLocalWhatsAppBatch"\)\.addEventListener\("click",\(\)=>\{/);
   assert.doesNotMatch(crm,/\$\("btnImportLocalWhatsAppBatch"\)\.addEventListener\("click",chooseLocalWhatsAppImportFile\)/);
@@ -299,6 +300,16 @@ test("resultado leve 1.3 gera sugestão limitada para o plano diário",async()=>
   assert.equal(plan.by_record.get(record.id).length,1);
   assert.equal(plan.by_record.get(record.id)[0].status,"suggested");
   assert.equal(plan.by_record.get(record.id)[0].event_id,null);
+});
+
+test("recupera todas as sugestões individuais armazenadas sem limite e sem duplicar",()=>{
+  const actions=Array.from({length:6},(_,index)=>({priority:"medium",owner:"seller",due_in_hours:index+1,estimated_minutes:20,action:`Ação ${index+1}`,suggested_message:`Mensagem ${index+1}`}));
+  const record={...textLead,id:"lead-recovery",owner_id:"seller-1",whatsapp_analysis_structured:{lead_id:"lead-recovery",conversation_hash:"b".repeat(64),analyzed_until_message_id:"MSG-RECOVERY",recommended_next_actions:actions,batch_metadata:{conversation_hash:"b".repeat(64),analyzed_until_message_id:"MSG-RECOVERY"}},appointments:[]};
+  const first=batch.recoverStoredIndividualSuggestions([record],{now:"2026-08-10T12:00:00Z",rolesByUser:{"seller-1":"member"}});
+  assert.equal(first.suggestion_count,6);
+  assert.equal(first.skipped.length,0);
+  const stored={...record,appointments:[first.by_record.get(record.id)[0]]},second=batch.recoverStoredIndividualSuggestions([stored],{now:"2026-08-10T12:00:00Z",rolesByUser:{"seller-1":"member"}});
+  assert.equal(second.suggestion_count,5);
 });
 
 test("preserva títulos, listas e parágrafos da análise completa",()=>{

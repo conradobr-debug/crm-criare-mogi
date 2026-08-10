@@ -3,7 +3,7 @@
   if(window.__criareBatchAnalysisUiLoaded)return;
   window.__criareBatchAnalysisUiLoaded=true;
 
-  const CRM_BATCH_VERSION="2.9.6";
+  const CRM_BATCH_VERSION="3.0.1";
   const CANDIDATE_TABLE="crm_whatsapp_lead_candidates";
   const engine=window.CriareBatchAnalysis;
   const syncEngine=window.CriareWhatsAppSyncReceipt;
@@ -33,6 +33,29 @@
   }
   function currentWorkspaceId(){return records.find(record=>record?.workspace_id)?.workspace_id||session?.user?.app_metadata?.workspace_id||"00000000-0000-4000-8000-000000000001";}
   async function loadWorkspaceRoles(){const {data,error}=await sb.from(TBL_WORKSPACE_MEMBERS).select("user_id,role").eq("workspace_id",currentWorkspaceId());if(error)throw error;state.workspaceRoles=Object.fromEntries((data||[]).map(item=>[String(item.user_id),String(item.role||"member")]));return state.workspaceRoles;}
+  async function recoverIndividualSuggestions(){
+    const button=$("btnRecoverIndividualSuggestions");
+    if(!button||!isAdminUser())return;
+    button.disabled=true;button.textContent="Verificando sugestões…";
+    try{
+      const rolesByUser=await loadWorkspaceRoles(),preview=engine.recoverStoredIndividualSuggestions(records,{rolesByUser,now:nowISO()});
+      if(!preview.suggestion_count){toast("Todas as sugestões individuais disponíveis já estão nas fichas.");return;}
+      if(!confirm(`Foram encontradas ${preview.suggestion_count} sugestão(ões) individual(is) ausente(s) em análises já importadas. Recuperar agora sem criar duplicatas?`))return;
+      let saved=0,updatedRecords=0,failed=0;
+      for(const recordId of preview.by_record.keys()){
+        try{
+          const {data:fresh,error:freshError}=await sb.from(TBL_RECORDS).select("*").eq("id",recordId).single();if(freshError)throw freshError;
+          const freshPlan=engine.recoverStoredIndividualSuggestions([fresh],{rolesByUser,now:nowISO()}),missing=freshPlan.by_record.get(String(recordId))||[];
+          if(!missing.length){replaceRecord(fresh);continue;}
+          const appointments=[...(Array.isArray(fresh.appointments)?fresh.appointments:[]),...missing];
+          const {data:reloaded,error:updateError}=await sb.from(TBL_RECORDS).update({appointments}).eq("id",recordId).select("*").single();if(updateError)throw updateError;
+          replaceRecord(reloaded);saved+=missing.length;updatedRecords+=1;
+        }catch(error){failed+=1;console.error("[CRM IA] Falha ao recuperar sugestões individuais.",recordId,error);}
+      }
+      render();toast(`${saved} sugestão(ões) individual(is) recuperada(s) em ${updatedRecords} cadastro(s).${failed?` ${failed} cadastro(s) falharam.`:""}`,{error:Boolean(failed)});
+    }catch(error){toast(`Não foi possível recuperar as sugestões: ${error.message||error}`,{error:true});}
+    finally{button.disabled=false;button.textContent="Recuperar sugestões individuais";}
+  }
   function selectedCompleteness(){const selected=state.candidates.filter(record=>state.selected.has(String(record.id)));return selected.map(record=>({record,summary:window.CriareConversationCompleteness.calculate(record,{identity_status:typeof phoneIdentityState==="function"?phoneIdentityState(record).code:"ready"})}));}
   function completenessStatus(summary){if(summary.conversation_completeness_status==="complete")return "Completa";if(summary.metadata_pending_audio_count)return "Metadados pendentes";return ({pending_audio:"Áudios pendentes",unavailable_audio:"Mídia indisponível",capture_may_be_incomplete:"Captura potencialmente incompleta",verification_required:"Verificação necessária",not_captured:"Não capturada"})[summary.conversation_completeness_status]||summary.conversation_completeness_status;}
   function refreshCompletenessWarning(){const chosen=selectedCompleteness(),incomplete=chosen.filter(item=>item.summary.conversation_completeness_status!=="complete"),withPending=chosen.filter(item=>item.summary.pending_audio_count>0),withMetadata=chosen.filter(item=>item.summary.metadata_pending_audio_count>0),capture=chosen.filter(item=>item.summary.capture_may_be_incomplete),unavailable=chosen.filter(item=>item.summary.unavailable_audio_count>0),complete=chosen.filter(item=>item.summary.conversation_completeness_status==="complete"),pending=withPending.reduce((sum,item)=>sum+item.summary.pending_audio_count,0),box=$("batchCompletenessChoice");if(!box)return;box.hidden=!incomplete.length;$("batchCompletenessWarning").innerHTML=`Das ${chosen.length} conversas selecionadas:<br>• ${withPending.length} possuem áudios sem transcrição (${pending} áudio(s));<br>• ${withMetadata.length} possuem metadados de áudio não confirmados;<br>• ${capture.length} possuem captura potencialmente incompleta;<br>• ${unavailable.length} possuem mídia indisponível;<br>• ${complete.length} não possuem pendências conhecidas.`;if(!incomplete.length)box.querySelectorAll("input").forEach(input=>input.checked=false);}
@@ -123,18 +146,19 @@
     if(!["ready","importing"].includes(state.importMachine.phase))return Promise.resolve({blocked:true,phase:state.importMachine.phase});
     const button=$("btnImportValidatedBatch");button.disabled=true;button.textContent="Importando…";state.importPhase="importing";
     const operation=state.importMachine.run(async snapshot=>{
-      const ready=[...new Map((snapshot.validation?.results||[]).filter(result=>result.status==="ready_to_import").map(result=>[result.import_key,result])).values()];state.importResults=[];state.actualWrites=0;
+      const ready=[...new Map((snapshot.validation?.results||[]).filter(result=>result.status==="ready_to_import").map(result=>[result.import_key,result])).values()];state.importResults=[];state.actualWrites=0;let rolesByUser={};try{rolesByUser=await loadWorkspaceRoles();}catch(error){rolesByUser=Object.fromEntries((profiles||[]).map(profile=>[String(profile.id),"member"]));}
       for(let index=0;index<ready.length;index++){
         const result=ready[index];setPanel("batchImportPanel","batchImportTitle","batchImportStatus",`Importando ${index+1} de ${ready.length}`,fullName(result.record));
         try{
           const {data:fresh,error:freshError}=await sb.from(TBL_RECORDS).select("*").eq("id",result.record.id).single();if(freshError)throw freshError;
           if(engine.storedImportKeys(fresh).has(result.import_key)){replaceRecord(fresh);result.record=fresh;result.status="already_imported";result.reason="A chave já estava persistida; nenhuma gravação foi executada.";state.importResults.push(result);continue;}
           const recheck=await engine.validateImport({...snapshot.payload,analyses:[result.item]},[fresh]);if(recheck.results[0]?.status!=="ready_to_import"){result.status=recheck.results[0]?.status||"save_error";result.reason=recheck.results[0]?.reason||"A validação antes da gravação falhou.";state.importResults.push(result);continue;}
-          const patch=engine.persistencePatch(fresh,result.item,snapshot.payload,nowISO(),[]);
+          const importedAt=nowISO(),patch=engine.persistencePatch(fresh,result.item,snapshot.payload,importedAt,[]),withAnalysis={...fresh,...patch},recovered=engine.recoverStoredIndividualSuggestions([withAnalysis],{rolesByUser,now:importedAt}),suggestions=recovered.by_record.get(String(fresh.id))||[];
+          if(suggestions.length)patch.appointments=[...(Array.isArray(patch.appointments)?patch.appointments:[]),...suggestions];
           const {error}=await sb.from(TBL_RECORDS).update(patch).eq("id",fresh.id);if(error)throw error;state.actualWrites+=1;
           const {data:reloaded,error:reloadError}=await sb.from(TBL_RECORDS).select("*").eq("id",fresh.id).single();if(reloadError)throw reloadError;
           if(!verifySavedAnalysis(reloaded,result,snapshot.payload))throw new Error("A confirmação após a gravação não corresponde à chave importada.");
-          replaceRecord(reloaded);result.record=reloaded;result.status="imported";result.action_plan={individual:Array.isArray(result.item?.recommended_next_actions)?result.item.recommended_next_actions.length:0};result.reason="Uma gravação executada e confirmada após releitura. As recomendações individuais ficaram disponíveis na ficha; a agenda da equipe será criada no planejamento gerencial.";
+          replaceRecord(reloaded);result.record=reloaded;result.status="imported";result.action_plan={individual:suggestions.length};result.reason=`Uma gravação executada e confirmada após releitura. ${suggestions.length} sugestão(ões) individual(is) foi(ram) incluída(s) na ficha para confirmação humana.`;
         }catch(error){result.status="save_error";result.reason=error.message||String(error);}
         state.importResults.push(result);
       }
@@ -257,6 +281,7 @@
 
   const headerExportButton=$("btnOpenBatchExportHeader");
   if(headerExportButton&&!headerExportButton.dataset.batchWired){headerExportButton.dataset.batchWired="1";headerExportButton.addEventListener("click",()=>{if(!isAdminUser())return;populateExportFilters();refreshExportPicker(true);$("batchExportModal").showModal();});}
+  const recoverButton=$("btnRecoverIndividualSuggestions");if(recoverButton&&!recoverButton.dataset.batchWired){recoverButton.dataset.batchWired="1";recoverButton.addEventListener("click",recoverIndividualSuggestions);}
 
   if(window.__criareBatchAnalysisStaticListenersRegistered)return;
   window.__criareBatchAnalysisStaticListenersRegistered=true;
