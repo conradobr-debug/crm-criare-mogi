@@ -14,6 +14,7 @@ test("retorno confirmado marca conversa inalterada como atual",()=>{
   assert.equal(plan.patches.length,1);
   assert.equal(plan.patches[0].patch.whatsapp_analysis_status,"current");
   assert.equal(plan.patches[0].patch.whatsapp_sync_status,"current");
+  assert.equal(plan.patches[0].patch.whatsapp_sync_batch_id,receipt.batch_id);
 });
 
 test("conversa recente sem telefone conhecido vira possível novo lead",()=>{

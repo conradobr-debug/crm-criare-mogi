@@ -725,8 +725,8 @@ test("a extensão captura todo o histórico carregado sem esperar indefinidament
   assert(!manifest.permissions.includes("downloads"));
   assert(!manifest.permissions.includes("debugger"));
   assert.doesNotMatch(background,/"criare-(?:start-audio-download-watch|wait-audio-download|dispatch-real-mouse-move)"/);
-  assert(crm.includes("https://web.whatsapp.com/send/?phone=${number}"));
-  assert(!crm.includes("whatsapp://"));
+  assert.match(crm,/https:\/\/web\.whatsapp\.com\/send\/\?phone=\$\{encodeURIComponent\(number\)\}/);
+  assert.match(crm,/whatsapp:\/\/send\?phone=\$\{encodeURIComponent\(number\)\}/);
   assert.match(crm,/id="btnCaptureOpenWhatsApp"[^>]*>Capturar conversa aberta/);
   assert.match(background,/criare-capture-open-whatsapp/);
   assert.match(background,/captureMode:"opened"/);

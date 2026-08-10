@@ -1250,7 +1250,7 @@
 <script src="whatsapp-crm-extension/capture-core.js?v=2.5.25"></script>
 <script src="audio-import-matcher.js?v=2.5.25"></script>
 <script src="conversation-completeness.js?v=2.5.1-final"></script>
-<script src="batch-analysis.js?v=2.9.5"></script>
+<script src="batch-analysis.js?v=2.9.6"></script>
 
 <script>
 /*
@@ -1276,6 +1276,7 @@ const STAGE_PHASES = {
 };
 const DEFAULT_SOURCES = ["WhatsApp","Campanha de Facebook","Cliente de Porta de loja","Google","Indicação","Lead Online"];
 const DEFAULT_LOST_REASONS = ["Preço","Prazo","Concorrente","Sem retorno (sumiu)","Mudou de ideia","Sem orçamento no momento","Outro"];
+const DEFAULT_AI_DAILY_ACTION_CAPACITY = {default:{max_actions:4,max_minutes:120},roles:{admin:{max_actions:3,max_minutes:90},manager:{max_actions:4,max_minutes:120},member:{max_actions:5,max_minutes:150}},users:{}};
 
 /* ===== DB tables (SQL no guia) ===== */
 const TBL_RECORDS = "crm_records";
@@ -1336,7 +1337,11 @@ function normalizeAppointments(record){
     event_id:item.event_id || null,
     web_link:item.web_link || null,
     synced_at:item.synced_at || null,
-    participant_ids:[...new Set((Array.isArray(item.participant_ids)?item.participant_ids:fallbackParticipants).filter(Boolean))]
+    participant_ids:[...new Set((Array.isArray(item.participant_ids)?item.participant_ids:fallbackParticipants).filter(Boolean))],
+    source:item.source || null, ai_action_key:item.ai_action_key || null, ai_priority:item.ai_priority || null,
+    ai_owner_role:item.ai_owner_role || null, owner_id:item.owner_id || record?.owner_id || null,
+    requires_human_review:Boolean(item.requires_human_review), generated_at:item.generated_at || null,
+    conversation_hash:item.conversation_hash || null, analyzed_until_message_id:item.analyzed_until_message_id || null
   })).filter(item=>item.starts_at);
   const legacy = getLegacyNextActionAt(record);
   return legacy ? [{
@@ -1363,7 +1368,7 @@ function sameLocalDate(a,b){return a.getFullYear()===b.getFullYear()&&a.getMonth
 function isAppointmentParticipant(record,appointment,userId=session?.user?.id){
   if(!userId)return false;
   const ids=Array.isArray(appointment?.participant_ids)?appointment.participant_ids.filter(Boolean):[];
-  return ids.length?ids.includes(userId):record?.owner_id===userId;
+  return ids.length?ids.includes(userId):(appointment?.owner_id||record?.owner_id)===userId;
 }
 function operationalActionsFor(record){
   const actions=record?.whatsapp_analysis_structured?.operational_actions;
@@ -1380,7 +1385,8 @@ function agendaEntries({day=null}={}){
   const endOfDay=new Date(now);endOfDay.setHours(23,59,59,999);
   const appointments=records.flatMap(record=>scheduledAppointments(record).filter(appointment=>isAppointmentParticipant(record,appointment)).map(appointment=>({type:"appointment",record,appointment,when:appointment.starts_at})));
   const actions=records.flatMap(record=>operationalActionsFor(record).filter(action=>isOperationalActionParticipant(record,action)).map(action=>({type:"action",record,action,when:action.due_at})));
-  return [...appointments.filter(entry=>sameLocalDate(new Date(entry.when),now)),...actions.filter(entry=>new Date(entry.when)<=endOfDay)]
+  const suggestions=records.flatMap(record=>suggestedAiAppointments(record).filter(suggestion=>isAppointmentParticipant(record,suggestion)).map(suggestion=>({type:"suggestion",record,suggestion,when:suggestion.starts_at})));
+  return [...appointments.filter(entry=>sameLocalDate(new Date(entry.when),now)),...actions.filter(entry=>new Date(entry.when)<=endOfDay),...suggestions.filter(entry=>new Date(entry.when)<=endOfDay)]
     .sort((a,b)=>{const priority=agendaPriorityRank(a.action?.priority)-agendaPriorityRank(b.action?.priority);return priority||new Date(a.when)-new Date(b.when);});
 }
 function participantNames(ids=[]){return [...new Set(ids)].map(profileNameById).filter(name=>name&&name!=="—");}
@@ -1405,6 +1411,7 @@ function renderTodayAgenda(){
   $("todayAgendaSubtitle").textContent=`${entries.length} item(ns) para hoje`;
   list.innerHTML=entries.length?entries.map(entry=>{
     if(entry.type==="action"){const action=entry.action,late=new Date(action.due_at)<new Date(),priority=String(action.priority||"medium").toUpperCase();return `<div class="todayAgendaItem"><button type="button" class="todayAgendaOpen" data-open-action-record="${escapeHtml(entry.record.id)}"><span class="todayAgendaTime">${late?"ATRASADA • ":""}${escapeHtml(priority)} • até ${escapeHtml(fmtBRDateTime(action.due_at))}</span><b>${escapeHtml(fullName(entry.record))}</b><small>${escapeHtml(action.action)}${action.evidence?` • Evidência: ${escapeHtml(action.evidence)}`:""}</small></button><button class="ghost" type="button" data-complete-operational-action="${escapeHtml(action.id)}" data-operational-record="${escapeHtml(entry.record.id)}">Concluir</button></div>`;}
+    if(entry.type==="suggestion"){const suggestion=entry.suggestion,priority=String(suggestion.ai_priority||"medium").toUpperCase();return `<button type="button" class="todayAgendaItem" data-open-agenda-record="${escapeHtml(entry.record.id)}"><span class="todayAgendaTime">SUGESTÃO IA • ${escapeHtml(priority)} • até ${escapeHtml(fmtBRDateTime(suggestion.starts_at))}</span><b>${escapeHtml(fullName(entry.record))}</b><small>${escapeHtml(suggestion.kind.replace(/^Sugestão IA:\s*/,""))} • requer revisão humana</small></button>`;}
     const {record,appointment}=entry,people=participantNames(appointment.participant_ids||[]);return `<button class="todayAgendaItem" type="button" data-open-agenda-record="${escapeHtml(record.id)}"><span class="todayAgendaTime">${escapeHtml(fmtBRDateTime(appointment.starts_at).split(", ")[1]||fmtBRDateTime(appointment.starts_at))} • ${escapeHtml(appointment.kind)}</span><b>${escapeHtml(fullName(record))}</b><small>${escapeHtml(appointment.details||"Sem detalhes")}${people.length?` • ${escapeHtml(people.join(", "))}`:""}</small></button>`;
   }).join(""):`<div class="todayAgendaEmpty">Nenhuma ação ou compromisso seu para hoje.</div>`;
 }
@@ -1457,6 +1464,7 @@ function scheduledAppointments(record){
     .filter(item=>item.status === "scheduled" && item.starts_at)
     .sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
 }
+function suggestedAiAppointments(record){return normalizeAppointments(record).filter(item=>item.status==="suggested"&&item.source==="whatsapp_ai"&&item.starts_at).sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));}
 function getNextActionAt(r){
   const now = Date.now();
   const scheduled = scheduledAppointments(r);
@@ -2675,7 +2683,7 @@ let justDraggedAt = 0;
 let currentEditingId = null;
 let appointmentDrafts = [];
 
-let config = { sources: DEFAULT_SOURCES.slice(), lost_reasons: DEFAULT_LOST_REASONS.slice() };
+let config = { sources: DEFAULT_SOURCES.slice(), lost_reasons: DEFAULT_LOST_REASONS.slice(), ai_daily_action_capacity: structuredClone(DEFAULT_AI_DAILY_ACTION_CAPACITY) };
 let profiles = [];   // [{id, display_name}]
 let currentWorkspaceRole = "member";
 let transferPreviewIds = new Set();
@@ -3172,23 +3180,24 @@ async function ensureProfile(){
 
 async function ensureConfigRow(){
   // id=1
-  const { data, error } = await sb.from(TBL_CONFIG).select("id, sources, lost_reasons").eq("id", 1).maybeSingle();
+  const { data, error } = await sb.from(TBL_CONFIG).select("id, sources, lost_reasons, ai_daily_action_capacity").eq("id", 1).maybeSingle();
   if(error){
     toast("Erro ao ler config.");
     return false;
   }
   if(!data){
-    const { error: insErr } = await sb.from(TBL_CONFIG).insert({ id: 1, sources: DEFAULT_SOURCES, lost_reasons: DEFAULT_LOST_REASONS });
+    const { error: insErr } = await sb.from(TBL_CONFIG).insert({ id: 1, sources: DEFAULT_SOURCES, lost_reasons: DEFAULT_LOST_REASONS, ai_daily_action_capacity: DEFAULT_AI_DAILY_ACTION_CAPACITY });
     if(insErr){ toast("Erro ao criar config."); return false; }
   }
   return true;
 }
 
 async function fetchConfig(){
-  const { data, error } = await sb.from(TBL_CONFIG).select("id, sources, lost_reasons").eq("id", 1).single();
+  const { data, error } = await sb.from(TBL_CONFIG).select("id, sources, lost_reasons, ai_daily_action_capacity").eq("id", 1).single();
   if(error){ toast("Erro ao carregar config."); return false; }
   config.sources = Array.isArray(data.sources) ? data.sources : DEFAULT_SOURCES.slice();
   config.lost_reasons = Array.isArray(data.lost_reasons) ? data.lost_reasons : DEFAULT_LOST_REASONS.slice();
+  config.ai_daily_action_capacity = window.CriareBatchAnalysis?.normalizedDailyActionCapacity(data.ai_daily_action_capacity) || structuredClone(DEFAULT_AI_DAILY_ACTION_CAPACITY);
   return true;
 }
 
@@ -3830,6 +3839,7 @@ function renderCard(r){
   const initialContact=initialContactDate(r);
   const schedule = scheduleStatus(r);
   const appointmentCount = scheduledAppointments(r).filter(item=>new Date(item.starts_at).getTime() >= Date.now()).length;
+  const aiSuggestion=suggestedAiAppointments(r)[0]||null;
 
   const metaLines = [
     initialContact ? `Contato <b>${escapeHtml(fmtBRDate(initialContact.date.toISOString()))}</b>` : "Contato <b>—</b>",
@@ -3863,6 +3873,7 @@ function renderCard(r){
 
       <div class="meta">${metaLines || "—"}</div>
       <div class="scheduleState ${schedule.kind}">${escapeHtml(schedule.label)}${appointmentCount > 1 ? ` • +${appointmentCount - 1} futuro(s)` : ""}</div>
+      ${aiSuggestion?`<div class="scheduleState warn" title="Sugestão gerada da conversa sincronizada; não foi enviada nem criada no calendário.">IA • ${escapeHtml(aiSuggestion.ai_priority||"prioridade")} • ${escapeHtml(aiSuggestion.kind.replace(/^Sugestão IA:\s*/,""))}</div>`:""}
 
       <div class="menu" data-menu="${escapeHtml(r.id)}">
         <button type="button" data-act="edit" data-id="${escapeHtml(r.id)}">Editar</button>
@@ -4819,7 +4830,8 @@ function renderLeadInfoSectionSummary(){
   $("leadInfoSectionSummary").textContent=values.length?values.slice(0,3).join(" • "):"Mais informações";
 }
 function renderAppointmentSectionSummary(sorted){
-  $("appointmentSectionSummary").textContent=sorted.length?`${sorted.length} compromisso(s) • próximo ${fmtBRDateTime(sorted[0].starts_at)}`:"Nenhum compromisso agendado";
+  const suggested=sorted.filter(item=>item.status==="suggested").length,scheduled=sorted.filter(item=>item.status==="scheduled").length;
+  $("appointmentSectionSummary").textContent=sorted.length?`${scheduled} compromisso(s) • ${suggested} sugestão(ões) IA`:"Nenhum compromisso agendado";
 }
 function renderWhatsAppSectionSummary(record){
   const normalized=normalizeLegacyWhatsAppRecord(record||records.find(item=>item.id===$("id").value));
@@ -4836,14 +4848,16 @@ function renderAppointmentList(){
   const sorted = appointmentDrafts.slice().sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
   renderAppointmentSectionSummary(sorted);
   list.innerHTML = sorted.length ? sorted.map(item=>{
-    const synced = Boolean(item.event_id || item.synced_at);
+    const synced = Boolean(item.event_id || item.synced_at),suggested=item.status==="suggested";
     return `<div class="appointmentItem" data-appointment-id="${escapeHtml(item.id)}">
       <div class="appointmentItemMain">
-        <b>${escapeHtml(item.kind)} • ${escapeHtml(fmtBRDateTime(item.starts_at))}</b>
+        <b>${escapeHtml(item.kind)} • ${escapeHtml(fmtBRDateTime(item.starts_at))}</b>${suggested?` <span class="badge">Sugestão da IA • ${escapeHtml(item.ai_priority||"prioridade não informada")}</span>`:""}
         ${item.details ? `<div>${escapeHtml(item.details)}</div>` : ""}
-        <div class="appointmentItemMeta">${item.duration_minutes || 30} min • lembrete ${item.reminder_minutes ? `${item.reminder_minutes} min antes` : "desativado"}${(item.participant_ids||[]).length ? ` • ${escapeHtml(participantNames(item.participant_ids).join(", ") || "participantes definidos")}` : ""}${synced ? " • salvo no calendário" : " • aguardando salvar"}</div>
+        <div class="appointmentItemMeta">${item.duration_minutes || 30} min${suggested?` • responsável: ${escapeHtml(item.ai_owner_role||"vendedor")} • requer revisão humana • não enviado ao calendário`:` • lembrete ${item.reminder_minutes ? `${item.reminder_minutes} min antes` : "desativado"}${(item.participant_ids||[]).length ? ` • ${escapeHtml(participantNames(item.participant_ids).join(", ") || "participantes definidos")}` : ""}${synced ? " • salvo no calendário" : " • aguardando salvar"}`}</div>
       </div>
-      ${synced
+      ${suggested
+        ? `<button class="ghost" type="button" data-remove-appointment="${escapeHtml(item.id)}">Descartar sugestão</button>`
+        : synced
         ? (item.web_link ? `<a class="btn" href="${escapeHtml(item.web_link)}" target="_blank" rel="noopener noreferrer">Abrir</a>` : `<span class="appointmentItemMeta">No calendário</span>`)
         : `<button class="ghost" type="button" data-remove-appointment="${escapeHtml(item.id)}">Remover</button>`}
     </div>`;
@@ -5183,7 +5197,7 @@ async function registerContactNow(r){
 /* ===== Config updates ===== */
 async function saveConfig(){
   if(!isAdminUser())return toast("Apenas o administrador pode alterar as configurações.",{error:true});
-  const { error } = await sb.from(TBL_CONFIG).upsert({ id:1, sources: config.sources, lost_reasons: config.lost_reasons });
+  const { error } = await sb.from(TBL_CONFIG).upsert({ id:1, sources: config.sources, lost_reasons: config.lost_reasons, ai_daily_action_capacity: config.ai_daily_action_capacity });
   if(error) toast("Erro ao salvar config.");
 }
 
@@ -6070,7 +6084,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=2.9.5").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=2.9.6").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
@@ -6126,8 +6140,8 @@ window.setInterval(checkAgendaReminders,30_000);
   }
 })();
 </script>
-<script src="whatsapp-sync-receipt.js?v=1.1.0"></script>
-<script src="batch-analysis-ui.js?v=2.9.5"></script>
+<script src="whatsapp-sync-receipt.js?v=1.2.0"></script>
+<script src="batch-analysis-ui.js?v=2.9.6"></script>
 <script src="partners.js"></script>
 </body>
 </html>

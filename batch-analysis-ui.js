@@ -3,12 +3,12 @@
   if(window.__criareBatchAnalysisUiLoaded)return;
   window.__criareBatchAnalysisUiLoaded=true;
 
-  const CRM_BATCH_VERSION="2.9.0";
+  const CRM_BATCH_VERSION="2.9.6";
   const CANDIDATE_TABLE="crm_whatsapp_lead_candidates";
   const engine=window.CriareBatchAnalysis;
   const syncEngine=window.CriareWhatsAppSyncReceipt;
-  const state={candidates:[],selected:new Set(),cancelled:false,lastBatch:null,importPayload:null,importFile:null,validation:null,importResults:[],importMachine:engine.createImportStateMachine(),importPhase:"idle",actualWrites:0,receiptPlan:null,receiptApplied:false,leadCandidates:[],dismissedCandidates:[],candidateInboxMode:"pending",linkingCandidateId:null};
-  const statusLabels={ready_to_import:"Pronta",invalid_schema:"Schema incompatível",duplicate:"Duplicada — não importada",duplicate_conflict:"Conflito de duplicidade",lead_not_found:"Lead não encontrado",invalid_analysis:"Análise inválida",stale_conversation:"Conversa alterada",already_imported:"Já importada",imported:"Importada",save_error:"Erro ao salvar"};
+  const state={candidates:[],selected:new Set(),cancelled:false,lastBatch:null,importPayload:null,importFile:null,validation:null,importResults:[],importMachine:engine.createImportStateMachine(),importPhase:"idle",actualWrites:0,receiptPlan:null,receiptApplied:false,leadCandidates:[],dismissedCandidates:[],candidateInboxMode:"pending",linkingCandidateId:null,workspaceRoles:{}};
+  const statusLabels={ready_to_import:"Pronta",invalid_schema:"Schema incompatível",duplicate:"Duplicada — não importada",duplicate_conflict:"Conflito de duplicidade",conversation_identity_conflict:"Conversa associada a mais de um cadastro",lead_not_found:"Lead não encontrado",invalid_analysis:"Análise inválida",stale_conversation:"Conversa alterada",already_imported:"Já importada",imported:"Importada",save_error:"Erro ao salvar"};
 
   function setPanel(id,titleId,statusId,title,message,kind=""){
     const panel=$(id); if(!panel)return;
@@ -32,6 +32,7 @@
     return {full_name:fullName(record),seller:profileNameById(record.owner_id),workspace_id:record.workspace_id||session?.user?.app_metadata?.workspace_id||null,commitments:commitmentsFor(record),identity_status:typeof phoneIdentityState==="function"?phoneIdentityState(record).code:"ready",analysis_focus:analysisFocus,open_pending_context:openPending.map(item=>({id:item.id,type:item.pending_type,title:item.title,priority:item.priority,due_at:item.due_at||null,description:item.description||null}))};
   }
   function currentWorkspaceId(){return records.find(record=>record?.workspace_id)?.workspace_id||session?.user?.app_metadata?.workspace_id||"00000000-0000-4000-8000-000000000001";}
+  async function loadWorkspaceRoles(){const {data,error}=await sb.from(TBL_WORKSPACE_MEMBERS).select("user_id,role").eq("workspace_id",currentWorkspaceId());if(error)throw error;state.workspaceRoles=Object.fromEntries((data||[]).map(item=>[String(item.user_id),String(item.role||"member")]));return state.workspaceRoles;}
   function selectedCompleteness(){const selected=state.candidates.filter(record=>state.selected.has(String(record.id)));return selected.map(record=>({record,summary:window.CriareConversationCompleteness.calculate(record,{identity_status:typeof phoneIdentityState==="function"?phoneIdentityState(record).code:"ready"})}));}
   function completenessStatus(summary){if(summary.conversation_completeness_status==="complete")return "Completa";if(summary.metadata_pending_audio_count)return "Metadados pendentes";return ({pending_audio:"Áudios pendentes",unavailable_audio:"Mídia indisponível",capture_may_be_incomplete:"Captura potencialmente incompleta",verification_required:"Verificação necessária",not_captured:"Não capturada"})[summary.conversation_completeness_status]||summary.conversation_completeness_status;}
   function refreshCompletenessWarning(){const chosen=selectedCompleteness(),incomplete=chosen.filter(item=>item.summary.conversation_completeness_status!=="complete"),withPending=chosen.filter(item=>item.summary.pending_audio_count>0),withMetadata=chosen.filter(item=>item.summary.metadata_pending_audio_count>0),capture=chosen.filter(item=>item.summary.capture_may_be_incomplete),unavailable=chosen.filter(item=>item.summary.unavailable_audio_count>0),complete=chosen.filter(item=>item.summary.conversation_completeness_status==="complete"),pending=withPending.reduce((sum,item)=>sum+item.summary.pending_audio_count,0),box=$("batchCompletenessChoice");if(!box)return;box.hidden=!incomplete.length;$("batchCompletenessWarning").innerHTML=`Das ${chosen.length} conversas selecionadas:<br>• ${withPending.length} possuem áudios sem transcrição (${pending} áudio(s));<br>• ${withMetadata.length} possuem metadados de áudio não confirmados;<br>• ${capture.length} possuem captura potencialmente incompleta;<br>• ${unavailable.length} possuem mídia indisponível;<br>• ${complete.length} não possuem pendências conhecidas.`;if(!incomplete.length)box.querySelectorAll("input").forEach(input=>input.checked=false);}
@@ -100,13 +101,13 @@
   function renderImportPreview(){
     const results=state.validation?.results||[];
     $("batchImportPreview").innerHTML=results.length?results.map(result=>{const item=result.item||{},record=result.record;return `<tr><td><b>${escapeHtml(record?fullName(record):result.lead_id||"—")}</b><br/><small>${escapeHtml(result.lead_id||"—")}</small></td><td>${escapeHtml(record?profileNameById(record.owner_id):"—")}</td><td>${escapeHtml(record?.stage||"—")}</td><td>${escapeHtml(hashLabel(result))}</td><td>${escapeHtml(analysisSnapshot(result))}</td><td>${escapeHtml(item.risk?.level||"—")}</td><td>${escapeHtml(item.risk?.urgency_score??"—")}</td><td>${escapeHtml(item.conversation_status?.waiting_for||"—")}</td><td class="batchStatus ${escapeHtml(result.status)}" title="${escapeHtml(result.reason)}">${escapeHtml(statusLabels[result.status]||result.status)}<br/><small>${escapeHtml(result.reason)}</small></td></tr>`;}).join(""):'<tr><td colspan="9">Nenhuma análise encontrada.</td></tr>';
-    const counts=results.reduce((map,result)=>(map[result.status]=(map[result.status]||0)+1,map),{});const ready=counts.ready_to_import||0;const received=state.validation?.summary?.received??results.length;const unique=state.validation?.summary?.unique??ready;const duplicates=counts.duplicate||0;const conflicts=counts.duplicate_conflict||0;const already=counts.already_imported||0;const imported=counts.imported||0;
+    const counts=results.reduce((map,result)=>(map[result.status]=(map[result.status]||0)+1,map),{});const ready=counts.ready_to_import||0;const received=state.validation?.summary?.received??results.length;const unique=state.validation?.summary?.unique??ready;const duplicates=counts.duplicate||0;const conflicts=counts.duplicate_conflict||0;const already=counts.already_imported||0;const imported=counts.imported||0;const suggested=results.reduce((sum,result)=>sum+Number(result.action_plan?.suggested||0),0);const deferred=results.reduce((sum,result)=>sum+Number(result.action_plan?.deferred||0),0);
     const completed=state.importPhase==="completed"||state.importMachine.phase==="completed";
     $("btnImportValidatedBatch").disabled=!ready||state.importPhase!=="ready";$("btnImportValidatedBatch").hidden=completed;
     $("btnLoadAnotherBatch").hidden=!completed;
     const file=state.importFile?.name||"JSON colado",batch=state.importPayload?.batch_id||"schema 1.0";const title=completed?`Lote ${batch} • recebidas: ${received} • importadas: ${imported}`:`${ready} pronta(s) para importar • lote ${batch}`;
-    const detail=`Arquivo: ${file} • únicas: ${unique} • duplicadas: ${duplicates} • conflitos: ${conflicts} • já importadas: ${already} • gravações: ${state.actualWrites}.`;
-    setPanel("batchImportPanel","batchImportTitle","batchImportStatus",title,detail,(counts.save_error||conflicts)?"error":"success");
+    const identityConflicts=counts.conversation_identity_conflict||0;const detail=`Arquivo: ${file} • únicas: ${unique} • duplicadas: ${duplicates} • conflitos: ${conflicts} • vínculos ambíguos: ${identityConflicts} • já importadas: ${already} • gravações: ${state.actualWrites} • sugestões IA: ${suggested}${deferred?` • adiadas por capacidade: ${deferred}`:""}.`;
+    setPanel("batchImportPanel","batchImportTitle","batchImportStatus",title,detail,(counts.save_error||conflicts||identityConflicts)?"error":"success");
   }
   async function parseImportText(text,meta={name:"JSON colado",type:"application/json"}){
     state.importFile=meta;
@@ -122,18 +123,18 @@
     if(!["ready","importing"].includes(state.importMachine.phase))return Promise.resolve({blocked:true,phase:state.importMachine.phase});
     const button=$("btnImportValidatedBatch");button.disabled=true;button.textContent="Importando…";state.importPhase="importing";
     const operation=state.importMachine.run(async snapshot=>{
-      const ready=[...new Map((snapshot.validation?.results||[]).filter(result=>result.status==="ready_to_import").map(result=>[result.import_key,result])).values()];state.importResults=[];state.actualWrites=0;
+      const ready=[...new Map((snapshot.validation?.results||[]).filter(result=>result.status==="ready_to_import").map(result=>[result.import_key,result])).values()];state.importResults=[];state.actualWrites=0;let rolesByUser={};try{rolesByUser=await loadWorkspaceRoles();}catch(error){rolesByUser=Object.fromEntries((profiles||[]).map(profile=>[String(profile.id),"member"]));console.warn("[CRM IA] Funções indisponíveis; aplicado limite padrão por responsável.",error);}const actionPlan=engine.planDailyActionSuggestions(ready,records,{now:nowISO(),capacity:config?.ai_daily_action_capacity,rolesByUser});
       for(let index=0;index<ready.length;index++){
         const result=ready[index];setPanel("batchImportPanel","batchImportTitle","batchImportStatus",`Importando ${index+1} de ${ready.length}`,fullName(result.record));
         try{
           const {data:fresh,error:freshError}=await sb.from(TBL_RECORDS).select("*").eq("id",result.record.id).single();if(freshError)throw freshError;
           if(engine.storedImportKeys(fresh).has(result.import_key)){replaceRecord(fresh);result.record=fresh;result.status="already_imported";result.reason="A chave já estava persistida; nenhuma gravação foi executada.";state.importResults.push(result);continue;}
           const recheck=await engine.validateImport({...snapshot.payload,analyses:[result.item]},[fresh]);if(recheck.results[0]?.status!=="ready_to_import"){result.status=recheck.results[0]?.status||"save_error";result.reason=recheck.results[0]?.reason||"A validação antes da gravação falhou.";state.importResults.push(result);continue;}
-          const patch=engine.persistencePatch(fresh,result.item,snapshot.payload,nowISO());
+          const suggestions=actionPlan.by_record.get(String(fresh.id))||[];const deferred=actionPlan.skipped.filter(item=>item.lead_id===String(fresh.id)).length;const patch=engine.persistencePatch(fresh,result.item,snapshot.payload,nowISO(),suggestions);
           const {error}=await sb.from(TBL_RECORDS).update(patch).eq("id",fresh.id);if(error)throw error;state.actualWrites+=1;
           const {data:reloaded,error:reloadError}=await sb.from(TBL_RECORDS).select("*").eq("id",fresh.id).single();if(reloadError)throw reloadError;
           if(!verifySavedAnalysis(reloaded,result,snapshot.payload))throw new Error("A confirmação após a gravação não corresponde à chave importada.");
-          replaceRecord(reloaded);result.record=reloaded;result.status="imported";result.reason="Uma gravação executada e confirmada após releitura.";
+          replaceRecord(reloaded);result.record=reloaded;result.status="imported";result.action_plan={suggested:suggestions.length,deferred};result.reason=`Uma gravação executada e confirmada após releitura.${suggestions.length?` ${suggestions.length} sugestão(ões) da IA incluída(s) para revisão.`:""}${deferred?` ${deferred} ação(ões) adiada(s) por capacidade ou responsável.`:""}`;
         }catch(error){result.status="save_error";result.reason=error.message||String(error);}
         state.importResults.push(result);
       }

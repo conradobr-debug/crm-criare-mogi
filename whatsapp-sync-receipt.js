@@ -28,6 +28,7 @@
         whatsapp_last_checked_at:item.checked_at||receipt.generated_at,
         whatsapp_observed_last_message_id:item.observed_last_message_id||null,
         whatsapp_observed_last_message_at:item.observed_last_message_at||null,
+        whatsapp_sync_batch_id:receipt.batch_id,
         whatsapp_external_chat_id:item.external_chat_id||record.whatsapp_external_chat_id||null,
         whatsapp_sync_status:status
       };

@@ -43,8 +43,8 @@ test("fila de verificação separa atual, atrasada, alterada e falha",()=>{
 });
 
 test("fila da extensão preserva foco comercial, pós-venda e assistência",()=>{
-  const lead={...textLead,id:"lead-sales",pipeline:"lead",stage:"Qualificação"};
-  const closed={...textLead,id:"lead-closed",pipeline:"closed",stage:"Contrato realizado"};
+  const lead={...textLead,id:"lead-sales",phone:"19996142936",pipeline:"lead",stage:"Qualificação"};
+  const closed={...textLead,id:"lead-closed",phone:"19996142937",pipeline:"closed",stage:"Contrato realizado"};
   const request=batch.buildDownloadRequest([lead,closed],record=>({analysis_focus:record.id==="lead-closed"?"technical_support":"sales",open_pending_context:record.id==="lead-closed"?[{type:"Assistência técnica",title:"Porta desalinhada"}]:[]}));
   assert.equal(request.contacts[0].analysis_focus,"sales");
   assert.equal(request.contacts[1].pipeline,"closed");
@@ -292,13 +292,13 @@ test("aceita resultado leve 1.2 com somente Chefe Duro e Análise Completa",asyn
   assert.deepEqual(patch.whatsapp_analysis_history,textLead.whatsapp_analysis_history?.length?textLead.whatsapp_analysis_history:[]);
 });
 
-test("resultado leve preserva ações verificáveis para o plano diário",async()=>{
-  const hash=await batch.conversationHash(textLead),item={batch_id:"20260802-1902-ABCD",lead_id:textLead.id,conversation_hash:hash,analyzed_until_message_id:batch.lastMessageId(textLead),chefe_duro:"Retomar hoje.",full_analysis:"## Próxima melhor ação\n\nRetomar.",recommended_next_actions:[{priority:"high",owner:"seller",due_in_hours:24,action:"Confirmar o prazo informado ao cliente.",evidence:"Cliente perguntou pelo prazo e não recebeu confirmação.",suggested_message:"Vou confirmar o prazo e retorno hoje."}]},payload={schema_version:"1.2",batch_id:item.batch_id,generated_at:"2026-08-02T22:01:00Z",analysis_model:"ChatGPT",prompt_version:"criare-whatsapp-local-v1",analyses:[item]};
-  assert.equal(batch.validateAnalysisShape(item,"1.2"),"");
-  const patch=batch.persistencePatch(textLead,item,payload,"2026-08-02T22:01:00Z");
-  assert.equal(patch.whatsapp_analysis_structured.operational_actions.length,1);
-  assert.equal(patch.whatsapp_analysis_structured.operational_actions[0].status,"open");
-  assert.match(patch.whatsapp_analysis_structured.operational_actions[0].evidence,/Cliente perguntou/);
+test("resultado leve 1.3 gera sugestão limitada para o plano diário",async()=>{
+  const record={...textLead,owner_id:"seller-1"},hash=await batch.conversationHash(record),item={batch_id:"20260802-1902-ABCD",lead_id:record.id,conversation_hash:hash,analyzed_until_message_id:batch.lastMessageId(record),chefe_duro:"Retomar hoje.",full_analysis:"## Próxima melhor ação\n\nRetomar.",recommended_next_actions:[{priority:"high",owner:"seller",due_in_hours:24,estimated_minutes:20,action:"Confirmar o prazo informado ao cliente.",suggested_message:"Vou confirmar o prazo e retorno hoje."}]};
+  assert.equal(batch.validateAnalysisShape(item,"1.3"),"");
+  const plan=batch.planDailyActionSuggestions([{record,item}],[record],{now:"2026-08-02T22:01:00Z",rolesByUser:{"seller-1":"member"}});
+  assert.equal(plan.by_record.get(record.id).length,1);
+  assert.equal(plan.by_record.get(record.id)[0].status,"suggested");
+  assert.equal(plan.by_record.get(record.id)[0].event_id,null);
 });
 
 test("preserva títulos, listas e parágrafos da análise completa",()=>{
