@@ -941,6 +941,7 @@
             <span id="whatsappOfficialNew">0 novas desde a análise</span>
             <span id="whatsappOfficialAnalysis">Análise ainda não executada</span>
           </div>
+          <div id="individualRecommendations"></div>
           <details class="whatsappCapturedConversation" id="whatsappCapturedConversation">
             <summary>Ver conversa capturada</summary>
             <div class="whatsappOfficialTimeline" id="whatsappOfficialTimeline">
@@ -1065,10 +1066,10 @@
         <label>Etapa <select id="batchExportStage"><option value="">Todas</option></select></label>
         <label>Última análise — início <input id="batchExportDateFrom" type="date" /></label>
         <label>Última análise — fim <input id="batchExportDateTo" type="date" /></label>
-        <label class="batchCheck"><input id="batchExportClosed" type="checkbox" /> Incluir fechados</label>
+        <label class="batchCheck"><input id="batchExportClosed" type="checkbox" checked /> Incluir fechados</label>
         <label class="batchCheck"><input id="batchExportLost" type="checkbox" /> Incluir perdidos</label>
-        <label class="batchCheck"><input id="batchExportPartners" type="checkbox" /> Incluir parceiros</label>
-        <label class="batchCheck"><input id="batchExportPending" type="checkbox" /> Incluir pendências</label>
+        <label class="batchCheck"><input id="batchExportPartners" type="checkbox" checked /> Incluir parceiros</label>
+        <label class="batchCheck"><input id="batchExportPending" type="checkbox" checked /> Incluir pendências</label>
       </div>
       <div class="batchPersistentPanel" id="batchExportPanel" role="status"><strong id="batchExportCount">0 contatos selecionados</strong><span id="batchExportStatus">Ajuste os filtros e confira os clientes antes de baixar a fila.</span></div>
       <fieldset class="batchCompletenessChoice" id="batchCompletenessChoice" hidden>
@@ -1251,6 +1252,7 @@
 <script src="audio-import-matcher.js?v=2.5.25"></script>
 <script src="conversation-completeness.js?v=2.5.1-final"></script>
 <script src="batch-analysis.js?v=2.9.6"></script>
+<script src="management-planning.js?v=1.0.0"></script>
 
 <script>
 /*
@@ -1291,6 +1293,8 @@ const TBL_WHATSAPP_CONVERSATIONS = "crm_whatsapp_conversations";
 const TBL_WHATSAPP_ANALYSES = "crm_whatsapp_analysis_history";
 const TBL_PARTNER_CONTENTS = "crm_partner_contents";
 const TBL_WORKSPACE_MEMBERS = "crm_workspace_members";
+const TBL_MANAGEMENT_PLAN_RUNS = "crm_management_plan_runs";
+const TBL_MANAGEMENT_PLAN_ITEMS = "crm_management_plan_items";
 const DEFAULT_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001";
 const PENDING_PHOTO_BUCKET = "crm-pending-photos";
 const WHATSAPP_AVATAR_BUCKET = "crm-whatsapp-avatars";
@@ -1339,6 +1343,7 @@ function normalizeAppointments(record){
     synced_at:item.synced_at || null,
     participant_ids:[...new Set((Array.isArray(item.participant_ids)?item.participant_ids:fallbackParticipants).filter(Boolean))],
     source:item.source || null, ai_action_key:item.ai_action_key || null, ai_priority:item.ai_priority || null,
+    management_plan_item_id:item.management_plan_item_id || null,
     ai_owner_role:item.ai_owner_role || null, owner_id:item.owner_id || record?.owner_id || null,
     requires_human_review:Boolean(item.requires_human_review), generated_at:item.generated_at || null,
     conversation_hash:item.conversation_hash || null, analyzed_until_message_id:item.analyzed_until_message_id || null
@@ -1411,7 +1416,7 @@ function renderTodayAgenda(){
   $("todayAgendaSubtitle").textContent=`${entries.length} item(ns) para hoje`;
   list.innerHTML=entries.length?entries.map(entry=>{
     if(entry.type==="action"){const action=entry.action,late=new Date(action.due_at)<new Date(),priority=String(action.priority||"medium").toUpperCase();return `<div class="todayAgendaItem"><button type="button" class="todayAgendaOpen" data-open-action-record="${escapeHtml(entry.record.id)}"><span class="todayAgendaTime">${late?"ATRASADA • ":""}${escapeHtml(priority)} • até ${escapeHtml(fmtBRDateTime(action.due_at))}</span><b>${escapeHtml(fullName(entry.record))}</b><small>${escapeHtml(action.action)}${action.evidence?` • Evidência: ${escapeHtml(action.evidence)}`:""}</small></button><button class="ghost" type="button" data-complete-operational-action="${escapeHtml(action.id)}" data-operational-record="${escapeHtml(entry.record.id)}">Concluir</button></div>`;}
-    if(entry.type==="suggestion"){const suggestion=entry.suggestion,priority=String(suggestion.ai_priority||"medium").toUpperCase();return `<button type="button" class="todayAgendaItem" data-open-agenda-record="${escapeHtml(entry.record.id)}"><span class="todayAgendaTime">SUGESTÃO IA • ${escapeHtml(priority)} • até ${escapeHtml(fmtBRDateTime(suggestion.starts_at))}</span><b>${escapeHtml(fullName(entry.record))}</b><small>${escapeHtml(suggestion.kind.replace(/^Sugestão IA:\s*/,""))} • requer revisão humana</small></button>`;}
+    if(entry.type==="suggestion"){const suggestion=entry.suggestion,priority=String(suggestion.ai_priority||"medium").toUpperCase();return `<button type="button" class="todayAgendaItem" data-open-agenda-record="${escapeHtml(entry.record.id)}"><span class="todayAgendaTime">COMPROMISSO SUGERIDO • ${escapeHtml(priority)} • até ${escapeHtml(fmtBRDateTime(suggestion.starts_at))}</span><b>${escapeHtml(fullName(entry.record))}</b><small>${escapeHtml(suggestion.kind.replace(/^Sugestão IA:\s*/,""))} • requer confirmação</small></button>`;}
     const {record,appointment}=entry,people=participantNames(appointment.participant_ids||[]);return `<button class="todayAgendaItem" type="button" data-open-agenda-record="${escapeHtml(record.id)}"><span class="todayAgendaTime">${escapeHtml(fmtBRDateTime(appointment.starts_at).split(", ")[1]||fmtBRDateTime(appointment.starts_at))} • ${escapeHtml(appointment.kind)}</span><b>${escapeHtml(fullName(record))}</b><small>${escapeHtml(appointment.details||"Sem detalhes")}${people.length?` • ${escapeHtml(people.join(", "))}`:""}</small></button>`;
   }).join(""):`<div class="todayAgendaEmpty">Nenhuma ação ou compromisso seu para hoje.</div>`;
 }
@@ -4063,9 +4068,9 @@ function renderPendingWhatsAppPanel(item){
   const phone=pendingPhoneIdentity(item.customer_phone),record=pendingConversationRecord(item);
   if(!phone){panel.className="pendingWhatsAppPanel";panel.innerHTML=`<h3>Conversa do WhatsApp</h3><p>Informe um telefone de WhatsApp válido para vincular esta pendência à conversa e às análises.</p>`;return;}
   if(!record){panel.className="pendingWhatsAppPanel";panel.innerHTML=`<h3>Conversa do WhatsApp</h3><p>Este telefone ainda não possui um cadastro de conversa. O vínculo é feito pelo telefone normalizado; o nome não é usado como chave.</p><div class="pendingWhatsAppActions"><button class="ghost" type="button" data-pending-prepare-whatsapp="${escapeHtml(item.id)}">Vincular e preparar atualização</button></div>`;return;}
-  const hasAnalysis=Boolean(record.whatsapp_analysis_full||record.whatsapp_analysis_hard_boss),analysis=record.whatsapp_analysis_full||"";
+  const hasAnalysis=Boolean(record.whatsapp_analysis_full||record.whatsapp_analysis_hard_boss),analysis=record.whatsapp_analysis_full||"",recommendations=record.whatsapp_analysis_structured?.recommended_next_actions||[];
   panel.className="pendingWhatsAppPanel isReady";
-  panel.innerHTML=`<h3>Conversa do WhatsApp vinculada</h3><p><b>${escapeHtml(fullName(record))}</b> • vínculo por telefone ${escapeHtml(phone)}${item.whatsapp_record_id===record.id?"":" • vínculo será salvo automaticamente"}.</p>${hasAnalysis?`<p><b>Chefe Duro:</b> ${escapeHtml(record.whatsapp_analysis_hard_boss||"Análise importada.")}</p><details class="pendingWhatsAppFull"><summary>Ler análise completa</summary>${analysisBodyHtml(normalizeAnalysisMarkdownSource(analysis).split("\n"))}</details>`:`<p>A conversa está vinculada, mas ainda não há análise importada para este contato.</p>`}<div class="pendingWhatsAppActions"><button class="ghost" type="button" data-pending-prepare-whatsapp="${escapeHtml(item.id)}">Atualizar / analisar conversa</button>${hasAnalysis?`<button class="ghost" type="button" data-pending-open-analysis="${escapeHtml(record.id)}">Abrir leitura ampliada</button>`:""}</div>`;
+  panel.innerHTML=`<h3>Conversa do WhatsApp vinculada</h3><p><b>${escapeHtml(fullName(record))}</b> • vínculo por telefone ${escapeHtml(phone)}${item.whatsapp_record_id===record.id?"":" • vínculo será salvo automaticamente"}.</p>${hasAnalysis?`<p><b>Chefe Duro:</b> ${escapeHtml(record.whatsapp_analysis_hard_boss||"Análise importada.")}</p>${recommendations.map(action=>`<div class="individualRecommendation"><b>${escapeHtml(action.action||"Próxima ação sugerida")}</b>${action.suggested_message?`<div><strong>Mensagem sugerida</strong><br>${escapeHtml(action.suggested_message)}</div>`:""}${action.suggested_speech?`<small><strong>Orientação para conversa</strong><br>${escapeHtml(action.suggested_speech)}</small>`:""}</div>`).join("")}<details class="pendingWhatsAppFull"><summary>Ler análise completa</summary>${analysisBodyHtml(normalizeAnalysisMarkdownSource(analysis).split("\n"))}</details>`:`<p>A conversa está vinculada, mas ainda não há análise importada para este contato.</p>`}<div class="pendingWhatsAppActions"><button class="ghost" type="button" data-pending-prepare-whatsapp="${escapeHtml(item.id)}">Atualizar / analisar conversa</button>${hasAnalysis?`<button class="ghost" type="button" data-pending-open-analysis="${escapeHtml(record.id)}">Abrir leitura ampliada</button>`:""}</div>`;
 }
 async function preparePendingWhatsApp(item){
   const linked=await ensurePendingWhatsAppRecord(item);
@@ -4831,7 +4836,7 @@ function renderLeadInfoSectionSummary(){
 }
 function renderAppointmentSectionSummary(sorted){
   const suggested=sorted.filter(item=>item.status==="suggested").length,scheduled=sorted.filter(item=>item.status==="scheduled").length;
-  $("appointmentSectionSummary").textContent=sorted.length?`${scheduled} compromisso(s) • ${suggested} sugestão(ões) IA`:"Nenhum compromisso agendado";
+  $("appointmentSectionSummary").textContent=sorted.length?`${scheduled} compromisso(s) • ${suggested} sugestão(ões)`:"Nenhum compromisso agendado";
 }
 function renderWhatsAppSectionSummary(record){
   const normalized=normalizeLegacyWhatsAppRecord(record||records.find(item=>item.id===$("id").value));
@@ -4841,6 +4846,9 @@ function renderWhatsAppSectionSummary(record){
   const labels={current:"análise atualizada",stale:"análise desatualizada",processing:"análise em processamento",failed:"falha na análise",never:"análise não executada"};
   $("whatsappSectionSummary").textContent=updated?`${count} mensagem(ns) • ${fmtBRDateTime(updated)} • ${labels[analysis]||labels.never}`:`Conversa ainda não capturada • ${labels[analysis]||labels.never}`;
   $("whatsappSectionHardBoss").textContent=normalized?.whatsapp_analysis_hard_boss?String(normalized.whatsapp_analysis_hard_boss):"";
+  const actions=normalized?.whatsapp_analysis_structured?.recommended_next_actions;
+  const target=$("individualRecommendations");
+  if(target)target.innerHTML=Array.isArray(actions)&&actions.length?actions.map(action=>`<article class="individualRecommendation"><b>${escapeHtml(action.action||"Próxima ação sugerida")}</b>${action.suggested_message?`<div><strong>Mensagem sugerida</strong><br>${escapeHtml(action.suggested_message)}</div>`:""}${action.suggested_speech?`<small><strong>Orientação para conversa</strong><br>${escapeHtml(action.suggested_speech)}</small>`:""}<small>${escapeHtml(action.priority||"medium")} • responsável: ${escapeHtml(action.owner==="manager"?"gestão":"responsável pelo contato")}</small></article>`).join(""):"";
 }
 function renderAppointmentList(){
   const list = $("appointmentList");
@@ -4851,12 +4859,12 @@ function renderAppointmentList(){
     const synced = Boolean(item.event_id || item.synced_at),suggested=item.status==="suggested";
     return `<div class="appointmentItem" data-appointment-id="${escapeHtml(item.id)}">
       <div class="appointmentItemMain">
-        <b>${escapeHtml(item.kind)} • ${escapeHtml(fmtBRDateTime(item.starts_at))}</b>${suggested?` <span class="badge">Sugestão da IA • ${escapeHtml(item.ai_priority||"prioridade não informada")}</span>`:""}
+        <b>${escapeHtml(item.kind.replace(/^Sugestão IA:\s*/,""))} • ${escapeHtml(fmtBRDateTime(item.starts_at))}</b>${suggested?` <span class="badge">Compromisso sugerido • ${escapeHtml(item.ai_priority||"prioridade não informada")}</span>`:""}
         ${item.details ? `<div>${escapeHtml(item.details)}</div>` : ""}
         <div class="appointmentItemMeta">${item.duration_minutes || 30} min${suggested?` • responsável: ${escapeHtml(item.ai_owner_role||"vendedor")} • requer revisão humana • não enviado ao calendário`:` • lembrete ${item.reminder_minutes ? `${item.reminder_minutes} min antes` : "desativado"}${(item.participant_ids||[]).length ? ` • ${escapeHtml(participantNames(item.participant_ids).join(", ") || "participantes definidos")}` : ""}${synced ? " • salvo no calendário" : " • aguardando salvar"}`}</div>
       </div>
       ${suggested
-        ? `<button class="ghost" type="button" data-remove-appointment="${escapeHtml(item.id)}">Descartar sugestão</button>`
+        ? `<div><button class="primary" type="button" data-accept-appointment="${escapeHtml(item.id)}">Confirmar</button> <button class="ghost" type="button" data-remove-appointment="${escapeHtml(item.id)}">Descartar</button></div>`
         : synced
         ? (item.web_link ? `<a class="btn" href="${escapeHtml(item.web_link)}" target="_blank" rel="noopener noreferrer">Abrir</a>` : `<span class="appointmentItemMeta">No calendário</span>`)
         : `<button class="ghost" type="button" data-remove-appointment="${escapeHtml(item.id)}">Remover</button>`}
@@ -5408,6 +5416,8 @@ $("btnShowAppointmentComposer").addEventListener("click",()=>{
 });
 $("btnAddAppointment").addEventListener("click", ()=>addAppointmentFromComposer());
 $("appointmentList").addEventListener("click", event=>{
+  const accept = event.target.closest("[data-accept-appointment]");
+  if(accept){appointmentDrafts=appointmentDrafts.map(item=>item.id===accept.dataset.acceptAppointment?{...item,status:"scheduled",kind:item.kind.replace(/^Sugestão IA:\s*/,""),reminder_minutes:item.reminder_minutes||30,requires_human_review:false}:item);renderAppointmentList();toast("Compromisso confirmado na ficha. Clique em Salvar para gravar.");return;}
   const button = event.target.closest("[data-remove-appointment]");
   if(!button) return;
   appointmentDrafts = appointmentDrafts.filter(item=>item.id!==button.dataset.removeAppointment);
@@ -6084,7 +6094,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=2.9.6").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=3.0.0").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
@@ -6141,7 +6151,8 @@ window.setInterval(checkAgendaReminders,30_000);
 })();
 </script>
 <script src="whatsapp-sync-receipt.js?v=1.3.0"></script>
-<script src="batch-analysis-ui.js?v=2.9.6"></script>
+<script src="batch-analysis-ui.js?v=3.0.0"></script>
+<script src="management-planning-ui.js?v=1.0.0"></script>
 <script src="partners.js"></script>
 </body>
 </html>
