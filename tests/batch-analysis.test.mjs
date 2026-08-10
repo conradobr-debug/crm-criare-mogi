@@ -68,6 +68,29 @@ test("caixa do WhatsApp oferece os cinco destinos de triagem",async()=>{
   assert.match(ui,/Pendência criada e conversa vinculada para análise de assistência/);
 });
 
+test("ações operacionais usam os responsáveis atuais do contato",async()=>{
+  const app=await readFile(new URL("../index.html",import.meta.url),"utf8");
+  assert.match(app,/function isOperationalActionParticipant\(record,action,userId=session\?\.user\?\.id\)/);
+  assert.match(app,/const owners=recordOwnerIds\(record\);/);
+  assert.match(app,/update\(\{owner_id:transferPreviewTarget,owner_ids:\[transferPreviewTarget\]\}\)/);
+});
+
+test("responsabilidade compartilhada é flexível em registros e pendências",async()=>{
+  const app=await readFile(new URL("../index.html",import.meta.url),"utf8");
+  assert.match(app,/id="btnAddRecordOwner"/);
+  assert.match(app,/id="btnAddPendingOwner"/);
+  assert.match(app,/function selectedPendingOwnerIds\(\)/);
+  assert.match(app,/owner_ids:pendingOwnerIdsSelected/);
+  assert.doesNotMatch(app,/__shared_marianna_micaely__/);
+});
+
+test("novo lead começa sem responsável até alguém assumir",async()=>{
+  const app=await readFile(new URL("../index.html",import.meta.url),"utf8");
+  assert.match(app,/<option value="">Sem responsável<\/option>/);
+  assert.match(app,/fillRecordOwnerSelect\(record\|\|\{\}\)/);
+  assert.doesNotMatch(app,/fillRecordOwnerSelect\(record\|\|\{owner_id:session/);
+});
+
 test("formatação do telefone não altera o hash da conversa",async()=>{const formatted={...textLead,phone:"(19) 99614-2935"},canonical={...textLead,phone:"+5519996142935"};assert.equal(await batch.conversationHash(formatted),await batch.conversationHash(canonical));});
 
 test("separa data, horário, remetente, direção e corpo das mensagens legadas",()=>{

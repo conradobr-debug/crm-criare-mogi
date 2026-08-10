@@ -315,6 +315,15 @@
     .appointmentParticipantList{display:flex;gap:7px;flex-wrap:wrap;}
     .appointmentParticipant{display:flex;align-items:center;gap:6px;margin:0;padding:6px 8px;border:1px solid #DCE8EA;border-radius:999px;background:#fff;color:var(--text);font-size:12px;font-weight:600;cursor:pointer;}
     .appointmentParticipant input{width:auto;margin:0;accent-color:#4A9EC5;}
+    .ownerPicker{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+    .ownerPicker select{flex:1 1 150px;min-width:0;}
+    .ownerAddButton{width:32px;height:32px;min-width:32px;padding:0;border-radius:9px;font-size:19px;line-height:1;font-weight:500;}
+    .ownerShareList{display:flex;gap:6px;flex-wrap:wrap;width:100%;}
+    .ownerShareChip{display:inline-flex;align-items:center;gap:5px;padding:4px 6px 4px 8px;border:1px solid #C9DEE2;border-radius:999px;background:#F5FAFB;color:#35545B;font-size:11px;font-weight:700;}
+    .ownerShareChip button{border:0;background:transparent;padding:0 2px;color:#6F858A;font-size:15px;line-height:1;cursor:pointer;}
+    .ownerAddMenu{display:flex;gap:6px;width:100%;align-items:center;}
+    .ownerAddMenu select{flex:1 1 160px;}
+    .ownerAddMenu button{padding:6px 9px;font-size:11px;}
     .agendaToggle{position:relative;}
     .agendaBadge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:4px;border-radius:999px;background:#2C9674;color:#fff;font-size:10px;}
     .todayAgenda{position:fixed;z-index:900;top:0;right:0;width:min(410px,100vw);height:100dvh;background:#fff;border-left:1px solid #D9E7EA;box-shadow:-16px 0 38px rgba(24,62,72,.16);transform:translateX(104%);transition:transform .22s ease;display:flex;flex-direction:column;}
@@ -706,8 +715,8 @@
           <select id="source"></select>
         </div>
         <div class="col-3">
-          <label>Usuário</label>
-          <select id="owner"></select>
+          <label>Responsável principal</label>
+          <div class="ownerPicker"><select id="owner"></select><button class="ghost ownerAddButton" id="btnAddRecordOwner" type="button" title="Compartilhar responsabilidade" aria-label="Compartilhar responsabilidade">+</button><div class="ownerShareList" id="recordOwnerShareList"></div><div class="ownerAddMenu" id="recordOwnerAddMenu" hidden><select id="recordOwnerAddSelect"></select><button class="ghost" id="btnConfirmRecordOwnerAdd" type="button">Adicionar</button></div></div>
         </div>
 
         <div class="col-4" id="wrapPipeline">
@@ -1166,8 +1175,8 @@
           <input id="pendingPhone" placeholder="WhatsApp ou telefone" />
         </div>
         <div class="col-4">
-          <label>Responsável</label>
-          <select id="pendingOwner"></select>
+          <label>Responsável principal</label>
+          <div class="ownerPicker"><select id="pendingOwner"></select><button class="ghost ownerAddButton" id="btnAddPendingOwner" type="button" title="Compartilhar responsabilidade" aria-label="Compartilhar responsabilidade">+</button><div class="ownerShareList" id="pendingOwnerShareList"></div><div class="ownerAddMenu" id="pendingOwnerAddMenu" hidden><select id="pendingOwnerAddSelect"></select><button class="ghost" id="btnConfirmPendingOwnerAdd" type="button">Adicionar</button></div></div>
         </div>
         <div class="col-4">
           <label>Cidade</label>
@@ -1241,7 +1250,7 @@
 <script src="whatsapp-crm-extension/capture-core.js?v=2.5.25"></script>
 <script src="audio-import-matcher.js?v=2.5.25"></script>
 <script src="conversation-completeness.js?v=2.5.1-final"></script>
-<script src="batch-analysis.js?v=2.9.4"></script>
+<script src="batch-analysis.js?v=2.9.5"></script>
 
 <script>
 /*
@@ -3352,29 +3361,45 @@ function recordOwnerIds(record){
   const ids=Array.isArray(record?.owner_ids)?record.owner_ids.filter(Boolean):[];
   return ids.length?[...new Set(ids)]:(record?.owner_id?[record.owner_id]:[]);
 }
+function pendingOwnerIds(item){
+  const ids=Array.isArray(item?.owner_ids)?item.owner_ids.filter(Boolean):[];
+  return ids.length?[...new Set(ids)]:(item?.owner_id?[item.owner_id]:[]);
+}
 function recordOwnerLabel(record){
   const names=recordOwnerIds(record).map(profileNameById).filter(name=>name&&name!=="—");
   return names.length?names.join(" / "):"—";
 }
-function sharedMariannaMicaelyIds(){
-  const wanted=new Set(["marianna","micaely"]);
-  const found=profiles.filter(profile=>wanted.has(String(profile.display_name||"").trim().toLowerCase())).map(profile=>profile.id);
-  return found.length===2?found:[];
+function pendingOwnerLabel(item){
+  const names=pendingOwnerIds(item).map(profileNameById).filter(name=>name&&name!=="—");
+  return names.length?names.join(" / "):"—";
 }
-function isMariannaMicaelyShared(ownerIds){
-  const shared=sharedMariannaMicaelyIds();
-  return shared.length===2&&ownerIds.length===2&&shared.every(id=>ownerIds.includes(id));
+let recordSharedOwnerIds=new Set(),pendingSharedOwnerIds=new Set();
+function ownerPickerElements(kind){return kind==="pending"?{primary:$("pendingOwner"),shared:pendingSharedOwnerIds,list:$("pendingOwnerShareList"),menu:$("pendingOwnerAddMenu"),add:$("pendingOwnerAddSelect")}:{primary:$("owner"),shared:recordSharedOwnerIds,list:$("recordOwnerShareList"),menu:$("recordOwnerAddMenu"),add:$("recordOwnerAddSelect")};}
+function renderSharedOwnerPicker(kind){
+  const picker=ownerPickerElements(kind);if(!picker.primary||!picker.list)return;
+  picker.shared.delete(picker.primary.value);
+  picker.list.innerHTML=[...picker.shared].map(id=>`<span class="ownerShareChip">${escapeHtml(profileNameById(id))}<button type="button" data-remove-shared-owner="${escapeHtml(id)}" data-owner-picker="${kind}" aria-label="Remover responsável">×</button></span>`).join("");
+  if(picker.add){const selected=new Set([picker.primary.value,...picker.shared]);picker.add.innerHTML=profiles.filter(profile=>!selected.has(profile.id)).map(profile=>`<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.display_name||profile.email||"Usuário")}</option>`).join("");}
+  if(picker.menu&&picker.add&&!picker.add.options.length)picker.menu.hidden=true;
 }
+function setOwnerPicker(kind,primaryId,ownerIds=[]){
+  const picker=ownerPickerElements(kind);if(!picker.primary)return;
+  picker.primary.innerHTML='<option value="">Sem responsável</option>'+profiles.map(profile=>`<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.display_name||profile.email||"Usuário")}</option>`).join("");
+  const primary=primaryId||ownerIds[0]||"";
+  picker.primary.value=primary;const shared=ownerIds.filter(id=>id&&id!==primary&&profiles.some(profile=>profile.id===id));
+  if(kind==="pending")pendingSharedOwnerIds=new Set(shared);else recordSharedOwnerIds=new Set(shared);
+  if(picker.menu)picker.menu.hidden=true;renderSharedOwnerPicker(kind);
+}
+function addSharedOwner(kind){const picker=ownerPickerElements(kind),id=picker.add?.value||"";if(!id)return;picker.shared.add(id);if(picker.menu)picker.menu.hidden=true;renderSharedOwnerPicker(kind);}
+function removeSharedOwner(kind,id){const picker=ownerPickerElements(kind);picker.shared.delete(id);renderSharedOwnerPicker(kind);}
 function fillRecordOwnerSelect(record){
-  const select=$("owner");if(!select)return;
-  const ownerIds=recordOwnerIds(record||{}),shared=sharedMariannaMicaelyIds();
-  select.innerHTML=profiles.map(profile=>`<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.display_name)}</option>`).join("")+(shared.length===2?'<option value="__shared_marianna_micaely__">Marianna / Micaely (compartilhado)</option>':"");
-  select.value=isMariannaMicaelyShared(ownerIds)?"__shared_marianna_micaely__":(record?.owner_id||ownerIds[0]||session?.user?.id||profiles[0]?.id||"");
+  const ownerIds=recordOwnerIds(record||{});setOwnerPicker("record",record?.owner_id||ownerIds[0]||null,ownerIds);
 }
 function selectedRecordOwnerIds(){
-  const choice=$("owner")?.value||"";
-  return choice==="__shared_marianna_micaely__"?sharedMariannaMicaelyIds():(choice?[choice]:[]);
+  const primary=$("owner")?.value||"";return [...new Set([primary,...recordSharedOwnerIds].filter(Boolean))];
 }
+function fillPendingOwnerSelect(item){const ownerIds=pendingOwnerIds(item||{});setOwnerPicker("pending",item?.owner_id||ownerIds[0]||null,ownerIds);}
+function selectedPendingOwnerIds(){const primary=$("pendingOwner")?.value||"";return [...new Set([primary,...pendingSharedOwnerIds].filter(Boolean))];}
 
 async function bootAfterLogin(){
   if(!sb || !session?.user) return;
@@ -3892,12 +3917,12 @@ async function ensurePendingWhatsAppRecord(item){
     return {record:linked,created:false};
   }
 
-  const name=pendingContactName(item),workspaceId=records.find(record=>record.workspace_id)?.workspace_id||session?.user?.app_metadata?.workspace_id||"00000000-0000-4000-8000-000000000001",ownerId=item.owner_id||session?.user?.id||null;
+  const name=pendingContactName(item),workspaceId=records.find(record=>record.workspace_id)?.workspace_id||session?.user?.app_metadata?.workspace_id||"00000000-0000-4000-8000-000000000001",ownerIds=pendingOwnerIds(item),ownerId=item.owner_id||ownerIds[0]||session?.user?.id||null;
   const payload={
     record_type:"pending_contact",pipeline:"support",stage:"Em acompanhamento",stage_entered_at:nowISO(),
     first_name:name.first_name,last_name:name.last_name,phone,city:item.city||"Não informado",rooms:"Pós-venda e assistência",source:"Pendências",
     notes:[`Contato de WhatsApp vinculado à pendência: ${item.title||"Sem título"}.`,item.description||""].filter(Boolean).join(" "),
-    owner_id:ownerId,owner_ids:ownerId?[ownerId]:[],created_by:session.user.id,workspace_id:workspaceId,
+    owner_id:ownerId,owner_ids:ownerIds.length?ownerIds:(ownerId?[ownerId]:[]),created_by:session.user.id,workspace_id:workspaceId,
     lead_quality:"Não avaliado",preferred_contact:"WhatsApp",appointments:[]
   };
   const {data:record,error:recordError}=await sb.from(TBL_RECORDS).insert(payload).select("*").single();
@@ -3911,7 +3936,7 @@ async function ensurePendingWhatsAppRecord(item){
 
 function pendingDataset(){
   let data = pendingItems.filter(item=>showCompletedPending || item.status!=="completed");
-  if(filters.owner!=="Todos") data = data.filter(item=>(item.owner_id||"")===filters.owner);
+  if(filters.owner!=="Todos") data = data.filter(item=>pendingOwnerIds(item).includes(filters.owner));
   if(filters.source!=="Todos") data = data.filter(item=>item.pending_type===filters.source);
   const city = filters.city.trim().toLowerCase();
   const query = filters.search.trim().toLowerCase();
@@ -3968,7 +3993,7 @@ function renderPendingCard(item){
     </div>
     <div class="pendingMeta">
       ${item.customer_name ? `<b>${escapeHtml(item.customer_name)}</b><br>` : ""}
-      ${escapeHtml(profileNameById(item.owner_id))} • <span class="${due.className}">${escapeHtml(due.label)}</span>
+      ${escapeHtml(pendingOwnerLabel(item))} • <span class="${due.className}">${escapeHtml(due.label)}</span>
     </div>
     <div class="row"><span class="chip ${conversation?"":"muted"}">${conversation?"WhatsApp vinculado":"WhatsApp sem vínculo"}</span><button class="ghost" type="button" data-pending-whatsapp="${escapeHtml(item.id)}">${conversation?"Atualizar / analisar conversa":"Vincular WhatsApp"}</button></div>
     ${photos.length ? `<div class="pendingThumbs">${photos.map(photo=>`<img src="${escapeHtml(photo.signed_url)}" alt="Foto da pendência">`).join("")}</div>` : ""}
@@ -4057,8 +4082,7 @@ function openPendingModal(item=null, options={}){
   $("pendingCity").value=item?.city||"";
   $("pendingAddress").value=item?.address||"";
   $("pendingDescription").value=item?.description||"";
-  $("pendingOwner").innerHTML=profiles.map(profile=>`<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.display_name)}</option>`).join("");
-  $("pendingOwner").value=item?.owner_id||session?.user?.id||profiles[0]?.id||"";
+  fillPendingOwnerSelect(item||{owner_id:session?.user?.id||profiles[0]?.id||null});
   const due=item?.due_at ? new Date(item.due_at) : null;
   $("pendingDueDate").value=due ? inputDateValue(due) : "";
   $("pendingDueTime").value=due ? inputTimeValue(due) : "09:00";
@@ -4107,11 +4131,12 @@ async function savePendingItem(){
   if(!title) return toast("Informe o título da pendência.");
   const id=$("pendingId").value;
   const dueDate=$("pendingDueDate").value||null;
+  const pendingOwnerIdsSelected=selectedPendingOwnerIds();
   const payload={
     title,pending_type:$("pendingType").value,priority:$("pendingPriority").value,
     customer_name:$("pendingCustomer").value.trim()||null,customer_phone:$("pendingPhone").value.trim()||null,
     city:$("pendingCity").value.trim()||null,address:$("pendingAddress").value.trim()||null,
-    description:$("pendingDescription").value.trim()||null,owner_id:$("pendingOwner").value||null,
+    description:$("pendingDescription").value.trim()||null,owner_id:$("pendingOwner").value||null,owner_ids:pendingOwnerIdsSelected,
     due_at:localScheduleIso(dueDate,$("pendingDueTime").value||"09:00")
   };
   let saved;
@@ -4126,12 +4151,22 @@ async function savePendingItem(){
   }
   try{ await uploadPendingPhotos(saved.id); }
   catch(error){ console.error(error); toast("Pendência salva, mas uma foto não foi enviada."); }
+  let linkedWhatsappRecord=null;
   try{
     const linked=await ensurePendingWhatsAppRecord(saved);
+    linkedWhatsappRecord=linked.record||null;
     if(linked.created) toast("Pendência salva e contato de WhatsApp preparado para sincronização.");
   }catch(error){
     console.error("[CRM Pendências] Não foi possível preparar o contato de WhatsApp.",error);
     toast("Pendência salva, mas o vínculo do WhatsApp não pôde ser criado. Aplique a atualização do CRM e tente novamente.",{error:true,duration:7000});
+  }
+  if(linkedWhatsappRecord&&isPendingContact(linkedWhatsappRecord)){
+    const nextOwnerId=payload.owner_id||null,nextOwnerIds=pendingOwnerIdsSelected.length?pendingOwnerIdsSelected:(nextOwnerId?[nextOwnerId]:[]);
+    if(linkedWhatsappRecord.owner_id!==nextOwnerId||JSON.stringify(recordOwnerIds(linkedWhatsappRecord))!==JSON.stringify(nextOwnerIds)){
+      const {data:reassigned,error:reassignError}=await sb.from(TBL_RECORDS).update({owner_id:nextOwnerId,owner_ids:nextOwnerIds}).eq("id",linkedWhatsappRecord.id).select("*").single();
+      if(reassignError) console.warn("[CRM Pendências] Responsável da conversa não foi atualizado.",reassignError);
+      else {const at=records.findIndex(record=>record.id===reassigned.id);if(at>=0)records[at]=reassigned;}
+    }
   }
   const candidateId=$('pendingModal').dataset.whatsappCandidateId;
   if(!id&&candidateId&&globalThis.CriareWhatsAppLeadCandidates?.onPendingCreated){
@@ -4926,7 +4961,7 @@ function openModal(record=null, options={}){
 
   // selects
   fillSelect($("source"), config.sources, record?.source || prefill.source || config.sources[0]);
-  fillRecordOwnerSelect(record||{owner_id:session?.user?.id||profiles[0]?.id||null});
+  fillRecordOwnerSelect(record||{});
   renderAppointmentParticipants(recordOwnerIds(record).length?recordOwnerIds(record):selectedRecordOwnerIds());
 
   const pipeline = kind === "specifier" ? "lead" : (record?.pipeline || requestedNewPipeline || (currentTab==="closed" ? "closed" : "lead"));
@@ -5680,7 +5715,7 @@ $("board").addEventListener("click", async (e)=>{
     if(!transferPreviewTarget||!transferPreviewIds.size)return;
     const targetName=profileNameById(transferPreviewTarget);if(!confirm(`Transferir ${transferPreviewIds.size} cliente(s) selecionado(s) para ${targetName}?`))return;
     btn.disabled=true;const selectedIds=[...transferPreviewIds];
-    const {data,error}=await sb.from(TBL_RECORDS).update({owner_id:transferPreviewTarget}).in("id",selectedIds).select("*");
+    const {data,error}=await sb.from(TBL_RECORDS).update({owner_id:transferPreviewTarget,owner_ids:[transferPreviewTarget]}).in("id",selectedIds).select("*");
     if(error){btn.disabled=false;return toast(`Transferência não realizada: ${error.message||"erro desconhecido"}`,{error:true});}
     for(const updated of data||[]){const at=records.findIndex(record=>record.id===updated.id);if(at>=0)records[at]=updated;}
     const changed=(data||[]).length;transferPreviewIds=new Set();transferPreviewSource="";transferPreviewTarget="";render();toast(`${changed} cliente(s) transferido(s) para ${targetName}.`);return;
@@ -6035,7 +6070,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=2.9.4").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=2.9.5").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
@@ -6059,9 +6094,16 @@ $("btnSnoozeAgendaReminder").addEventListener("click",()=>{
   const entry=agendaUi.activeReminder;$("agendaReminderModal").close();if(entry)window.setTimeout(()=>showAgendaReminder(entry),5*60_000);
 });
 $("owner").addEventListener("change",()=>{
+  renderSharedOwnerPicker("record");
   const selected=[...document.querySelectorAll('#appointmentParticipants input:checked')].map(input=>input.value);
   if(!selected.length)renderAppointmentParticipants(selectedRecordOwnerIds());
 });
+$("pendingOwner").addEventListener("change",()=>renderSharedOwnerPicker("pending"));
+$("btnAddRecordOwner").addEventListener("click",()=>{const picker=ownerPickerElements("record");if(!picker.add?.options.length)return;picker.menu.hidden=!picker.menu.hidden;});
+$("btnAddPendingOwner").addEventListener("click",()=>{const picker=ownerPickerElements("pending");if(!picker.add?.options.length)return;picker.menu.hidden=!picker.menu.hidden;});
+$("btnConfirmRecordOwnerAdd").addEventListener("click",()=>addSharedOwner("record"));
+$("btnConfirmPendingOwnerAdd").addEventListener("click",()=>addSharedOwner("pending"));
+document.addEventListener("click",event=>{const button=event.target.closest("[data-remove-shared-owner]");if(!button)return;removeSharedOwner(button.dataset.ownerPicker,button.dataset.removeSharedOwner);});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)checkAgendaReminders();});
 window.setInterval(checkAgendaReminders,30_000);
 
@@ -6085,7 +6127,7 @@ window.setInterval(checkAgendaReminders,30_000);
 })();
 </script>
 <script src="whatsapp-sync-receipt.js?v=1.1.0"></script>
-<script src="batch-analysis-ui.js?v=2.9.4"></script>
+<script src="batch-analysis-ui.js?v=2.9.5"></script>
 <script src="partners.js"></script>
 </body>
 </html>
