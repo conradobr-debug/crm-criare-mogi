@@ -509,7 +509,8 @@
 
 <div class="wrap">
   <div class="tabs" role="tablist" aria-label="Navegação">
-    <div class="tab active" data-tab="leads" role="tab" tabindex="0" aria-selected="true"><span class="tabIcon" aria-hidden="true">●</span><span>Leads</span></div>
+    <div class="tab active" data-tab="overview" role="tab" tabindex="0" aria-selected="true"><span class="tabIcon" aria-hidden="true">▦</span><span>Visão Geral</span></div>
+    <div class="tab" data-tab="leads" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">●</span><span>Leads</span></div>
     <div class="tab" data-tab="closed" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">✓</span><span>Fechados</span></div>
     <div class="tab" data-tab="specifiers" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">◇</span><span>Parceiros</span></div>
     <div class="tab" data-tab="pending" role="tab" tabindex="0" aria-selected="false"><span class="tabIcon" aria-hidden="true">!</span><span>Pendências</span></div>
@@ -2492,7 +2493,9 @@ function stageOptionsForRecord(kind, pipeline="lead"){
 /* ===== App state ===== */
 let sb = null;
 let session = null;
-let currentTab = "leads";
+let currentTab = "overview";
+let overviewMode = "all";
+let overviewAttentionExpanded = false;
 let hideLostColumn = localStorage.getItem("crm_hide_lost") === "1";
 const filters = { owner:"Todos", source:"Todos", city:"", search:"" };
 let isDragging = false;
@@ -2514,6 +2517,7 @@ let eventsSupported = true;
 let weeklyReports = [];
 let weeklyReportsSupported = true;
 let pendingItems = [];
+let pendingDataLoaded = false;
 let pendingAttachments = [];
 let pendingPhotosBuffer = [];
 let whatsappAvatarUrls = new Map();
@@ -3090,6 +3094,7 @@ async function fetchPendingData(){
     const {data} = await sb.storage.from(PENDING_PHOTO_BUCKET).createSignedUrl(attachment.object_path, 3600);
     return {...attachment, signed_url:data?.signedUrl || null};
   }));
+  pendingDataLoaded = true;
   return true;
 }
 
@@ -3203,6 +3208,12 @@ async function bootAfterLogin(){
     if(currentAuthState === "authenticated") bootDiagnostic = "";
     profiles = sessionProfileFallback();
     buildFilters();
+    const initialPendingLoad = currentTab === "overview"
+      ? withTimeout(fetchPendingData(), BOOT_QUERY_TIMEOUT_MS, "crm_pending_items").catch(error=>{
+          noteOptionalBootFailure("Pendências", error);
+          return false;
+        })
+      : Promise.resolve(false);
     const loaded = await fetchRecords({
       reason:"carga inicial",
       notifyNew:false,
@@ -3212,6 +3223,7 @@ async function bootAfterLogin(){
       throwOnError:true
     });
     if(!loaded) throw new Error("Não foi possível carregar os registros compartilhados.");
+    await initialPendingLoad;
     currentAuthState = "authenticated";
     lastAuthValidationError = null;
     setAuthenticatedActionsEnabled(true);
@@ -3254,7 +3266,7 @@ async function bootAfterLogin(){
     void Promise.allSettled([
       withTimeout(fetchRecordEvents(), BOOT_QUERY_TIMEOUT_MS, "histórico de eventos"),
       withTimeout(fetchWeeklyReports(), BOOT_QUERY_TIMEOUT_MS, "relatórios"),
-      withTimeout(fetchPendingData(), BOOT_QUERY_TIMEOUT_MS, "crm_pending_items"),
+      pendingDataLoaded ? Promise.resolve(true) : withTimeout(fetchPendingData(), BOOT_QUERY_TIMEOUT_MS, "crm_pending_items"),
       withTimeout(fetchOutlookStatus(), BOOT_QUERY_TIMEOUT_MS, "Outlook"),
       withTimeout(typeof partnerFetchContents === "function" ? partnerFetchContents() : Promise.resolve(), BOOT_QUERY_TIMEOUT_MS, "parceiros")
     ]).then(results => {
@@ -4142,6 +4154,207 @@ function updateLostBtn(){
   $("wrapLostFilter").style.display = currentTab === "leads" ? "" : "none";
 }
 
+/* ===== Visão Geral ===== */
+function overviewRecordMatchesMode(record){
+  return overviewMode === "all" || String(record?.owner_id || "") === String(session?.user?.id || "");
+}
+function overviewPendingMatchesMode(item){
+  return overviewMode === "all" || String(item?.owner_id || "") === String(session?.user?.id || "");
+}
+function overviewDataset(){
+  const scopedRecords = records.filter(overviewRecordMatchesMode);
+  const leads = scopedRecords.filter(record=>record.pipeline === "lead" && !isSpecifier(record));
+  return {
+    records:scopedRecords,
+    leads,
+    activeLeads:leads.filter(record=>normalizeLeadStage(record.stage) !== "Perdido"),
+    closed:scopedRecords.filter(record=>record.pipeline === "closed" && !isSpecifier(record)),
+    partners:scopedRecords.filter(isSpecifier),
+    pending:pendingItems.filter(item=>item.status === "open" && overviewPendingMatchesMode(item))
+  };
+}
+function overviewRisk(record){
+  const structured = record?.whatsapp_analysis_structured;
+  return structured && typeof structured === "object" && structured.risk && typeof structured.risk === "object"
+    ? structured.risk
+    : null;
+}
+function overviewPartnerNeedsAction(record){
+  if(typeof partnerNeedsNextAction === "function") return partnerNeedsNextAction(record);
+  return !["Mapeado","Adormecido"].includes(record?.stage || "");
+}
+function overviewPartnerHasOpportunity(record){
+  if(typeof partnerHasOpportunity === "function") return partnerHasOpportunity(record);
+  return ["Oportunidade identificada","Projeto recebido","Parceiro ativo"].includes(record?.stage || "");
+}
+function overviewDaysWithoutPartnerContact(record){
+  if(typeof partnerDaysWithoutContact === "function") return partnerDaysWithoutContact(record);
+  const value = record?.last_contact_at || record?.first_visit_at || record?.created_at;
+  return value ? Math.max(0, daysBetween(new Date(value), new Date())) : null;
+}
+function overviewDateKey(value){
+  const date = value instanceof Date ? value : new Date(value);
+  if(Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+}
+function overviewTodayAppointments(){
+  const today = overviewDateKey(new Date());
+  return records.flatMap(record=>scheduledAppointments(record).map(appointment=>({record,appointment})))
+    .filter(({record,appointment})=>{
+      if(appointment.status !== "scheduled" || overviewDateKey(appointment.starts_at) !== today) return false;
+      if(overviewMode === "all") return true;
+      return String(appointment.owner_id || record.owner_id || "") === String(session?.user?.id || "");
+    })
+    .sort((a,b)=>new Date(a.appointment.starts_at)-new Date(b.appointment.starts_at));
+}
+function overviewActiveWorkRecords(data){
+  return [...data.activeLeads, ...data.partners.filter(overviewPartnerNeedsAction)];
+}
+function overviewAttentionItems(data){
+  const now = new Date();
+  const items = [];
+  data.pending.forEach(item=>{
+    if(item.due_at && new Date(item.due_at) < now){
+      items.push({key:`pending:${item.id}`,type:"pending",item,weight:500,title:item.customer_name || item.title,context:item.pending_type,reason:"Prazo vencido"});
+    }
+  });
+  overviewActiveWorkRecords(data).forEach(record=>{
+    const next = getNextActionAt(record);
+    if(next && next < now){
+      items.push({key:`record:${record.id}`,type:"record",record,weight:400,title:fullName(record),context:record.stage || "—",reason:scheduleStatus(record).label});
+    }
+  });
+  [...data.activeLeads, ...data.closed, ...data.partners].forEach(record=>{
+    const risk = overviewRisk(record);
+    if(["critical","high"].includes(risk?.level)){
+      items.push({key:`record:${record.id}`,type:"record",record,weight:risk.level === "critical" ? 360 : 330,title:fullName(record),context:record.stage || "—",reason:`Risco IA ${risk.level === "critical" ? "crítico" : "alto"}`});
+    }
+  });
+  overviewActiveWorkRecords(data).forEach(record=>{
+    if(!getNextActionAt(record)){
+      items.push({key:`record:${record.id}`,type:"record",record,weight:200,title:fullName(record),context:record.stage || "—",reason:"Sem próxima ação"});
+    }
+  });
+  data.activeLeads.forEach(record=>{
+    if(whatsappAnalysisIsStale(record)){
+      items.push({key:`record:${record.id}`,type:"record",record,weight:100,title:fullName(record),context:record.stage || "—",reason:"Análise WhatsApp desatualizada"});
+    }
+  });
+  return [...items.reduce((map,item)=>{
+    const prior = map.get(item.key);
+    if(!prior || item.weight > prior.weight) map.set(item.key,item);
+    return map;
+  },new Map()).values()].sort((a,b)=>b.weight-a.weight);
+}
+function renderOverviewRecordItem(record){
+  const next = getNextActionAt(record);
+  const risk = overviewRisk(record);
+  const alert = risk?.level === "critical" ? "Crítico" : (risk?.level === "high" ? "Risco alto" : (next && next < new Date() ? "Atrasado" : ""));
+  return `<button class="overview-record" type="button" data-overview-record="${escapeHtml(record.id)}"><span>${escapeHtml(fullName(record))}</span>${alert?`<small class="overview-badge ${risk?.level === "critical" ? "critical" : "warning"}">${escapeHtml(alert)}</small>`:""}</button>`;
+}
+function renderOverviewFunnel(items, stages, pipeline, targetTab){
+  const byStage = Object.fromEntries(stages.map(stage=>[stage,[]]));
+  items.forEach(record=>{
+    const stage = pipeline === "lead" ? normalizeLeadStage(record.stage) : normalizeClosedStage(record.stage);
+    if(byStage[stage]) byStage[stage].push(record);
+  });
+  const occupied = stages.filter(stage=>byStage[stage].length);
+  return `<section class="overview-panel overview-funnel-panel">
+    <div class="overview-panel-header"><div><h2>${pipeline === "lead" ? "Leads" : "Fechados"}</h2><span>${items.length} registro(s)</span></div><button class="ghost" type="button" data-overview-nav="${targetTab}">Ver todos</button></div>
+    ${occupied.length?`<div class="overview-funnel">${occupied.map(stage=>`<section class="overview-stage"><div class="overview-stage-header"><span>${escapeHtml(stage)}</span><b>${byStage[stage].length}</b></div><div class="overview-stage-list">${byStage[stage].map(renderOverviewRecordItem).join("")}</div></section>`).join("")}</div>`:`<div class="overview-empty">Nenhum registro neste funil.</div>`}
+  </section>`;
+}
+function renderOverviewAttention(items){
+  const visible = overviewAttentionExpanded ? items : items.slice(0,8);
+  return `<section class="overview-panel">
+    <div class="overview-panel-header"><div><h2>Precisa de atenção</h2><span>${items.length} item(ns)</span></div>${items.length>8?`<button class="ghost" type="button" data-overview-attention>${overviewAttentionExpanded?"Mostrar menos":"Ver todos"}</button>`:""}</div>
+    <div class="overview-compact-list">${visible.length?visible.map(entry=>`<button class="overview-list-row is-alert" type="button" ${entry.type === "pending" ? `data-overview-pending="${escapeHtml(entry.item.id)}"` : `data-overview-record="${escapeHtml(entry.record.id)}"`}><span><b>${escapeHtml(entry.title)}</b><small>${escapeHtml(entry.context)}</small></span><em>${escapeHtml(entry.reason)}</em></button>`).join(""):`<div class="overview-empty">Nenhum alerta prioritário.</div>`}</div>
+  </section>`;
+}
+function renderOverviewToday(appointments){
+  return `<section class="overview-panel">
+    <div class="overview-panel-header"><div><h2>Hoje</h2><span>${appointments.length} compromisso(s)</span></div></div>
+    <div class="overview-compact-list">${appointments.length?appointments.map(({record,appointment})=>`<button class="overview-list-row has-time" type="button" data-overview-record="${escapeHtml(record.id)}"><time>${escapeHtml(inputTimeValue(new Date(appointment.starts_at)))}</time><span><b>${escapeHtml(fullName(record))}</b><small>${escapeHtml(appointment.kind || "Acompanhamento")} · ${escapeHtml(profileNameById(appointment.owner_id || record.owner_id))}</small></span></button>`).join(""):`<div class="overview-empty">Nenhum compromisso para hoje.</div>`}</div>
+  </section>`;
+}
+function renderOverviewPartners(partners){
+  const now = new Date();
+  const ranked = partners.map(record=>{
+    const next = getNextActionAt(record);
+    const days = overviewDaysWithoutPartnerContact(record);
+    const score = next && next < now ? 500 : (!next && overviewPartnerNeedsAction(record) ? 450 : (record.stage === "Projeto recebido" ? 350 : (overviewPartnerHasOpportunity(record) ? 300 : (days > 14 ? 200 : 0))));
+    const signal = next && next < now ? "Contato vencido" : (!next && overviewPartnerNeedsAction(record) ? "Sem próxima ação" : (record.stage === "Projeto recebido" ? "Projeto recebido" : (overviewPartnerHasOpportunity(record) ? "Oportunidade" : (days > 14 ? `${days} dias sem contato` : record.stage || "—"))));
+    return {record,score,signal};
+  }).sort((a,b)=>b.score-a.score).slice(0,6);
+  const active = partners.filter(record=>record.stage === "Parceiro ativo").length;
+  const opportunities = partners.filter(overviewPartnerHasOpportunity).length;
+  return `<section class="overview-panel">
+    <div class="overview-panel-header"><div><h2>Parceiros</h2><span>${active} ativo(s) · ${opportunities} oportunidade(s)</span></div><button class="ghost" type="button" data-overview-nav="specifiers">Ver todos</button></div>
+    <div class="overview-compact-list">${ranked.length?ranked.map(({record,signal})=>`<button class="overview-list-row" type="button" data-overview-record="${escapeHtml(record.id)}"><span><b>${escapeHtml(fullName(record))}</b><small>${escapeHtml(record.company_name || record.stage || "Parceiro")}</small></span><em>${escapeHtml(signal)}</em></button>`).join(""):`<div class="overview-empty">Nenhum parceiro neste recorte.</div>`}</div>
+  </section>`;
+}
+function renderOverviewPending(items){
+  if(!pendingSupported) return `<section class="overview-panel"><div class="overview-panel-header"><div><h2>Pendências</h2><span>Indisponível</span></div><button class="ghost" type="button" data-overview-nav="pending">Ver todas</button></div><div class="overview-empty">Estrutura de pendências indisponível.</div></section>`;
+  if(!pendingDataLoaded) return `<section class="overview-panel"><div class="overview-panel-header"><div><h2>Pendências</h2><span>Carregando</span></div></div><div class="overview-empty">Carregando pendências…</div></section>`;
+  const priority = {Urgente:3,Alta:2,Normal:1,Baixa:0};
+  const ranked = items.slice().sort((a,b)=>{
+    const lateA = a.due_at && new Date(a.due_at)<new Date() ? 1 : 0;
+    const lateB = b.due_at && new Date(b.due_at)<new Date() ? 1 : 0;
+    return lateB-lateA || (priority[b.priority]||0)-(priority[a.priority]||0) || new Date(a.due_at||"9999-12-31")-new Date(b.due_at||"9999-12-31");
+  }).slice(0,6);
+  return `<section class="overview-panel">
+    <div class="overview-panel-header"><div><h2>Pendências</h2><span>${items.length} aberta(s)</span></div><button class="ghost" type="button" data-overview-nav="pending">Ver todas</button></div>
+    <div class="overview-compact-list">${ranked.length?ranked.map(item=>{const due=pendingDueState(item);return `<button class="overview-list-row ${due.className === "pendingDueLate" || item.priority === "Urgente" ? "is-alert" : ""}" type="button" data-overview-pending="${escapeHtml(item.id)}"><span><b>${escapeHtml(item.customer_name || item.title)}</b><small>${escapeHtml(item.pending_type)}${item.customer_name?` · ${escapeHtml(item.title)}`:""}</small></span><em>${escapeHtml(due.label)}</em></button>`;}).join(""):`<div class="overview-empty">Nenhuma pendência aberta.</div>`}</div>
+  </section>`;
+}
+function renderOverview(){
+  const data = overviewDataset();
+  const today = overviewTodayAppointments();
+  const attention = overviewAttentionItems(data);
+  const activeWork = overviewActiveWorkRecords(data);
+  const overdueActions = activeWork.filter(record=>{const next=getNextActionAt(record);return next&&next<new Date();}).length;
+  const overduePending = data.pending.filter(item=>item.due_at&&new Date(item.due_at)<new Date()).length;
+  const critical = [...data.activeLeads,...data.closed,...data.partners].filter(record=>["critical","high"].includes(overviewRisk(record)?.level)).length;
+  const withoutAction = activeWork.filter(record=>!getNextActionAt(record)).length;
+  const partnerActive = data.partners.filter(record=>record.stage === "Parceiro ativo").length;
+  return `<div class="overview-dashboard">
+    <div class="overview-header"><div><h2>Visão Geral</h2><p>Diagnóstico rápido da operação.</p></div><div class="overview-mode" role="group" aria-label="Escopo da Visão Geral"><button type="button" data-overview-mode="all" class="${overviewMode === "all" ? "active" : ""}">Todos</button><button type="button" data-overview-mode="mine" class="${overviewMode === "mine" ? "active" : ""}">Meu trabalho</button></div></div>
+    <div class="overview-kpis">
+      <div class="overview-kpi"><span>Leads ativos</span><b>${data.activeLeads.length}</b><small>${data.leads.length-data.activeLeads.length} perdido(s)</small></div>
+      <div class="overview-kpi"><span>Clientes fechados</span><b>${data.closed.length}</b><small>Em todas as fases</small></div>
+      <div class="overview-kpi"><span>Pendências abertas</span><b>${pendingDataLoaded?data.pending.length:"—"}</b><small>${overduePending} atrasada(s)</small></div>
+      <div class="overview-kpi"><span>Parceiros</span><b>${data.partners.length}</b><small>${partnerActive} ativo(s)</small></div>
+    </div>
+    <div class="overview-secondary-kpis">
+      <div><b>${overdueActions+overduePending}</b><span>Atrasados</span></div><div><b>${today.length}</b><span>Ações hoje</span></div><div><b>${critical}</b><span>Críticos IA</span></div><div><b>${withoutAction}</b><span>Sem próxima ação</span></div>
+    </div>
+    <div class="overview-focus-grid">${renderOverviewAttention(attention)}${renderOverviewToday(today)}</div>
+    ${renderOverviewFunnel(data.leads,LEAD_STAGES,"lead","leads")}
+    ${renderOverviewFunnel(data.closed,CLOSED_STAGES,"closed","closed")}
+    <div class="overview-bottom-grid">${renderOverviewPartners(data.partners)}${renderOverviewPending(data.pending)}</div>
+  </div>`;
+}
+function wireOverview(){
+  $("board").querySelectorAll("[data-overview-mode]").forEach(button=>button.addEventListener("click",()=>{
+    overviewMode = button.dataset.overviewMode;
+    overviewAttentionExpanded = false;
+    render();
+  }));
+  $("board").querySelectorAll("[data-overview-nav]").forEach(button=>button.addEventListener("click",()=>setTab(button.dataset.overviewNav)));
+  $("board").querySelectorAll("[data-overview-record]").forEach(button=>button.addEventListener("click",()=>{
+    const record = records.find(item=>item.id===button.dataset.overviewRecord);
+    if(record) openModal(record);
+  }));
+  $("board").querySelectorAll("[data-overview-pending]").forEach(button=>button.addEventListener("click",()=>{
+    const item = pendingItems.find(entry=>entry.id===button.dataset.overviewPending);
+    if(item) openPendingModal(item);
+  }));
+  $("board").querySelector("[data-overview-attention]")?.addEventListener("click",()=>{
+    overviewAttentionExpanded = !overviewAttentionExpanded;
+    render();
+  });
+}
+
 
 function render(){
   applyAccessVisibility();
@@ -4150,6 +4363,11 @@ function render(){
   if(appDataState !== "ready"){
     renderKPIs([]);
     $("board").innerHTML = statePanelHtml();
+    return;
+  }
+  if(currentTab==="overview"){
+    $("board").innerHTML = renderOverview();
+    wireOverview();
     return;
   }
   if(currentTab==="config"){
@@ -4834,7 +5052,9 @@ function setTab(tab){
   const tabChanged = currentTab !== tab;
   currentTab = tab;
   $("btnNew").textContent = tab === "specifiers" ? "+ Novo especificador" : (tab === "pending" ? "+ Nova pendência" : "+ Novo lead");
-  $("btnNew").style.display = ["reports","config","completeness"].includes(tab) ? "none" : "";
+  $("btnNew").style.display = ["overview","reports","config","completeness"].includes(tab) ? "none" : "";
+  document.querySelector(".toolbar").style.display = tab === "overview" ? "none" : "";
+  $("boardHint").style.display = tab === "overview" ? "none" : "";
   document.querySelectorAll(".tab").forEach(el=>{
     const on = el.dataset.tab===tab;
     el.classList.toggle("active", on);
@@ -4842,7 +5062,8 @@ function setTab(tab){
   });
 
   const mobileHint = isMobileLayout() ? "Toque em um cartão para abrir. Etapas vazias ficam ocultas no celular." : "";
-  const hint = tab==="leads" ? mobileHint :
+  const hint = tab==="overview" ? "" :
+               tab==="leads" ? mobileHint :
                tab==="closed" ? mobileHint :
                tab==="specifiers" ? "Relacionamento contínuo com arquitetos, designers, corretores e parceiros." :
                tab==="pending" ? "Assistências, vistorias, peças e compras acompanhadas até a conclusão." :
@@ -5723,7 +5944,7 @@ if("serviceWorker" in navigator){
     $("btnSignOut").disabled = true;
     $("btnSync").disabled = true;
   }
-  setTab("leads");
+  setTab("overview");
   await initSupabase();
   if(sessionStorage.getItem("criare_retry_extension_preflight")==="1"){
     sessionStorage.removeItem("criare_retry_extension_preflight");
