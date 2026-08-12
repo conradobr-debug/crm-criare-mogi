@@ -517,6 +517,7 @@
       <summary class="btn ghost">Conversas e análises</summary>
       <div class="headerMaintenanceMenu headerConversationMenu">
         <div class="headerMenuHint">Atualize conversas, revise novos contatos e importe análises em um só lugar.</div>
+        <a class="btn ghost" id="btnOpenLocalTranscriber" href="criare-transcriber://start">Abrir Transcritor Criare</a>
         <button class="ghost" id="btnOpenBatchExportHeader" type="button" data-admin-only hidden>Verificar WhatsApp</button>
         <button class="ghost" id="btnImportExtensionReceipt" type="button" data-admin-only hidden>Atualizar retorno da extensão</button>
         <button class="ghost" id="btnReviewWhatsAppCandidates" type="button" data-admin-only hidden>Novos no WhatsApp <span id="whatsappCandidateCount" class="headerCount" hidden>0</span></button>
@@ -6095,7 +6096,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=3.0.1").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=3.0.2").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
@@ -6152,7 +6153,7 @@ window.setInterval(checkAgendaReminders,30_000);
 })();
 </script>
 <script src="whatsapp-sync-receipt.js?v=1.3.0"></script>
-<script src="batch-analysis-ui.js?v=3.0.1"></script>
+<script src="batch-analysis-ui.js?v=3.0.2"></script>
 <script src="management-planning-ui.js?v=1.0.0"></script>
 <script src="partners.js"></script>
 </body>

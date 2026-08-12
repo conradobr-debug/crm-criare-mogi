@@ -16,3 +16,8 @@ prontos.
 
 Se o serviço estiver desligado, a captura de mensagens continua normalmente e
 os áudios permanecem como `[Áudio sem transcrição]` pendentes.
+
+No CRM publicado, o atalho **Conversas e análises → Abrir Transcritor Criare**
+chama o esquema local `criare-transcriber://start`. Ele depende do aplicativo
+macOS `Criare Transcriber Launcher.app`, que contém uma cópia deste servidor e
+o abre no Terminal sem acessar mensagens por conta própria.

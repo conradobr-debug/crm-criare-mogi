@@ -280,6 +280,7 @@
   };
 
   const headerExportButton=$("btnOpenBatchExportHeader");
+  const localTranscriberButton=$("btnOpenLocalTranscriber");if(localTranscriberButton&&!localTranscriberButton.dataset.transcriberWired){localTranscriberButton.dataset.transcriberWired="1";localTranscriberButton.addEventListener("click",()=>{const menu=$("conversationActionsMenu");if(menu)menu.open=false;if(typeof toast==="function")toast("Abrindo o Transcritor Criare no computador. Confirme a abertura no navegador, se solicitado.");});}
   if(headerExportButton&&!headerExportButton.dataset.batchWired){headerExportButton.dataset.batchWired="1";headerExportButton.addEventListener("click",()=>{if(!isAdminUser())return;populateExportFilters();refreshExportPicker(true);$("batchExportModal").showModal();});}
   const recoverButton=$("btnRecoverIndividualSuggestions");if(recoverButton&&!recoverButton.dataset.batchWired){recoverButton.dataset.batchWired="1";recoverButton.addEventListener("click",recoverIndividualSuggestions);}
 

@@ -220,6 +220,7 @@ test("ZIP de entrada selecionado no importador é classificado e rejeitado clara
 
 test("botão superior abre o importador novo e o seletor aceita ZIP",async()=>{
   const crm=await readFile(new URL("../index.html",import.meta.url),"utf8");
+  assert.match(crm,/id="btnOpenLocalTranscriber"[^>]*href="criare-transcriber:\/\/start"[^>]*>Abrir Transcritor Criare<\/a>/);
   assert.match(crm,/id="btnOpenBatchExportHeader"[^>]*>Verificar WhatsApp</);
   assert.match(crm,/value="verify_due" selected>Verificações pendentes/);
   assert.match(crm,/value="needs_analysis">Conversas que precisam de análise/);
@@ -233,6 +234,15 @@ test("botão superior abre o importador novo e o seletor aceita ZIP",async()=>{
   assert.doesNotMatch(crm,/\$\("btnImportLocalWhatsAppBatch"\)\.addEventListener\("click",chooseLocalWhatsAppImportFile\)/);
   assert.doesNotMatch(crm,/data-tab="completeness"/);
   assert.match(crm,/id="whatsappSection" hidden aria-hidden="true"/);
+});
+
+test("inicializador local do transcritor não depende da página ou de conversa aberta",async()=>{
+  const launcher=await readFile(new URL("../whatsapp-local-transcriber/CriareTranscriberLauncher.applescript",import.meta.url),"utf8");
+  assert.match(launcher,/on «event GURLGURL»/);
+  assert.match(launcher,/path to me/);
+  assert.match(launcher,/Contents\/Resources\/server\.py/);
+  assert.match(launcher,/127\.0\.0\.1:32123\/health/);
+  assert.match(launcher,/tell application "Terminal"/);
 });
 
 test("relatórios, configuração e operações em lote são exclusivos do administrador",async()=>{
