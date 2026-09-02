@@ -3297,6 +3297,16 @@ function recordsStateVersion(items){
     .join("|");
 }
 
+async function fetchRecordsStateVersion(){
+  const query = sb
+    .from(TBL_RECORDS)
+    .select("id,updated_at,pipeline,stage")
+    .order("id", { ascending:true });
+  const {data,error} = await withTimeout(query, BOOT_QUERY_TIMEOUT_MS, "versão dos registros");
+  if(error) throw error;
+  return recordsStateVersion(data || []);
+}
+
 async function refreshWhatsAppAvatarUrls(items=records){
   const paths = [...new Set(items.map(record=>record.whatsapp_profile_photo_path).filter(Boolean))];
   const next = new Map();
@@ -3531,7 +3541,9 @@ async function bootAfterLogin(){
 
 /* ===== Sincronização resiliente: Realtime + polling ===== */
 const syncController = (() => {
-  const POLL_INTERVAL_MS = 45000;
+  const REALTIME_SYNC_ENABLED = false;
+  const POLL_INTERVAL_MS = 600000;
+  const FOCUS_REFRESH_COOLDOWN_MS = 120000;
   const WAKE_CHECK_INTERVAL_MS = 15000;
   const WAKE_GAP_MS = 45000;
   const MAX_RECONNECT_DELAY_MS = 30000;
@@ -3565,7 +3577,7 @@ const syncController = (() => {
   }
 
   function scheduleReconnect(reason){
-    if(!started || !session?.user || !navigator.onLine || reconnectTimer) return;
+    if(!REALTIME_SYNC_ENABLED || !started || !session?.user || !navigator.onLine || reconnectTimer) return;
     const delay = Math.min(1000 * (2 ** reconnectAttempt), MAX_RECONNECT_DELAY_MS);
     reconnectAttempt = Math.min(reconnectAttempt + 1, 6);
     setSyncConnectionState("reconnecting");
@@ -3610,6 +3622,7 @@ const syncController = (() => {
 
   async function connectInternal(reason){
     if(!started || !sb || !session?.user) return false;
+    if(!REALTIME_SYNC_ENABLED) return true;
     if(!navigator.onLine){
       setSyncConnectionState("offline");
       return false;
@@ -3678,6 +3691,24 @@ const syncController = (() => {
   }
 
   async function refresh(reason="sincronização", notifyNew=true, showError=false, includeAuxiliary=false){
+    const lightweight=["polling de segurança","aba visível","janela em foco","retorno de suspensão","navegador online"].some(label=>String(reason).includes(label));
+    if(lightweight){
+      try{
+        const serverVersion = await fetchRecordsStateVersion();
+        if(serverVersion === recordsStateVersion(records)){
+          lastSuccessfulSyncAt = Date.now();
+          setSyncConnectionState("online");
+          updateSyncStatusDisplay();
+          console.info("[CRM Sync] Verificação leve concluída; nenhum registro mudou.", {reason,total:records.length});
+          return true;
+        }
+      }catch(error){
+        console.warn("[CRM Sync] A verificação leve falhou; a carga completa foi adiada.", {reason,error});
+        setSyncConnectionState(navigator.onLine ? "error" : "offline");
+        if(showError) toast("Erro ao verificar atualizações. Tente novamente.");
+        return false;
+      }
+    }
     const ok = await fetchRecords({ reason, notifyNew, showError });
     // Eventos de lead atualizam apenas os leads. As fontes auxiliares são
     // buscadas no boot ou numa sincronização manual, não a cada evento realtime.
@@ -3708,6 +3739,9 @@ const syncController = (() => {
 
     document.addEventListener("visibilitychange", () => {
       if(!started || !session?.user || document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if(now - lastFocusRefreshAt < FOCUS_REFRESH_COOLDOWN_MS) return;
+      lastFocusRefreshAt = now;
       console.info("[CRM Sync] Aba voltou a ficar visível.");
       if(channelStatus !== "SUBSCRIBED") connect("aba visível");
       scheduleRefresh("aba visível", true, 150);
@@ -3716,7 +3750,7 @@ const syncController = (() => {
     window.addEventListener("focus", () => {
       if(!started || !session?.user) return;
       const now = Date.now();
-      if(now - lastFocusRefreshAt < 10000) return;
+      if(now - lastFocusRefreshAt < FOCUS_REFRESH_COOLDOWN_MS) return;
       lastFocusRefreshAt = now;
       if(channelStatus !== "SUBSCRIBED") connect("janela em foco");
       scheduleRefresh("janela em foco", true, 150);
