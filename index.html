@@ -958,6 +958,7 @@
             <button class="primary" id="btnAnalyzeAutomatic" type="button" hidden>Fluxo automático desativado</button>
             <button class="ghost" id="btnTranscribeAudios" type="button" disabled>Transcrever áudios pendentes</button>
             <button class="ghost" id="btnCopyAudioDiagnostics" type="button">Copiar diagnóstico dos áudios</button>
+            <button class="ghost" id="btnExportConversationChatGpt" type="button">Exportar conversa para ChatGPT</button>
             <button class="ghost" id="btnCopyConversationManual" type="button">Copiar conversa para meu GPT</button>
             <button class="ghost" id="btnOpenCustomGpt" type="button">Abrir meu GPT</button>
             <button class="ghost" id="btnImportCustomGpt" type="button">Importar resultado do GPT</button>
@@ -1255,6 +1256,7 @@
 <script src="audio-import-matcher.js?v=2.5.25"></script>
 <script src="conversation-completeness.js?v=2.5.1-final"></script>
 <script src="batch-analysis.js?v=3.0.1"></script>
+<script src="whatsapp-chatgpt-export.js?v=1.0.0"></script>
 <script src="management-planning.js?v=1.0.0"></script>
 <script src="management-activity-report.js?v=1.0.0"></script>
 
@@ -5685,6 +5687,14 @@ $("appointmentList").addEventListener("click", event=>{
 ["leadQuality","email","propertyStatus","professionalName","hasFloorPlan","investmentProfile","decisionDueAt","preferredContact","estimate"].forEach(id=>$(id).addEventListener("change",renderLeadInfoSectionSummary));
 $("email").addEventListener("input",renderLeadInfoSectionSummary);
 $("professionalName").addEventListener("input",renderLeadInfoSectionSummary);
+$("btnExportConversationChatGpt").addEventListener("click",async()=>{
+  const record=records.find(item=>item.id===$("id").value)||null;
+  if(!record)return toast("Salve o cliente antes de exportar a conversa.",{error:true});
+  try{
+    await CriareWhatsAppChatGptExport.download(record);
+    toast("Conversa exportada para ChatGPT.");
+  }catch(error){toast(error.message||"Não foi possível exportar a conversa.",{error:true});}
+});
 $("btnCopyConversationManual").addEventListener("click", async ()=>{
   const record=normalizeLegacyWhatsAppRecord(records.find(item=>item.id===$("id").value)||null);
   const conversation=String(record?.whatsapp_transcript||"").trim();
