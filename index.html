@@ -5143,6 +5143,8 @@ function addAppointmentFromComposer({silent=false}={}){
 }
 function updateModalMode(kind){
   const specifier = kind === "specifier";
+  $("whatsappSection").hidden = specifier;
+  $("whatsappSection").setAttribute("aria-hidden",String(specifier));
   document.querySelectorAll(".leadDiscoveryField").forEach(field=>field.style.display=specifier ? "none" : "");
   $("wrapRooms").style.display = specifier ? "none" : "";
   $("wrapSource").style.display = specifier ? "none" : "";

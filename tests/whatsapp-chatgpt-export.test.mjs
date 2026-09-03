@@ -88,5 +88,7 @@ test("index integra somente o exportador local no bloco de ações do WhatsApp",
   assert.match(index,/id="btnExportConversationChatGpt"[^>]*>Exportar conversa para ChatGPT<\/button>/);
   assert.match(index,/<script src="whatsapp-chatgpt-export\.js\?v=1\.0\.0"><\/script>/);
   assert.match(index,/CriareWhatsAppChatGptExport\.download\(record\)/);
+  assert.match(index,/\$\("whatsappSection"\)\.hidden = specifier;/);
+  assert.match(index,/\$\("whatsappSection"\)\.setAttribute\("aria-hidden",String\(specifier\)\);/);
   assert.doesNotMatch(source,/buildCustomGptPrompt|slice\(-80\)|300000|fetch\(|XMLHttpRequest|supabase|\.from\(/i);
 });
