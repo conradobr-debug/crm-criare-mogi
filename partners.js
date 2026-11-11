@@ -365,14 +365,14 @@ openModal = function(record=null, options={}){
   document.querySelectorAll(".partnerOnly").forEach(section=>section.hidden = true);
   if(specifier){
     $("modalTitle").textContent = record ? "Detalhes do parceiro" : "Novo parceiro";
-    document.querySelector(".appointmentComposerTitle").textContent = "Agenda de relacionamento";
-    document.querySelector(".whatsappWorkspaceTitle").textContent = "WhatsApp do parceiro";
+    document.querySelector("#appointmentSection [data-toggle-section] span").textContent = "Agenda de relacionamento";
+    document.querySelector("#whatsappSection [data-toggle-section] span").textContent = "WhatsApp do parceiro";
     partnerPopulateFields(record);
     partnerSelectFormTab(options.focusSchedule ? "relationship" : "basic");
   }else{
     $("form").querySelectorAll("[data-partner-group]:not(.partnerOnly)").forEach(section=>section.hidden=false);
-    document.querySelector(".appointmentComposerTitle").textContent = "Compromissos do cliente";
-    document.querySelector(".whatsappWorkspaceTitle").textContent = "WhatsApp do cliente";
+    document.querySelector("#appointmentSection [data-toggle-section] span").textContent = "Compromissos do cliente";
+    document.querySelector("#whatsappSection [data-toggle-section] span").textContent = "WhatsApp do cliente";
   }
 };
 const baseUpdateModalMode = updateModalMode;
