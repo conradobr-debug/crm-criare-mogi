@@ -6364,7 +6364,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=3.0.3").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=rollback-20261111").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
