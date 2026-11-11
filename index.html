@@ -495,7 +495,6 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="assets/app-icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="assets/app-icon-192.png" />
-<link rel="stylesheet" href="activity-log.css?v=1.0.0" />
 </head>
 <body>
 
@@ -6365,7 +6364,7 @@ function prepareInstallExperience(){
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("./service-worker.js?v=followup-1").catch(error=>{
+    navigator.serviceWorker.register("./service-worker.js?v=3.0.3").catch(error=>{
       console.warn("[CRM App] Não foi possível ativar o modo instalável.", error);
     });
   });
@@ -6425,8 +6424,6 @@ window.setInterval(checkAgendaReminders,30_000);
 <script src="batch-analysis-ui.js?v=3.0.2"></script>
 <script src="management-planning-ui.js?v=1.0.0"></script>
 <script src="management-activity-report-ui.js?v=1.0.0"></script>
-<script src="partners.js?v=followup-1"></script>
-<script src="activity-log-core.js?v=1.0.0"></script>
-<script src="activity-log-ui.js?v=1.0.0"></script>
+<script src="partners.js"></script>
 </body>
 </html>
